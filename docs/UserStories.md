@@ -501,3 +501,323 @@
 **Priority:** High
 
 ---
+
+### US-30 — Audit System Activities
+
+**As a** System Administrator, **I want to** important system actions to be recorded, **so that** changes and workflow activities can be traced.
+
+**Acceptance Criteria**
+
+- Important actions record the responsible user.
+- Timestamp is recorded.
+- Important task/workflow changes are traceable.
+- Audit records cannot be casually modified by ordinary users.
+- Authorized administrators can review audit logs.
+
+**Traceability:** NFR-AU01, NFR-AU02, NFR-HR02
+**Priority:** High
+
+---
+
+### US-31 — Multi-Factor Authentication for Admin Access
+
+**As a** System Administrator, **I want to** MFA required for admin-level logins, **so that** a stolen password alone can't compromise administrative control.
+
+**Acceptance Criteria**
+
+- MFA is required, not optional, for every admin-role login.
+- No documented flow bypasses it.
+- MFA failure is itself logged as a security event.
+
+**Traceability:** NFR-S02
+**Priority:** High
+
+---
+
+
+### US-32 — View Task Details
+
+**As an** Employee, **I want to** view full task details (description, deadline, priority, project, attachments), **so that** I understand exactly what's expected of me.
+
+**Acceptance Criteria**
+
+- Opening a task shows all listed fields.
+- Attachments are downloadable directly from the detail view.
+- Missing fields display as empty, not as errors.
+
+**Traceability:** FR-E04
+**Priority:** High
+
+---
+
+### US-33 — Comment on Task
+
+**As an** Employee, **I want to** comment on an assigned task, **so that** I can communicate context or questions to my Team Lead.
+
+**Acceptance Criteria**
+
+- Comments are timestamped and attributed to the author.
+- Visible to the Team Lead and Project Manager.
+- No hard limit on comment length within reasonable bounds.
+
+**Traceability:** FR-E09
+**Priority:** Medium
+
+---
+
+### US-34 — Propose Skill Profile Change
+
+**As an** Employee, **I want to** propose changes to my skill profile, **so that** my record reflects my actual capabilities.
+
+**Acceptance Criteria**
+
+- Proposal is routed to the correct approver per configured policy.
+- I can see the status of a pending proposal.
+- Approved changes update my profile; rejected ones show a reason.
+
+**Traceability:** FR-E15
+**Priority:** Medium
+
+---
+
+### US-35 — Restrict Workload/Utilization Visibility
+
+**As an** Employee, **I want to** my workload/utilization percentage visible only to authorized roles, **so that** my data isn't exposed to people who don't need it.
+
+**Acceptance Criteria**
+
+- Visibility settings support self, Team Lead, PM, HR, Senior Management as distinct toggles.
+- Unauthorized roles can't see it even via direct link/API.
+- Setting changes take effect immediately.
+
+**Traceability:** FR-E17
+**Priority:** Medium
+
+---
+
+### US-36 — Update Project Status
+
+**As a** Project Manager, **I want to** update a project's information and status after creation, **so that** the record stays current as things change.
+
+**Acceptance Criteria**
+
+- Status options reflect the defined project lifecycle.
+- Changes are timestamped.
+- Relevant stakeholders are notified of significant status changes where configured.
+
+**Traceability:** FR-PM02
+**Priority:** High
+
+---
+
+### US-37 — View Team Members & Team Tasks
+
+**As a** Team Lead, **I want to** view my team's members and their assigned tasks, **so that** I know who I'm managing and what everyone's working on.
+
+**Acceptance Criteria**
+
+- List shows every active member on my team.
+- Task view is filterable by member and by project.
+- Updates in real time as tasks change.
+
+**Traceability:** FR-TL01, FR-TL02
+**Priority:** High
+
+---
+
+
+### US-38 — Repeated Rejection Risk View
+
+**As a** Project Manager, **I want to** see tasks that have been rejected or returned multiple times, **so that** I can treat repeated rejection as an early risk indicator.
+
+**Acceptance Criteria**
+
+- Threshold for "multiple times" is configurable or clearly defined.
+- Filterable by project and by employee.
+- Each entry links to the task's rejection history.
+
+**Traceability:** FR-PM07
+**Priority:** Medium
+
+---
+
+### US-39 — Cross-Project Workload View
+
+**As a** Project Manager, **I want to** see an employee's aggregate task load across all projects before assigning new work, **so that** I don't accidentally overload someone who's already busy.
+
+**Acceptance Criteria**
+
+- Shows total open tasks/load across every project, not just mine.
+- I see aggregate figures only, not other PMs' project-internal detail.
+- Surfaces before I confirm the assignment.
+
+**Traceability:** FR-PM10
+**Priority:** High
+
+---
+
+### US-40 — Auto-Notify PM/TL on Leave Request
+
+**As a** Project Manager, **I want to** be automatically notified when a team member on my project submits a leave request, **so that** I can plan around it instead of finding out too late.
+
+**Acceptance Criteria**
+
+- Fires immediately on submission, not on approval.
+- Identifies the employee, dates, and affected project.
+- Both the relevant PM and Team Lead receive the notification.
+
+**Traceability:** FR-PM11
+**Priority:** High
+
+---
+
+### US-41 — Export Client Reports
+
+**As a** Client, **I want to** export authorized progress summaries as PDF or spreadsheet, **so that** I can share updates internally on my end.
+
+**Acceptance Criteria**
+
+- Produces correctly formatted PDF and spreadsheet options.
+- Includes only data I'm authorized to see.
+- Completes within the defined latency window.
+
+**Traceability:** FR-CL06, NFR-P-CL02
+**Priority:** Medium
+
+---
+
+### US-42 — Toggle Client-Visible Team Role Info
+
+**As a** Project Manager, **I want to** toggle visibility of high-level team roles and lead contacts on the client view, **so that** I control exactly how much team detail the client sees.
+
+**Acceptance Criteria**
+
+- Toggle is per-project, not global.
+- Default state is explicitly defined.
+- Client sees the change immediately once toggled.
+
+**Traceability:** FR-CL07
+**Priority:** Low
+
+---
+
+
+### US-43 — Manage User Accounts
+
+**As a** System Administrator, **I want to** create, edit, activate, and deactivate user accounts, **so that** I control who has system access at any time.
+
+**Acceptance Criteria**
+
+- All four actions available from one interface.
+- Deactivating an account immediately revokes access.
+- Deactivated accounts retain historical data, not active access.
+
+**Traceability:** FR-SA01
+**Priority:** High
+
+---
+
+### US-44 — Assign & Revoke Roles
+
+**As a** System Administrator, **I want to** assign, modify, and revoke user roles, **so that** permissions match each person's actual responsibilities.
+
+**Acceptance Criteria**
+
+- Role changes take effect immediately.
+- Revoking a role immediately removes associated permissions.
+- Role changes are audited.
+
+**Traceability:** FR-SA02, FR-SA03
+**Priority:** High
+
+---
+
+### US-45 — Time-Bound Elevated Access
+
+**As a** System Administrator, **I want to** grant time-bound temporary elevated privileges with automatic revocation, **so that** emergency access never lingers past when it's needed.
+
+**Acceptance Criteria**
+
+- Grant requires an explicit expiry; no indefinite option.
+- Privilege reverts automatically at expiry with no manual step.
+- Every grant and its expiry is logged.
+
+**Traceability:** FR-SA04
+**Priority:** Medium
+
+---
+
+### US-46 — Configure System-Wide Parameters
+
+**As a** System Administrator, **I want to** configure system-wide parameters (session timeout, password policy, upload limits, maintenance mode), **so that** I can tune platform behavior without a code change.
+
+**Acceptance Criteria**
+
+- Each parameter has a defined valid range/format.
+- Changes take effect without a restart, or clearly state if one is needed.
+- Parameter changes are logged.
+
+**Traceability:** FR-SA05
+**Priority:** Medium
+
+---
+
+### US-47 — Search & Export Audit Logs
+
+**As a** System Administrator, **I want to** search, filter, and export audit logs by user, date range, module, task, or project, **so that** I can investigate incidents efficiently.
+
+**Acceptance Criteria**
+
+- All filter dimensions work independently and combined.
+- Export produces a usable file format.
+- Search performance stays acceptable as log volume grows.
+
+**Traceability:** FR-SA06, FR-SA07
+**Priority:** Medium
+
+---
+
+### US-48 — Account Unlock & Password Recovery
+
+**As a** System Administrator, **I want to** a secure mechanism to unlock accounts and reset/recover passwords, **so that** locked-out users can regain access safely.
+
+**Acceptance Criteria**
+
+- Reset requires identity verification before completing.
+- Reset action is logged with who performed it.
+- Temporary credentials expire quickly and force a change on first use.
+
+**Traceability:** FR-SA08
+**Priority:** High
+
+---
+
+### US-49 — Real-Time Anomaly Alerts
+
+**As a** System Administrator, **I want to** real-time alerts on anomalous security events (repeated failed logins, brute-force patterns, off-hours admin access), **so that** I can respond to threats as they happen.
+
+**Acceptance Criteria**
+
+- Alert fires in real time, not on a delayed batch job.
+- Includes enough context to act.
+- Alert thresholds are configurable.
+
+**Traceability:** FR-SA09
+**Priority:** Medium
+
+---
+
+### US-50 — Backup & Recovery Management
+
+**As a** System Administrator, **I want to** trigger on-demand backups and view scheduled backup status, **so that** I can confirm data protection is actually working.
+
+**Acceptance Criteria**
+
+- On-demand backup can be triggered without waiting for the schedule.
+- Status view shows last successful backup time and any failures.
+- Failed scheduled backups trigger their own alert.
+
+**Traceability:** FR-SA10, NFR-BR01, NFR-BR02
+**Priority:** High
+
+---
