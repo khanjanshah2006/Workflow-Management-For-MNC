@@ -352,23 +352,6 @@ Keep PRs small: **ideally under ~300 changed lines**. If your PR is huge, split 
 - Do not take feedback personally; review is normal for everyone.
 - Fix on the same branch, push, then resolve the conversation.
 
-### 8.5 Reviewer rotation
-
-| Author | Primary reviewer | Backup |
-|---|---|---|
-| Member 2 | Member 3 | Team Lead |
-| Member 3 | Member 4 | Team Lead |
-| Member 4 | Member 5 | Team Lead |
-| Member 5 | Member 6 | Team Lead |
-| Member 6 | Member 7 | Team Lead |
-| Member 7 | Member 8 | Team Lead |
-| Member 8 | Member 9 | Team Lead |
-| Member 9 | Member 10 | Team Lead |
-| Member 10 | Member 11 | Team Lead |
-| Member 11 | Member 2 | Team Lead |
-| Team Lead | Member 2 | Member 3 |
-
-*(Adjust names to match your actual team.)*
 
 ---
 
