@@ -1,0 +1,260 @@
+erDiagram
+    %% =========================================================
+    %% Workflow Management System for MNCs - ER Diagram (v2)
+    %% Conceptual model: entities, attributes, relationships.
+    %% Foreign keys are intentionally NOT shown - they are derived
+    %% from the relationships when we build the relational schema.
+    %% =========================================================
+
+    %% ---------- Identity & Organisation ----------
+    USER_ACCOUNT {
+        uuid     account_id PK
+        string   email UK
+        string   user_type "EMPLOYEE, PM, HR, CLIENT"
+        boolean  is_active
+        datetime last_login_at
+        datetime created_at
+    }
+
+    DEPARTMENT {
+        int      dept_id PK
+        string   name UK
+        string   description
+        datetime created_at
+    }
+
+    EMPLOYEE {
+        int    emp_id PK
+        string emp_code UK
+        string full_name
+        string email UK
+        string phone
+        string designation
+        date   date_of_joining
+        string status "ACTIVE, INACTIVE"
+    }
+
+    PROJECT_MANAGER {
+        int    pm_id PK
+        string emp_code UK
+        string full_name
+        string email UK
+        string phone
+        date   date_of_joining
+        string status "ACTIVE, INACTIVE"
+    }
+
+    HR_MANAGER {
+        int    hr_id PK
+        string emp_code UK
+        string full_name
+        string email UK
+        string phone
+        date   date_of_joining
+        string status "ACTIVE, INACTIVE"
+    }
+
+    CLIENT {
+        int    client_id PK
+        string company_name
+        string contact_person
+        string email UK
+        string phone
+        string address
+        string status "ACTIVE, INACTIVE"
+    }
+
+    %% ---------- Projects & Teams ----------
+    PROJECT {
+        int    project_id PK
+        string project_code UK
+        string name
+        string description
+        date   start_date
+        date   end_date
+        string priority "LOW, MEDIUM, HIGH, CRITICAL"
+        string status "PLANNED, ACTIVE, ON_HOLD, COMPLETED, CANCELLED"
+    }
+
+    PROJECT_ASSIGNMENT {
+        int    assignment_id PK
+        string role_in_project "e.g. Backend Developer"
+        date   assigned_on
+        date   released_on "null while active"
+    }
+
+    TEAM {
+        int      team_id PK
+        string   name
+        string   description
+        datetime created_at
+        string   status "ACTIVE, DISBANDED"
+    }
+
+    TEAM_MEMBER {
+        int  team_member_id PK
+        date joined_on
+    }
+
+    MILESTONE {
+        int    milestone_id PK
+        string title
+        string description
+        date   due_date
+        string status "PENDING, COMPLETED, MISSED"
+    }
+
+    %% ---------- Tasks ----------
+    TASK {
+        int      task_id PK
+        string   title
+        string   description
+        string   priority "LOW, MEDIUM, HIGH, CRITICAL"
+        string   status "TODO, IN_PROGRESS, IN_REVIEW, DONE, BLOCKED"
+        date     start_date
+        date     due_date
+        datetime completed_at
+        datetime created_at
+    }
+
+    TASK_COMMENT {
+        int      comment_id PK
+        string   content
+        datetime created_at
+        datetime edited_at
+    }
+
+    %% ---------- Client Deliverables ----------
+    DELIVERABLE {
+        int      deliverable_id PK
+        string   title
+        string   description
+        string   file_url
+        int      version
+        datetime submitted_at
+        string   status "SUBMITTED, ACCEPTED, CHANGES_REQUESTED"
+    }
+
+    DELIVERABLE_FEEDBACK {
+        int      feedback_id PK
+        string   decision "ACCEPTED, CHANGES_REQUESTED"
+        string   comments
+        int      rating "1 to 5"
+        datetime given_at
+    }
+
+    %% ---------- Leave ----------
+    LEAVE_TYPE {
+        int     leave_type_id PK
+        string  name UK "CASUAL, SICK, EARNED"
+        int     yearly_quota
+        boolean is_paid
+        string  description
+    }
+
+    LEAVE_REQUEST {
+        int      leave_id PK
+        date     start_date
+        date     end_date
+        int      total_days
+        string   reason
+        string   status "PENDING, APPROVED, REJECTED, CANCELLED"
+        datetime applied_at
+        datetime reviewed_at
+        string   review_remarks
+    }
+
+    %% ---------- Skills ----------
+    SKILL {
+        int    skill_id PK
+        string name UK
+        string category
+    }
+
+    EMPLOYEE_SKILL {
+        int    employee_skill_id PK
+        string proficiency "BEGINNER, INTERMEDIATE, EXPERT"
+        int    years_of_experience
+    }
+
+    %% ---------- Notifications & Audit ----------
+    NOTIFICATION {
+        int      notification_id PK
+        string   type
+        string   title
+        string   message
+        boolean  is_read
+        datetime created_at
+    }
+
+    AUDIT_LOG {
+        int      log_id PK
+        string   action "CREATE, UPDATE, DELETE, LOGIN, APPROVE"
+        string   entity_name
+        string   entity_ref_id
+        string   old_value
+        string   new_value
+        string   ip_address
+        datetime created_at
+    }
+
+    %% =========================================================
+    %% RELATIONSHIPS
+    %% =========================================================
+
+    %% Login (each person has exactly one account)
+    EMPLOYEE        |o--|| USER_ACCOUNT : "logs in via"
+    PROJECT_MANAGER |o--|| USER_ACCOUNT : "logs in via"
+    HR_MANAGER      |o--|| USER_ACCOUNT : "logs in via"
+    CLIENT          |o--|| USER_ACCOUNT : "logs in via"
+
+    %% Organisation
+    DEPARTMENT ||--o{ EMPLOYEE        : "employs"
+    DEPARTMENT ||--o{ PROJECT_MANAGER : "has PM"
+    DEPARTMENT ||--o{ HR_MANAGER      : "has HR member"
+    HR_MANAGER ||--|{ DEPARTMENT      : "looks after"
+
+    %% Projects
+    PROJECT_MANAGER ||--o{ PROJECT : "manages"
+    CLIENT          |o--o{ PROJECT : "commissions"
+
+    %% Employee to Project (M:N via PROJECT_ASSIGNMENT)
+    EMPLOYEE ||--o{ PROJECT_ASSIGNMENT : "is assigned"
+    PROJECT  ||--o{ PROJECT_ASSIGNMENT : "staffed by"
+
+    %% Teams inside a project
+    PROJECT  ||--o{ TEAM        : "contains"
+    TEAM     ||--|{ TEAM_MEMBER : "has"
+    EMPLOYEE ||--o{ TEAM_MEMBER : "is member"
+    EMPLOYEE ||--o{ TEAM        : "leads (Team Lead post)"
+
+    %% Milestones
+    PROJECT ||--o{ MILESTONE : "has"
+
+    %% Tasks
+    TEAM      ||--o{ TASK         : "owns"
+    EMPLOYEE  ||--o{ TASK         : "is assigned"
+    EMPLOYEE  ||--o{ TASK         : "creates (as TL)"
+    MILESTONE |o--o{ TASK         : "groups"
+    TASK      ||--o{ TASK_COMMENT : "has"
+    USER_ACCOUNT ||--o{ TASK_COMMENT : "writes"
+
+    %% Deliverables
+    PROJECT         ||--o{ DELIVERABLE          : "has"
+    MILESTONE       |o--o{ DELIVERABLE          : "delivered for"
+    PROJECT_MANAGER ||--o{ DELIVERABLE          : "submits"
+    DELIVERABLE     ||--o{ DELIVERABLE_FEEDBACK : "receives"
+    CLIENT          ||--o{ DELIVERABLE_FEEDBACK : "gives"
+
+    %% Leave
+    EMPLOYEE   ||--o{ LEAVE_REQUEST : "applies"
+    LEAVE_TYPE ||--o{ LEAVE_REQUEST : "classifies"
+    HR_MANAGER |o--o{ LEAVE_REQUEST : "reviews"
+
+    %% Skills (M:N via EMPLOYEE_SKILL)
+    EMPLOYEE ||--o{ EMPLOYEE_SKILL : "has"
+    SKILL    ||--o{ EMPLOYEE_SKILL : "held via"
+
+    %% Notifications & Audit
+    USER_ACCOUNT ||--o{ NOTIFICATION : "receives"
+    USER_ACCOUNT |o--o{ AUDIT_LOG    : "performs"
