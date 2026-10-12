@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 def login(
     payload: LoginRequest,
     response: Response,
+    request: Request,
     db: Session = Depends(get_db),
 ) -> TokenResponse:
     """
@@ -33,6 +34,7 @@ def login(
         db=db,
         email=payload.email,
         password=payload.password,
+        ip_address=request.client.host if request.client else None,
     )
 
     # Set HttpOnly refresh token cookie
