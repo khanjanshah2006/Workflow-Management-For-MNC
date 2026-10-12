@@ -12,12 +12,14 @@ DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localho
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql://", 1)
 
-# Configure SQLAlchemy connection pooling against Supabase PostgreSQL
+# Configure reliable SQLAlchemy connection pooling against Supabase PostgreSQL
 engine = create_engine(
     DATABASE_URL,
-    pool_pre_ping=True,
-    pool_size=5,
+    pool_pre_ping=True,      # Automatically detects severed/idle connections and reconnects
+    pool_size=5,             # Sensible pool size for development
     max_overflow=10,
+    pool_recycle=120,        # Recycle connections every 2 minutes before Supabase idle timeout
+    pool_timeout=30,
 )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
