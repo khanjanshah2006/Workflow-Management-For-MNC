@@ -78,7 +78,9 @@ class DepartmentUpdate(BaseModel):
     @field_validator("description", mode="before")
     @classmethod
     def validate_and_strip_description(cls, v: Any) -> Any:
-        """Strip whitespace from description; empty string converts to None."""
+        """Strip whitespace from description; empty string or explicit null converts to None."""
+        if v is None:
+            return None
         if isinstance(v, str):
             v = v.strip()
             return v if v else None
@@ -86,8 +88,8 @@ class DepartmentUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_at_least_one_field(self) -> "DepartmentUpdate":
-        """Ensure at least one updatable field is provided."""
-        if self.name is None and self.description is None:
+        """Ensure at least one updatable field is provided via model_fields_set."""
+        if not self.model_fields_set:
             raise ValueError(
                 "At least one field ('name' or 'description') must be provided for update"
             )
@@ -116,11 +118,14 @@ class DepartmentResponse(BaseModel):
         ...,
         description="Timestamp when the department was created",
     )
-    team_count: int = Field(
-        default=0,
-        ge=0,
-        description="Total number of active teams in this department",
-        examples=[3],
+    team_count: int | None = Field(
+        default=None,
+        description=(
+            "UNRESOLVED REQUIREMENT: The database schema does not link Team to Department "
+            "(Team references Project, Employee references Department). "
+            "Returns null pending team decision on whether to drop this field, "
+            "replace with employee_count, or migrate the schema."
+        ),
     )
 
     model_config = ConfigDict(from_attributes=True)
