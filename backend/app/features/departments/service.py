@@ -1,10 +1,3 @@
-"""
-Service layer for Department Management (US-05).
-
-Coordinates business logic, transaction lifecycles, and audit logging
-for Department entity operations.
-"""
-
 import json
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -61,19 +54,6 @@ def _record_audit_log(
 
 
 def get_department(db: Session, dept_id: int) -> Department:
-    """
-    Retrieve a department by its ID or raise DepartmentNotFoundError.
-
-    Args:
-        db: Active SQLAlchemy database session.
-        dept_id: Department primary key.
-
-    Returns:
-        Department model instance.
-
-    Raises:
-        DepartmentNotFoundError: If no department matches dept_id.
-    """
     dept = repository.get_by_id(db, dept_id)
     if dept is None:
         raise DepartmentNotFoundError(dept_id)
@@ -85,17 +65,6 @@ def list_departments(
     skip: int = 0,
     limit: int = 20,
 ) -> tuple[list[Department], int]:
-    """
-    Retrieve paginated departments and the total count.
-
-    Args:
-        db: Active SQLAlchemy database session.
-        skip: Pagination offset.
-        limit: Maximum number of records to return.
-
-    Returns:
-        Tuple of (list of Department instances, total_count).
-    """
     return repository.get_all(db, skip=skip, limit=limit)
 
 
@@ -105,31 +74,13 @@ def create_department(
     actor_account_id: UUID | None = None,
     ip_address: str | None = None,
 ) -> Department:
-    """
-    Create a new department, validate unique name, log audit trail, and commit.
-
-    Args:
-        db: Active SQLAlchemy database session.
-        department_in: Validated DepartmentCreate schema.
-        actor_account_id: UUID of user account performing the action.
-        ip_address: Optional IP address of client for audit.
-
-    Returns:
-        The newly created and committed Department instance.
-
-    Raises:
-        DepartmentAlreadyExistsError: If a department with this name exists.
-    """
-    # 1. Unique name validation
     existing = repository.get_by_name(db, department_in.name)
     if existing is not None:
         raise DepartmentAlreadyExistsError(department_in.name)
 
     try:
-        # 2. Stage creation in repository (db.flush)
         department = repository.create(db, department_in)
 
-        # 3. Write audit log
         new_data = {
             "dept_id": department.dept_id,
             "name": department.name,
@@ -144,7 +95,6 @@ def create_department(
             ip_address=ip_address,
         )
 
-        # 4. Commit transaction
         db.commit()
         db.refresh(department)
         return department
@@ -160,46 +110,23 @@ def update_department(
     actor_account_id: UUID | None = None,
     ip_address: str | None = None,
 ) -> Department:
-    """
-    Update an existing department, validate name uniqueness if changed,
-    log audit trail, and commit.
-
-    Args:
-        db: Active SQLAlchemy database session.
-        dept_id: Primary key of department to update.
-        department_in: Validated DepartmentUpdate schema.
-        actor_account_id: UUID of user account performing the action.
-        ip_address: Optional IP address of client for audit.
-
-    Returns:
-        The updated and committed Department instance.
-
-    Raises:
-        DepartmentNotFoundError: If department does not exist.
-        DepartmentAlreadyExistsError: If updated name conflicts with another department.
-    """
-    # 1. Fetch existing department
     department = repository.get_by_id(db, dept_id)
     if department is None:
         raise DepartmentNotFoundError(dept_id)
 
-    # 2. Check name collision if name is being changed
     if department_in.name and department_in.name.lower() != department.name.lower():
         existing = repository.get_by_name(db, department_in.name)
         if existing is not None and existing.dept_id != dept_id:
             raise DepartmentAlreadyExistsError(department_in.name)
 
     try:
-        # 3. Capture old state for audit
         old_data = {
             "name": department.name,
             "description": department.description,
         }
 
-        # 4. Apply update
         department = repository.update(db, department, department_in)
 
-        # 5. Capture new state and log audit
         new_data = {
             "name": department.name,
             "description": department.description,
@@ -214,7 +141,6 @@ def update_department(
             ip_address=ip_address,
         )
 
-        # 6. Commit transaction
         db.commit()
         db.refresh(department)
         return department
@@ -229,18 +155,6 @@ def delete_department(
     actor_account_id: UUID | None = None,
     ip_address: str | None = None,
 ) -> None:
-    """
-    Delete a department, log audit trail, and commit.
-
-    Args:
-        db: Active SQLAlchemy database session.
-        dept_id: Primary key of department to delete.
-        actor_account_id: UUID of user account performing the action.
-        ip_address: Optional IP address of client for audit.
-
-    Raises:
-        DepartmentNotFoundError: If department does not exist.
-    """
     department = repository.get_by_id(db, dept_id)
     if department is None:
         raise DepartmentNotFoundError(dept_id)

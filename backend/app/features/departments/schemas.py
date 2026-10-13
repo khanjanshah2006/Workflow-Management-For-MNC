@@ -4,8 +4,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 
 class DepartmentBase(BaseModel):
-    """Shared department attributes for request payloads."""
-
     name: str = Field(
         ...,
         min_length=2,
@@ -23,7 +21,6 @@ class DepartmentBase(BaseModel):
     @field_validator("name", mode="before")
     @classmethod
     def validate_and_strip_name(cls, v: Any) -> Any:
-        """Strip whitespace and reject blank or whitespace-only names."""
         if isinstance(v, str):
             v = v.strip()
             if not v:
@@ -33,7 +30,6 @@ class DepartmentBase(BaseModel):
     @field_validator("description", mode="before")
     @classmethod
     def validate_and_strip_description(cls, v: Any) -> Any:
-        """Strip whitespace from description; empty string converts to None."""
         if isinstance(v, str):
             v = v.strip()
             return v if v else None
@@ -41,14 +37,10 @@ class DepartmentBase(BaseModel):
 
 
 class DepartmentCreate(DepartmentBase):
-    """Payload schema for creating a new department."""
-
     pass
 
 
 class DepartmentUpdate(BaseModel):
-    """Payload schema for updating an existing department (PUT / PATCH)."""
-
     name: str | None = Field(
         default=None,
         min_length=2,
@@ -66,7 +58,6 @@ class DepartmentUpdate(BaseModel):
     @field_validator("name", mode="before")
     @classmethod
     def validate_and_strip_name(cls, v: Any) -> Any:
-        """Strip whitespace and reject blank or explicit null names."""
         if v is None:
             raise ValueError("Department name cannot be null")
         if isinstance(v, str):
@@ -78,7 +69,6 @@ class DepartmentUpdate(BaseModel):
     @field_validator("description", mode="before")
     @classmethod
     def validate_and_strip_description(cls, v: Any) -> Any:
-        """Strip whitespace from description; empty string or explicit null converts to None."""
         if v is None:
             return None
         if isinstance(v, str):
@@ -88,7 +78,6 @@ class DepartmentUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_at_least_one_field(self) -> "DepartmentUpdate":
-        """Ensure at least one updatable field is provided via model_fields_set."""
         if not self.model_fields_set:
             raise ValueError(
                 "At least one field ('name' or 'description') must be provided for update"
@@ -97,8 +86,6 @@ class DepartmentUpdate(BaseModel):
 
 
 class DepartmentResponse(BaseModel):
-    """Response schema returned to clients representing a department."""
-
     dept_id: int = Field(
         ...,
         description="Unique identifier of the department",
@@ -118,14 +105,11 @@ class DepartmentResponse(BaseModel):
         ...,
         description="Timestamp when the department was created",
     )
-    team_count: int | None = Field(
-        default=None,
-        description=(
-            "UNRESOLVED REQUIREMENT: The database schema does not link Team to Department "
-            "(Team references Project, Employee references Department). "
-            "Returns null pending team decision on whether to drop this field, "
-            "replace with employee_count, or migrate the schema."
-        ),
+    team_count: int = Field(
+        default=0,
+        ge=0,
+        description="Total number of distinct teams associated with this department (via team members and leads)",
+        examples=[3],
     )
 
     model_config = ConfigDict(from_attributes=True)
