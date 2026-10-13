@@ -8,11 +8,7 @@ load_dotenv()
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
-<<<<<<< HEAD
-# SQLAlchemy 2.0 defaults to psycopg (v3); ensure postgresql+psycopg2 is used
-=======
 # SQLAlchemy 1.4+ / 2.0 requires postgresql+psycopg2:// instead of bare postgres:// or postgresql://
->>>>>>> origin/develop
 if DATABASE_URL.startswith("postgres://"):
     DATABASE_URL = DATABASE_URL.replace("postgres://", "postgresql+psycopg2://", 1)
 elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
