@@ -1,20 +1,13 @@
-"""
-FastAPI Router for Department Management (US-05).
-
-Provides endpoints for listing, viewing, creating, and updating departments.
-Enforces authentication, RBAC, pagination, and maps domain errors to standard HTTP status codes.
-"""
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.features.departments import service
 from app.features.departments.dependencies import (
-    CurrentUser,
     get_current_user,
     require_roles,
 )
+from app.models.user_account import UserAccount
 from app.features.departments.schemas import (
     DepartmentCreate,
     DepartmentResponse,
@@ -35,9 +28,8 @@ def list_departments(
     skip: int = Query(0, ge=0, description="Number of departments to skip"),
     limit: int = Query(20, ge=1, le=100, description="Max number of departments to return"),
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: UserAccount = Depends(get_current_user),
 ) -> list[DepartmentResponse]:
-    """Retrieve paginated departments."""
     departments, total_count = service.list_departments(db, skip=skip, limit=limit)
     response.headers["X-Total-Count"] = str(total_count)
     return [DepartmentResponse.model_validate(dept) for dept in departments]
@@ -52,9 +44,8 @@ def list_departments(
 def get_department(
     dept_id: int,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(get_current_user),
+    current_user: UserAccount = Depends(get_current_user),
 ) -> DepartmentResponse:
-    """Retrieve a single department by its primary key."""
     try:
         dept = service.get_department(db, dept_id)
         return DepartmentResponse.model_validate(dept)
@@ -76,11 +67,10 @@ def create_department(
     payload: DepartmentCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(
+    current_user: UserAccount = Depends(
         require_roles(["HR_MANAGER", "ADMIN"])
     ),
 ) -> DepartmentResponse:
-    """Create a new department."""
     client_ip = request.client.host if request.client else None
     try:
         dept = service.create_department(
@@ -108,11 +98,10 @@ def update_department(
     payload: DepartmentUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: CurrentUser = Depends(
+    current_user: UserAccount = Depends(
         require_roles(["HR_MANAGER", "ADMIN"])
     ),
 ) -> DepartmentResponse:
-    """Update an existing department."""
     client_ip = request.client.host if request.client else None
     try:
         dept = service.update_department(
