@@ -10,6 +10,8 @@ from app.core.security import (
     decode_token,
     ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+from app.core.audit import write_audit_log
+from app.models.enums import AuditAction
 from app.features.auth.repository import AuthRepository
 from app.features.auth.schemas import (
     TokenResponse,
@@ -22,7 +24,9 @@ class AuthService:
     """Service encapsulating authentication logic and token lifecycle."""
 
     @staticmethod
-    def authenticate_user(db: Session, email: str, password: str) -> TokenResponse:
+    def authenticate_user(
+        db: Session, email: str, password: str, ip_address: str | None = None
+    ) -> TokenResponse:
         """Authenticate user credentials and issue signed JWT access & refresh tokens."""
         account = AuthRepository.get_by_email(db, email=email)
         if not account or not verify_password(password, account.password_hash):
@@ -40,6 +44,22 @@ class AuthService:
 
         # Update last login timestamp in-place
         AuthRepository.update_last_login(db, account)
+
+        # Record audit log event for successful authentication
+        write_audit_log(
+            db=db,
+            action=AuditAction.LOGIN,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(account.account_id),
+            account_id=account.account_id,
+            new_value={
+                "email": account.email,
+                "user_type": account.user_type.value
+                if hasattr(account.user_type, "value")
+                else str(account.user_type),
+            },
+            ip_address=ip_address,
+        )
 
         # Payload encoded into token
         token_payload = {

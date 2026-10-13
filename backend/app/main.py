@@ -6,6 +6,7 @@ from sqlalchemy import text
 from app.db.session import SessionLocal
 from app.features.auth.router import router as auth_router
 from app.features.departments.router import router as department_router
+from app.features.audit import audit_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
 from app.models.user_account import UserAccount
@@ -41,6 +42,7 @@ app.add_middleware(
 # Register feature routers
 app.include_router(auth_router)
 app.include_router(department_router)
+app.include_router(audit_router)
 
 
 @app.get("/", tags=["Root"])
