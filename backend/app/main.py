@@ -8,6 +8,7 @@ from app.features.auth.router import router as auth_router
 from app.features.departments.router import router as department_router
 from app.features.audit import audit_router
 from app.features.profile import profile_router
+from app.features.projects import project_router
 from app.features.employees import employee_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
@@ -46,6 +47,7 @@ app.include_router(auth_router)
 app.include_router(department_router)
 app.include_router(audit_router)
 app.include_router(profile_router)
+app.include_router(project_router)
 app.include_router(employee_router)
 
 
