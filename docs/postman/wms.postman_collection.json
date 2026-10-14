@@ -1,0 +1,796 @@
+{
+	"info": {
+		"_postman_id": "c1f72e90-84a2-4a4b-91d9-76bb44e3922c",
+		"name": "Workflow Management System for MNCs API",
+		"description": "Standardized Postman collection for WMS backend endpoints adhering to team skill specifications.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "01 Auth",
+			"description": "Authentication and session management (features/auth)",
+			"item": [
+				{
+					"name": "POST Login as HR",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    console.log(\"HR access token set:\", jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"hr@company.com\",\n    \"password\": \"Password@123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login as HR Manager account. Saves access_token to environment automatically."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Login as PM",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    console.log(\"PM access token set:\", jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"pm@company.com\",\n    \"password\": \"Password@123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login as Project Manager account. Saves access_token to environment automatically."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Login as Admin",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    console.log(\"Admin access token set:\", jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"admin@company.com\",\n    \"password\": \"Admin@123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login as Admin account. Saves access_token to environment automatically."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Login as Employee",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    pm.environment.set(\"access_token\", jsonData.access_token);",
+									"    console.log(\"Employee access token set:\", jsonData.access_token);",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"email\": \"employee@company.com\",\n    \"password\": \"Password@123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"login"
+							]
+						},
+						"description": "Login as standard Employee account. Saves access_token to environment automatically."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Current User Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/me",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"me"
+							]
+						},
+						"description": "Retrieves the authenticated user profile information."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Refresh Access Token",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/refresh",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"refresh"
+							]
+						},
+						"description": "Issues a fresh access token using the HttpOnly refresh token cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"auth",
+								"logout"
+							]
+						},
+						"description": "Clears the active session and refresh token cookie."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "02 Employees & Org",
+			"description": "Employee directory and organizational management (features/employees, features/org, features/departments)",
+			"item": [
+				{
+					"name": "GET List Departments",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/departments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"departments"
+							]
+						},
+						"description": "Lists all company departments (US-05)."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Browse Employee Directory",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/employees?skip=0&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"employees"
+							],
+							"query": [
+								{
+									"key": "skip",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								},
+								{
+									"key": "search",
+									"value": "",
+									"disabled": true
+								},
+								{
+									"key": "dept_id",
+									"value": "1",
+									"disabled": true
+								},
+								{
+									"key": "status",
+									"value": "ACTIVE",
+									"disabled": true
+								}
+							]
+						},
+						"description": "Browse paginated employee directory with search and filter capabilities (US-04)."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Employee Details by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/employees/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"employees",
+								"1"
+							]
+						},
+						"description": "Fetches detailed employee profile by employee ID."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Register New Employee",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"first_name\": \"Rohan\",\n    \"last_name\": \"Mehta\",\n    \"email\": \"rohan.mehta@company.com\",\n    \"phone\": \"+91 9876543210\",\n    \"dept_id\": 1,\n    \"designation\": \"Senior Backend Engineer\",\n    \"date_of_joining\": \"2026-10-15\",\n    \"password\": \"Password@123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/employees",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"employees"
+							]
+						},
+						"description": "Onboard an employee, generate EMP code, and provision login user account. Restricted to HR/Admin."
+					},
+					"response": []
+				},
+				{
+					"name": "PATCH Update Employee Status",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"status\": \"ACTIVE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/employees/1/status",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"employees",
+								"1",
+								"status"
+							]
+						},
+						"description": "Update employee status (ACTIVE/INACTIVE) and sync account login. Restricted to HR/Admin."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "03 Projects",
+			"description": "Project creation, lifecycle, staffing allocations, and project teams (features/projects - US-06, US-07)",
+			"item": [
+				{
+					"name": "POST Create Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"project_code\": \"PRJ-AI-01\",\n    \"name\": \"Enterprise AI Copilot System\",\n    \"description\": \"Internal agentic workflow assistant for MNC departments\",\n    \"start_date\": \"2026-10-20\",\n    \"end_date\": \"2027-04-30\",\n    \"priority\": \"HIGH\",\n    \"client_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects"
+							]
+						},
+						"description": "Create a new project record. Restricted to Project Managers (PM) and Admins."
+					},
+					"response": []
+				},
+				{
+					"name": "GET List Projects",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects?skip=0&limit=20",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects"
+							],
+							"query": [
+								{
+									"key": "skip",
+									"value": "0"
+								},
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						},
+						"description": "List projects scoped by caller role (PM sees managed; Employee sees assigned; Admin sees all)."
+					},
+					"response": []
+				},
+				{
+					"name": "GET Project Details by ID",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1"
+							]
+						},
+						"description": "Retrieve project details by primary key."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Allocate Employee to Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"emp_id\": 1,\n    \"role_in_project\": \"Lead Backend Architect\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/assign",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"assign"
+							]
+						},
+						"description": "Allocate an employee to project roster (US-07). Restricted to managing PM or Admin."
+					},
+					"response": []
+				},
+				{
+					"name": "GET List Project Roster",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/assignments",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"assignments"
+							]
+						},
+						"description": "Lists all assigned employees on a project."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Create Team in Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"name\": \"Core Infrastructure Team\",\n    \"description\": \"Handles cloud hosting and database migrations\",\n    \"lead_emp_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/teams",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"teams"
+							]
+						},
+						"description": "Create a functional sub-team under a project (US-07)."
+					},
+					"response": []
+				},
+				{
+					"name": "GET List Project Teams",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/teams",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"teams"
+							]
+						},
+						"description": "List all teams formed under a project."
+					},
+					"response": []
+				},
+				{
+					"name": "POST Add Member to Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"emp_id\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"teams",
+								"1",
+								"members"
+							]
+						},
+						"description": "Add an allocated project employee to a team. Returns 400 if not on project roster."
+					},
+					"response": []
+				},
+				{
+					"name": "GET List Team Members",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"projects",
+								"1",
+								"teams",
+								"1",
+								"members"
+							]
+						},
+						"description": "List all members of a team."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "04 Tasks",
+			"description": "Task tracking and sprint boards (features/tasks)",
+			"item": []
+		},
+		{
+			"name": "05 Leave",
+			"description": "Leave requests and approvals (features/leave)",
+			"item": []
+		},
+		{
+			"name": "06 Notifications",
+			"description": "Notification delivery and subscriptions (features/notifications)",
+			"item": []
+		},
+		{
+			"name": "07 Client Portal",
+			"description": "External client view and deliverables access (features/client_portal)",
+			"item": []
+		},
+		{
+			"name": "08 Reporting",
+			"description": "Executive metrics, summaries and analytics (features/reporting)",
+			"item": []
+		},
+		{
+			"name": "09 Support",
+			"description": "Internal and client support tickets (features/support)",
+			"item": []
+		},
+		{
+			"name": "10 Admin",
+			"description": "System configuration and audit log inspection (features/admin, features/audit)",
+			"item": [
+				{
+					"name": "GET Paginated Audit Logs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/audit-logs",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"api",
+								"v1",
+								"audit-logs"
+							]
+						},
+						"description": "View system audit logs. Restricted to ADMIN."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8000"
+		}
+	]
+}
