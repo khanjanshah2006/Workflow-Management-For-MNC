@@ -5,11 +5,16 @@ import { teamApi } from "../../api/teamApi.js";
 /**
  * TeamRosterPage (US-37: [S1-FE-4] Team Lead Team Roster View)
  *
+ * Primary view for Team Leads to inspect the members belonging to their team,
+ * their designations, emails, and active employment status.
+ *
  * Implements graceful loading skeletons, empty state, error state with retry,
- * live data cards, and an initial Wave 2 placeholder for Team Tasks.
+ * dynamic team switching, and an initial Wave 2 placeholder for Team Tasks.
  */
 export default function TeamRosterPage() {
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Single source of truth: URL query param (defaults to Team 1)
   const teamId = searchParams.get("teamId") || "1";
 
   const [members, setMembers] = useState([]);
@@ -18,14 +23,17 @@ export default function TeamRosterPage() {
   const [isRetrying, setIsRetrying] = useState(false);
   const [fetchTrigger, setFetchTrigger] = useState(0);
 
+  // Dynamic API data fetch synchronized with teamId and fetchTrigger
   useEffect(() => {
     let ignore = false;
 
-    async function loadMembers() {
+    async function loadRoster() {
       try {
         setErrorMessage(null);
 
+        // Consume primary endpoint specified in Issue #43: GET /api/v1/teams/{id}/members
         const rawMembers = await teamApi.getTeamMembers(teamId);
+
         if (ignore) return;
 
         if (!Array.isArray(rawMembers) || rawMembers.length === 0) {
@@ -35,23 +43,25 @@ export default function TeamRosterPage() {
           return;
         }
 
-        const normalized = await Promise.all(
+        // Check if members need profile enrichment (if missing full_name/email)
+        const enrichedMembers = await Promise.all(
           rawMembers.map(async (raw) => {
             if (raw.full_name || raw.name || !raw.emp_id) {
               return teamApi.normalizeMember(raw);
             }
             try {
-              const detail = await teamApi.getEmployeeById(raw.emp_id);
-              return teamApi.normalizeMember(raw, detail);
+              // Enrich with employee details from /api/v1/employees/{emp_id}
+              const employeeDetail = await teamApi.getEmployeeById(raw.emp_id);
+              return teamApi.normalizeMember(raw, employeeDetail);
             } catch {
+              // Fallback to normalized raw record if detail lookup fails
               return teamApi.normalizeMember(raw);
             }
           })
         );
 
-        if (!ignore) {
-          setMembers(normalized);
-        }
+        if (ignore) return;
+        setMembers(enrichedMembers);
       } catch (err) {
         if (!ignore) {
           const message =
@@ -68,7 +78,7 @@ export default function TeamRosterPage() {
       }
     }
 
-    loadMembers();
+    loadRoster();
 
     return () => {
       ignore = true;
@@ -81,9 +91,16 @@ export default function TeamRosterPage() {
     setFetchTrigger((prev) => prev + 1);
   };
 
+  const handleTeamChange = (newTeamId) => {
+    setIsLoading(true);
+    setSearchParams({ teamId: newTeamId });
+  };
+
   return (
     <section className="page roster-page-container">
-      {/* Page Header */}
+      {/* ======================================================== */}
+      {/* A. PAGE HEADER                                           */}
+      {/* ======================================================== */}
       <div className="page-header-row">
         <div>
           <div className="page-eyebrow">TEAM WORKSPACE</div>
@@ -93,13 +110,23 @@ export default function TeamRosterPage() {
           </p>
         </div>
 
+        {/* Team Context Controls */}
         <div className="roster-header-actions">
           <div className="team-badge-container">
-            <span className="team-context-label">Current Team:</span>
-            <span className="team-pill">
-              <span className="team-pill-indicator" />
-              Team #{teamId}
-            </span>
+            <label htmlFor="team-select" className="team-context-label">
+              Active Team:
+            </label>
+            <select
+              id="team-select"
+              className="team-select-dropdown"
+              value={teamId}
+              onChange={(e) => handleTeamChange(e.target.value)}
+              title="Select team to view roster"
+            >
+              <option value="1">Team #1 (Frontend Engineering)</option>
+              <option value="2">Team #2 (Backend Engineering)</option>
+              <option value="3">Team #3 (Quality Assurance)</option>
+            </select>
           </div>
 
           <button
@@ -114,7 +141,9 @@ export default function TeamRosterPage() {
         </div>
       </div>
 
-      {/* Error State Banner */}
+      {/* ======================================================== */}
+      {/* B. ERROR STATE                                           */}
+      {/* ======================================================== */}
       {errorMessage && (
         <div className="roster-error-banner" role="alert">
           <div className="error-banner-icon">⚠</div>
@@ -133,7 +162,9 @@ export default function TeamRosterPage() {
         </div>
       )}
 
-      {/* Loading State Skeletons */}
+      {/* ======================================================== */}
+      {/* C. LOADING STATE (SKELETON CARDS)                        */}
+      {/* ======================================================== */}
       {isLoading && (
         <div className="roster-section">
           <div className="section-meta-row">
@@ -157,7 +188,9 @@ export default function TeamRosterPage() {
         </div>
       )}
 
-      {/* Empty State */}
+      {/* ======================================================== */}
+      {/* D. EMPTY STATE                                           */}
+      {/* ======================================================== */}
       {!isLoading && !errorMessage && members.length === 0 && (
         <div className="roster-empty-state">
           <div className="empty-symbol">👥</div>
@@ -176,7 +209,9 @@ export default function TeamRosterPage() {
         </div>
       )}
 
-      {/* Data State: Team Member Cards */}
+      {/* ======================================================== */}
+      {/* E. DATA STATE: TEAM MEMBER CARDS                         */}
+      {/* ======================================================== */}
       {!isLoading && !errorMessage && members.length > 0 && (
         <div className="roster-section">
           <div className="section-meta-row">
@@ -248,7 +283,9 @@ export default function TeamRosterPage() {
         </div>
       )}
 
-      {/* Team Tasks Placeholder Container (Wave 2) */}
+      {/* ======================================================== */}
+      {/* F. TEAM TASKS PLACEHOLDER CONTAINER (WAVE 2)             */}
+      {/* ======================================================== */}
       <section className="tasks-placeholder-section" aria-labelledby="team-tasks-heading">
         <div className="tasks-placeholder-header">
           <div className="tasks-heading-row">
