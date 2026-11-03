@@ -10,6 +10,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import AppLayout from "./components/layout/AppLayout";
+import ProjectsPage from "./features/projects/pages/ProjectsPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -80,15 +81,8 @@ function App() {
                 />
               }
             />
-            <Route
-              path="/projects"
-              element={
-                <PagePlaceholder
-                  title="Projects"
-                  description="Your project workspace will appear here."
-                />
-              }
-            />
+            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects/:projectId" element={<ProjectsPage />} />
             <Route
               path="/tasks"
               element={
