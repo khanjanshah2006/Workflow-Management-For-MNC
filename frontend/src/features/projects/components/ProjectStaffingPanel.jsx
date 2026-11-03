@@ -1,8 +1,48 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { projectsApi } from "../../../api/projectsApi";
+
+function getWorkloadBadgeClass(count) {
+  if (count === 0) return "badge-workload badge-workload-free";
+  if (count <= 1) return "badge-workload badge-workload-low";
+  if (count <= 3) return "badge-workload badge-workload-medium";
+  return "badge-workload badge-workload-high";
+}
+
+function getWorkloadLabel(count) {
+  if (count === 1) return "1 active project";
+  return `${count} active projects`;
+}
 
 export default function ProjectStaffingPanel({ projectId }) {
   const [activeTab, setActiveTab] = useState("eligible"); // 'eligible' | 'roster'
   const [searchTerm, setSearchTerm] = useState("");
+
+  // Fetch eligible employees for this project (US-07)
+  const {
+    data: eligibleEmployees = [],
+    isLoading: eligibleLoading,
+    isError: eligibleIsError,
+    error: eligibleError,
+    refetch: refetchEligible,
+  } = useQuery({
+    queryKey: ["projects", projectId, "eligible-employees"],
+    queryFn: () => projectsApi.getEligibleEmployees(projectId),
+    enabled: Boolean(projectId),
+    retry: 1,
+  });
+
+  // Filter candidates based on search
+  const filteredEligible = eligibleEmployees.filter((emp) => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return (
+      emp.full_name?.toLowerCase().includes(term) ||
+      emp.emp_code?.toLowerCase().includes(term) ||
+      emp.designation?.toLowerCase().includes(term) ||
+      emp.department_name?.toLowerCase().includes(term)
+    );
+  });
 
   return (
     <div className="staffing-panel-card">
@@ -22,7 +62,7 @@ export default function ProjectStaffingPanel({ projectId }) {
             onClick={() => setActiveTab("eligible")}
           >
             <span>Eligible Employees</span>
-            <span className="tab-pill">0</span>
+            <span className="tab-pill">{eligibleEmployees.length}</span>
           </button>
           <button
             type="button"
@@ -59,34 +99,100 @@ export default function ProjectStaffingPanel({ projectId }) {
               )}
             </div>
             <div className="staffing-count-label">
-              Project #{projectId || "—"} Staffing Workspace
+              Showing <strong>{filteredEligible.length}</strong> eligible candidates
             </div>
           </div>
 
-          <div className="eligible-table-wrapper">
-            <table className="staffing-table">
-              <thead>
-                <tr>
-                  <th>Employee</th>
-                  <th>Department</th>
-                  <th>Current Workload</th>
-                  <th>Project Role</th>
-                  <th className="th-action">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="candidate-row">
-                  <td colSpan={5} className="empty-cell">
-                    <div className="staffing-empty-state">
-                      <div className="empty-symbol">👥</div>
-                      <h4>Candidate table initialized</h4>
-                      <p>Connect with eligible employees API to populate real-time candidate roster.</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          {eligibleLoading ? (
+            <div className="staffing-loading-state">
+              <div className="spinner-medium" />
+              <p>Scanning employee directory and calculating workloads...</p>
+            </div>
+          ) : eligibleIsError ? (
+            <div className="staffing-error-state">
+              <span className="error-symbol">⚠️</span>
+              <h4>Unable to load eligible candidates</h4>
+              <p>{eligibleError?.message || "An unexpected error occurred while fetching employees."}</p>
+              <button
+                type="button"
+                className="btn-retry"
+                onClick={() => refetchEligible()}
+              >
+                Retry
+              </button>
+            </div>
+          ) : filteredEligible.length === 0 ? (
+            <div className="staffing-empty-state">
+              <div className="empty-symbol">👥</div>
+              <h4>No eligible employees found</h4>
+              <p>
+                {searchTerm
+                  ? `No employees match "${searchTerm}". Try a different search term.`
+                  : "All active employees are already assigned to this project or none are available in the organization."}
+              </p>
+            </div>
+          ) : (
+            <div className="eligible-table-wrapper">
+              <table className="staffing-table">
+                <thead>
+                  <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Current Workload</th>
+                    <th>Project Role</th>
+                    <th className="th-action">Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredEligible.map((employee) => {
+                    const workloadCount = employee.workload ?? employee.active_projects_count ?? 0;
+                    return (
+                      <tr key={employee.emp_id} className="candidate-row">
+                        <td className="candidate-info-cell">
+                          <div className="candidate-avatar">
+                            {employee.full_name?.charAt(0) || "E"}
+                          </div>
+                          <div className="candidate-details">
+                            <span className="candidate-name">{employee.full_name}</span>
+                            <span className="candidate-code-email">
+                              {employee.emp_code} · {employee.email}
+                            </span>
+                          </div>
+                        </td>
+                        <td>
+                          <span className="department-tag">
+                            {employee.department_name || "General"}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={getWorkloadBadgeClass(workloadCount)}>
+                            <span className="workload-dot" />
+                            {getWorkloadLabel(workloadCount)}
+                          </span>
+                        </td>
+                        <td className="role-input-cell">
+                          <span className="role-tag-preview">
+                            {employee.designation || "Project Member"}
+                          </span>
+                        </td>
+                        <td className="action-cell">
+                          <button
+                            type="button"
+                            className="btn-assign"
+                            disabled
+                            title="Assignment action available in next flow"
+                          >
+                            <span className="btn-plus">+</span>
+                            <span>Add</span>
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       )}
 
