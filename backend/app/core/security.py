@@ -8,6 +8,7 @@ JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "your-secret-key-change-in-producti
 JWT_ALGORITHM = os.getenv("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "60"))
 REFRESH_TOKEN_EXPIRE_DAYS = int(os.getenv("REFRESH_TOKEN_EXPIRE_DAYS", "7"))
+MFA_TOKEN_EXPIRE_MINUTES = 5
 
 
 def hash_password(plain_password: str) -> str:
@@ -49,6 +50,15 @@ def create_refresh_token(data: dict[str, Any], expires_delta: Union[timedelta, N
     else:
         expire = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
     to_encode.update({"exp": expire, "iat": now, "type": "refresh"})
+    return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
+
+
+def create_mfa_pending_token(data: dict[str, Any]) -> str:
+    """Create an ephemeral JWT token for two-factor challenge (5 minutes expiration)."""
+    to_encode = data.copy()
+    now = datetime.now(timezone.utc)
+    expire = now + timedelta(minutes=MFA_TOKEN_EXPIRE_MINUTES)
+    to_encode.update({"exp": expire, "iat": now, "type": "mfa_pending"})
     return jwt.encode(to_encode, JWT_SECRET_KEY, algorithm=JWT_ALGORITHM)
 
 

@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,12 +19,13 @@ from app.models.user_account import UserAccount
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Pre-warm connection pool on startup so the first request doesn't pay connection penalty
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-    except Exception:
-        pass
+    # Pre-warm connection pool on startup unless in testing environment
+    if not os.getenv("TESTING"):
+        try:
+            with SessionLocal() as db:
+                db.execute(text("SELECT 1"))
+        except Exception:
+            pass
     yield
 
 
