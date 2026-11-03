@@ -8,7 +8,7 @@ class Deliverable(Base):
 
     deliverable_id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey("project.project_id", ondelete="CASCADE"), nullable=False, index=True)
-    milestone_id = Column(Integer, ForeignKey("milestone.milestone_id", ondelete="SET NULL"), nullable=True)
+    milestone_id = Column(Integer, ForeignKey("project_milestone.id", ondelete="SET NULL"), nullable=True)
     submitted_by = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True)
     title = Column(String(200), nullable=False)
     description = Column(Text, nullable=True)
