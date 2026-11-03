@@ -1,0 +1,536 @@
+{
+  "info": {
+    "_postman_id": "a9e88d12-4f3b-482a-a829-37f28bc02834",
+    "name": "Workflow Management System for MNCs API",
+    "description": "Comprehensive API collection for Workflow Management System for MNCs, organized by domain and feature slices.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000",
+      "type": "string"
+    },
+    {
+      "key": "access_token",
+      "value": "it_support_token",
+      "type": "string"
+    },
+    {
+      "key": "employee_token",
+      "value": "employee_token",
+      "type": "string"
+    },
+    {
+      "key": "other_employee_token",
+      "value": "other_employee_token",
+      "type": "string"
+    },
+    {
+      "key": "ticket_id",
+      "value": "1",
+      "type": "string"
+    },
+    {
+      "key": "it_staff_id",
+      "value": "bb000000-0000-0000-0000-000000000001",
+      "type": "string"
+    },
+    {
+      "key": "non_it_user_id",
+      "value": "dd000000-0000-0000-0000-000000000001",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "09 Support",
+      "description": "Epic 9: IT Support & System Issues (US-26, US-27, US-28) - Ticket submission, employee inspection, queue triage, assignment, notes, and status lifecycle.",
+      "item": [
+        {
+          "name": "POST Submit Support Ticket (US-26)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var jsonData = pm.response.json();",
+                  "pm.test(\"Sequential ticket number generated\", function () {",
+                  "    pm.expect(jsonData.ticket_number).to.match(/^TKT-\\d{3,}$/);",
+                  "});",
+                  "if (jsonData.id) {",
+                  "    pm.collectionVariables.set(\"ticket_id\", jsonData.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Dell XPS laptop battery swelling\",\n  \"description\": \"The chassis is expanding near trackpad. Potential battery swelling risk.\",\n  \"category\": \"hardware\",\n  \"priority\": \"CRITICAL\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets"]
+            },
+            "description": "Employee submits technical support ticket (US-26 / FR-ITS-01). Auto-generates sequential ticket_number and initial CREATED activity entry."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Support Tickets (US-26)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response is an array of my tickets\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/my",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "my"]
+            },
+            "description": "Returns tickets created by the current user (US-26)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Ticket Details and Chronological Activities (US-26)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Activities list is present\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('activities');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}"]
+            },
+            "description": "Returns ticket detail including chronological activities (US-26 / US-27)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Other Employee Ticket - 403 Forbidden (US-26)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403 Forbidden\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Error explains ordinary employees cannot view others' tickets\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.detail.toLowerCase()).to.include(\"cannot view other employees\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-User-Role",
+                "value": "EMPLOYEE",
+                "type": "text"
+              },
+              {
+                "key": "X-User-Id",
+                "value": "ee000000-0000-0000-0000-000000000099",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}"]
+            },
+            "description": "Acceptance criterion: Ordinary employees cannot see other employees' tickets (403 Forbidden)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET IT Staff Ticket Queue - Filtered (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response is an array\", function () {",
+                  "    pm.expect(pm.response.json()).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets?status=open&category=hardware",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets"],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open"
+                },
+                {
+                  "key": "category",
+                  "value": "hardware"
+                },
+                {
+                  "key": "assigned_to",
+                  "value": "{{it_staff_id}}",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "View incoming ticket triage queue filtered by status, category, or assigned_to (US-27)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Ticket to IT Staff (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Ticket is assigned to target staff\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.assigned_to).to.eql(pm.collectionVariables.get(\"it_staff_id\"));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"{{it_staff_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}", "assign"]
+            },
+            "description": "Assign ticket to an IT Support staff member (verifies IT_SUPPORT role)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Ticket - Reject Non-IT Staff (422 Error) (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 422 Unprocessable Entity\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});",
+                  "pm.test(\"Error explains target role mismatch\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.detail.toLowerCase()).to.include(\"it_support\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"{{non_it_user_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}", "assign"]
+            },
+            "description": "Negative test: Ticket assignment must fail when target assignee lacks IT_SUPPORT role."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Append Troubleshooting Note (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201 Created\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "pm.test(\"Action is NOTE_ADDED\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.action).to.eql(\"NOTE_ADDED\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Ordered replacement battery OEM part #451-BCKL. Advised user to disconnect charger immediately.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/notes",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}", "notes"]
+            },
+            "description": "Append internal troubleshooting note to ticket_activity and update ticket updated_at."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Transition Status to In Progress (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Ticket status is in_progress\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(\"in_progress\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\",\n  \"resolution_notes\": \"Disassembled chassis, quarantined swelling battery cell.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}", "status"]
+            },
+            "description": "Transition ticket status from open to in_progress."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Transition Status to Resolved - Triggers Notification (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Ticket status is resolved\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.status).to.eql(\"resolved\");",
+                  "    pm.expect(json.resolved_at).to.not.be.null;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_notes\": \"Replaced with brand new OEM battery. Tested 100% discharge/charge cycle successfully. Ready for user pickup.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "{{ticket_id}}", "status"]
+            },
+            "description": "Transition status to resolved, recording resolved_at and sending notification to ticket reporter."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Triage Queue - Unauthorized Role 403 Forbidden (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403 Forbidden\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});",
+                  "pm.test(\"Error explains insufficient role permissions\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json.detail.toLowerCase()).to.include(\"insufficient role permissions\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets"]
+            },
+            "description": "RBAC verification: Non-IT users receive 403 Forbidden when accessing triage queue."
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
