@@ -15,6 +15,7 @@ from app.features.support.schemas import (
     TicketStatusUpdateIn,
     TicketOut,
     TicketActivityOut,
+    QueueMetricsOut,
 )
 
 router = APIRouter(tags=["IT Support Tickets"])
@@ -56,6 +57,23 @@ def get_my_tickets(
 
 
 @router.get(
+    "/tickets/queue/metrics",
+    response_model=QueueMetricsOut,
+    summary="Get ticket queue summary metrics for IT Support dashboard",
+)
+def get_queue_metrics(
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Aggregate summary metrics for the IT Support queue dashboard (US-27).
+    Restricted to IT_SUPPORT and SYSTEM_ADMIN roles.
+    """
+    require_role(current_user, allowed=ALLOWED_TRIAGE_ROLES)
+    return service.get_queue_metrics(db=db, actor=current_user)
+
+
+@router.get(
     "/tickets",
     response_model=List[TicketOut],
     summary="IT staff queue view with query filters",
@@ -64,6 +82,7 @@ def get_tickets(
     status: Optional[str] = Query(None, description="Filter by status: open, in_progress, resolved, etc."),
     category: Optional[str] = Query(None, description="Filter by category: hardware, software, network, access, etc."),
     assigned_to: Optional[UUID] = Query(None, description="Filter by assigned IT staff UUID"),
+    priority: Optional[str] = Query(None, description="Filter by priority: LOW, MEDIUM, HIGH, CRITICAL"),
     skip: int = Query(0, ge=0, description="Offset pagination skip"),
     limit: int = Query(50, ge=1, le=100, description="Limit records returned"),
     current_user: UserAccount = Depends(get_current_user),
@@ -71,7 +90,7 @@ def get_tickets(
 ):
     """
     Queue view for IT Support staff and System Administrators (US-27).
-    Supports query filters: ?status=open&category=hardware&assigned_to=uuid.
+    Supports query filters: ?status=open&category=hardware&assigned_to=uuid&priority=HIGH.
     """
     require_role(current_user, allowed=ALLOWED_TRIAGE_ROLES)
     return service.list_tickets(
@@ -79,6 +98,7 @@ def get_tickets(
         status=status,
         category=category,
         assigned_to=assigned_to,
+        priority=priority,
         skip=skip,
         limit=limit,
         actor=current_user,
