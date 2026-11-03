@@ -551,3 +551,59 @@ def test_complete_end_to_end_support_lifecycle(client, seed_users):
     details = detail_res.json()
     assert len(details["activities"]) >= 4  # CREATED, ASSIGNED, STATUS_CHANGED, NOTE_ADDED, STATUS_CHANGED
 
+
+def test_append_troubleshooting_note_empty_rejected(client, seed_users, seed_ticket):
+    it_headers = {"X-User-Id": str(seed_users["it_support_1"].account_id)}
+
+    # Empty string note
+    res = client.post(
+        f"/api/v1/support/tickets/{seed_ticket.ticket_id}/notes",
+        json={"note": ""},
+        headers=it_headers,
+    )
+    assert res.status_code == 422
+
+    # Whitespace-only note
+    res = client.post(
+        f"/api/v1/support/tickets/{seed_ticket.ticket_id}/notes",
+        json={"note": "    \t\n  "},
+        headers=it_headers,
+    )
+    assert res.status_code == 422
+
+
+def test_queue_pagination_skip_and_limit(client, db_session, seed_users):
+    it_headers = {"X-User-Id": str(seed_users["it_support_1"].account_id)}
+    reporter_id = seed_users["reporter"].account_id
+
+    # Create 5 tickets with distinct subjects
+    tickets = [
+        SupportTicket(
+            ticket_number=f"TCK-PAG-{i:03d}",
+            subject=f"Pagination Ticket {i}",
+            description=f"Pagination test description {i}",
+            category="software",
+            priority="MEDIUM",
+            status="open",
+            reporter_id=reporter_id,
+        )
+        for i in range(1, 6)
+    ]
+    db_session.add_all(tickets)
+    db_session.commit()
+
+    # Request limit=2
+    res = client.get("/api/v1/support/tickets?limit=2", headers=it_headers)
+    assert res.status_code == 200
+    assert len(res.json()) == 2
+
+    # Request limit=2, skip=2
+    res_page2 = client.get("/api/v1/support/tickets?limit=2&skip=2", headers=it_headers)
+    assert res_page2.status_code == 200
+    assert len(res_page2.json()) == 2
+    # Ensure items on page 2 differ from page 1
+    page1_ids = {t["ticket_id"] for t in res.json()}
+    page2_ids = {t["ticket_id"] for t in res_page2.json()}
+    assert page1_ids.isdisjoint(page2_ids)
+
+
