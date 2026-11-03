@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 
 class TicketCreateIn(BaseModel):
@@ -41,6 +41,13 @@ class TicketReassignIn(BaseModel):
 
 class TicketNoteIn(BaseModel):
     note: str = Field(..., min_length=1, description="Troubleshooting or investigation note")
+
+    @field_validator("note")
+    @classmethod
+    def validate_non_empty_note(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Troubleshooting note cannot be empty or whitespace only")
+        return v.strip()
 
     model_config = ConfigDict(from_attributes=True)
 
