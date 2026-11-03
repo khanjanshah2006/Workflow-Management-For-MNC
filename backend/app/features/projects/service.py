@@ -1,12 +1,15 @@
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional, List, Tuple
 from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.models.project import Project, ProjectAssignment
 from app.models.team import Team, TeamMember
+from app.models.milestone import ProjectMilestone
 from app.models.user_account import UserAccount
-from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction
+from app.models.client import Client
+from app.models.employee import Employee
+from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction, MilestoneStatus
 from app.core.audit import write_audit_log
 from app.features.projects.repository import ProjectRepository
 from app.features.projects.schemas import (
@@ -18,6 +21,9 @@ from app.features.projects.schemas import (
     TeamResponse,
     TeamMemberAdd,
     TeamMemberResponse,
+    MilestoneCreate,
+    MilestoneUpdate,
+    MilestoneResponse,
 )
 
 
@@ -92,6 +98,12 @@ class UnauthorizedProjectAccessError(ProjectServiceError):
         super().__init__(message)
 
 
+class MilestoneNotFoundError(ProjectServiceError):
+    def __init__(self, milestone_id: int):
+        self.milestone_id = milestone_id
+        super().__init__(f"Milestone with ID {milestone_id} not found")
+
+
 # ==========================================
 # Service Implementation
 # ==========================================
@@ -128,6 +140,28 @@ class ProjectService:
         pm = ProjectRepository.get_pm_by_account_id(db, current_user.account_id)
         if not pm or pm.pm_id != project.pm_id:
             raise UnauthorizedProjectAccessError("Only the assigned Project Manager can modify this project")
+
+    @staticmethod
+    def _verify_project_access(db: Session, project: Project, current_user: UserAccount) -> None:
+        """Verify user is authorized to access project details/milestones."""
+        if ProjectService._is_admin(current_user):
+            return
+
+        role = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
+        role = role.upper()
+
+        if role in ["PM", "PROJECT_MANAGER"]:
+            pm = ProjectRepository.get_pm_by_account_id(db, current_user.account_id)
+            if not pm or pm.pm_id != project.pm_id:
+                raise UnauthorizedProjectAccessError("You are not authorized to access this project's milestones")
+        elif role == "EMPLOYEE":
+            emp = db.query(Employee).filter(Employee.account_id == current_user.account_id).first()
+            if not emp or not ProjectRepository.get_active_assignment(db, project.project_id, emp.emp_id):
+                raise UnauthorizedProjectAccessError("You are not assigned to this project")
+        elif role == "CLIENT":
+            client = db.query(Client).filter(Client.account_id == current_user.account_id).first()
+            if not client or client.client_id != project.client_id:
+                raise UnauthorizedProjectAccessError("You are not authorized to access this project's milestones")
 
     # ------------------------------------------
     # Project Operations (US-06)
@@ -412,3 +446,219 @@ class ProjectService:
             raise TeamNotFoundError(team_id)
         members = ProjectRepository.list_team_members(db, team_id)
         return [TeamMemberResponse.model_validate(m) for m in members]
+
+    # ------------------------------------------
+    # Milestone Operations (US-08)
+    # ------------------------------------------
+
+    @staticmethod
+    def create_milestone(
+        db: Session,
+        project_id: int,
+        payload: MilestoneCreate,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> MilestoneResponse:
+        """
+        Create a new milestone under a project (US-08).
+        Validates target_date falls within [project.start_date, project.end_date].
+        Restricted to the assigned PM or System Admin.
+        """
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        ProjectService._verify_pm_ownership(db, project, current_user)
+
+        # Validate target_date against project timeline
+        if payload.target_date < project.start_date:
+            raise InvalidDateRangeError(
+                f"Milestone target_date ({payload.target_date}) cannot be before project start_date ({project.start_date})"
+            )
+        if project.end_date and payload.target_date > project.end_date:
+            raise InvalidDateRangeError(
+                f"Milestone target_date ({payload.target_date}) cannot be after project end_date ({project.end_date})"
+            )
+
+        status_val = payload.status or MilestoneStatus.PENDING
+        completed_at = datetime.now(timezone.utc) if status_val == MilestoneStatus.COMPLETED else None
+
+        milestone = ProjectMilestone(
+            project_id=project_id,
+            title=payload.title,
+            description=payload.description.strip() if payload.description else None,
+            target_date=payload.target_date,
+            status=status_val,
+            completed_at=completed_at,
+        )
+        ProjectRepository.create_milestone(db, milestone)
+        db.flush()
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="PROJECT_MILESTONE",
+            entity_ref_id=str(milestone.id),
+            account_id=current_user.account_id,
+            new_value={
+                "project_id": project_id,
+                "title": milestone.title,
+                "description": milestone.description,
+                "target_date": str(milestone.target_date),
+                "status": milestone.status.value,
+                "completed_at": str(milestone.completed_at) if milestone.completed_at else None,
+            },
+            ip_address=ip_address,
+        )
+        db.refresh(milestone)
+
+        return MilestoneResponse.model_validate(milestone)
+
+    @staticmethod
+    def list_milestones(
+        db: Session, project_id: int, current_user: Optional[UserAccount] = None
+    ) -> List[MilestoneResponse]:
+        """
+        List all active (non-deleted) milestones for a project,
+        ordered by target_date ASC (US-08).
+        """
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        if current_user is not None:
+            ProjectService._verify_project_access(db, project, current_user)
+
+        milestones = ProjectRepository.list_milestones(db, project_id)
+        return [MilestoneResponse.model_validate(m) for m in milestones]
+
+    @staticmethod
+    def update_milestone(
+        db: Session,
+        project_id: int,
+        milestone_id: int,
+        payload: MilestoneUpdate,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> MilestoneResponse:
+        """
+        Update milestone details or mark completed (US-08).
+        Sets completed_at = now() when marking completed.
+        Restricted to the assigned PM or System Admin.
+        """
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        ProjectService._verify_pm_ownership(db, project, current_user)
+
+        milestone = ProjectRepository.get_milestone_by_id(db, milestone_id)
+        if not milestone or milestone.project_id != project_id or milestone.is_deleted:
+            raise MilestoneNotFoundError(milestone_id)
+
+        # Validate target_date if provided
+        if payload.target_date is not None:
+            if payload.target_date < project.start_date:
+                raise InvalidDateRangeError(
+                    f"Milestone target_date ({payload.target_date}) cannot be before project start_date ({project.start_date})"
+                )
+            if project.end_date and payload.target_date > project.end_date:
+                raise InvalidDateRangeError(
+                    f"Milestone target_date ({payload.target_date}) cannot be after project end_date ({project.end_date})"
+                )
+            milestone.target_date = payload.target_date
+
+        old_value = {
+            "project_id": project_id,
+            "title": milestone.title,
+            "description": milestone.description,
+            "target_date": str(milestone.target_date),
+            "status": milestone.status.value,
+            "completed_at": str(milestone.completed_at) if milestone.completed_at else None,
+        }
+
+        if payload.title is not None:
+            milestone.title = payload.title
+        if payload.description is not None:
+            milestone.description = payload.description.strip() if payload.description else None
+
+        if payload.status is not None:
+            if payload.status == MilestoneStatus.COMPLETED:
+                # Do not overwrite completed_at if already completed
+                if milestone.status != MilestoneStatus.COMPLETED or milestone.completed_at is None:
+                    milestone.status = MilestoneStatus.COMPLETED
+                    milestone.completed_at = datetime.now(timezone.utc)
+            elif payload.status == MilestoneStatus.PENDING:
+                milestone.status = MilestoneStatus.PENDING
+                milestone.completed_at = None
+
+        db.flush()
+
+        new_value = {
+            "project_id": project_id,
+            "title": milestone.title,
+            "description": milestone.description,
+            "target_date": str(milestone.target_date),
+            "status": milestone.status.value,
+            "completed_at": str(milestone.completed_at) if milestone.completed_at else None,
+        }
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="PROJECT_MILESTONE",
+            entity_ref_id=str(milestone.id),
+            account_id=current_user.account_id,
+            old_value=old_value,
+            new_value=new_value,
+            ip_address=ip_address,
+        )
+        db.refresh(milestone)
+
+        return MilestoneResponse.model_validate(milestone)
+
+    @staticmethod
+    def delete_milestone(
+        db: Session,
+        project_id: int,
+        milestone_id: int,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> dict:
+        """
+        Soft delete milestone (US-08).
+        Restricted to the assigned PM or System Admin.
+        """
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        ProjectService._verify_pm_ownership(db, project, current_user)
+
+        milestone = ProjectRepository.get_milestone_by_id(db, milestone_id)
+        if not milestone or milestone.project_id != project_id or milestone.is_deleted:
+            raise MilestoneNotFoundError(milestone_id)
+
+        old_value = {
+            "project_id": project_id,
+            "title": milestone.title,
+            "target_date": str(milestone.target_date),
+            "status": milestone.status.value,
+        }
+
+        ProjectRepository.delete_milestone(db, milestone, soft=True)
+        db.flush()
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.DELETE,
+            entity_name="PROJECT_MILESTONE",
+            entity_ref_id=str(milestone.id),
+            account_id=current_user.account_id,
+            old_value=old_value,
+            new_value=None,
+            ip_address=ip_address,
+        )
+
+        return {"message": "Milestone deleted successfully", "id": milestone.id}
+
