@@ -33,8 +33,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # ── 1. Drop old single-column index ────────────────────────────────────
-    op.drop_index("ix_notification_account_id", table_name="notification")
+    # ── 1. Drop old single-column index if it exists ───────────────────────
+    op.execute("DROP INDEX IF EXISTS ix_notification_account_id")
 
     # ── 2. Replace Integer PK with UUID PK ─────────────────────────────────
     # 2a. Drop the existing primary-key constraint on notification_id.
