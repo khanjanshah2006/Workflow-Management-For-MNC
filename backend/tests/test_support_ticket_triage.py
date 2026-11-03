@@ -381,6 +381,50 @@ def test_queue_filters(client, db_session, seed_users):
     assert len(data) == 1
     assert data[0]["ticket_number"] == "TCK-10001"
 
+    # Filter by priority=CRITICAL
+    res = client.get("/api/v1/support/tickets?priority=CRITICAL", headers=it_headers)
+    assert res.status_code == 200
+    assert len(res.json()) == 1
+    assert res.json()[0]["ticket_number"] == "TCK-10002"
+
+
+def test_queue_metrics_aggregation(client, db_session, seed_users):
+    it_headers = {"X-User-Id": str(seed_users["it_support_1"].account_id)}
+    reporter_id = seed_users["reporter"].account_id
+    it1_id = seed_users["it_support_1"].account_id
+
+    # Create 2 tickets: 1 open unassigned, 1 resolved assigned
+    t1 = SupportTicket(
+        ticket_number="TCK-99001",
+        subject="Issue A",
+        description="Unassigned open ticket",
+        category="hardware",
+        priority="HIGH",
+        status="open",
+        reporter_id=reporter_id,
+        assigned_to=None,
+    )
+    t2 = SupportTicket(
+        ticket_number="TCK-99002",
+        subject="Issue B",
+        description="Resolved ticket",
+        category="software",
+        priority="LOW",
+        status="resolved",
+        reporter_id=reporter_id,
+        assigned_to=it1_id,
+    )
+    db_session.add_all([t1, t2])
+    db_session.commit()
+
+    res = client.get("/api/v1/support/tickets/queue/metrics", headers=it_headers)
+    assert res.status_code == 200
+    metrics = res.json()
+    assert metrics["open_count"] >= 1
+    assert metrics["resolved_count"] >= 1
+    assert metrics["unassigned_count"] >= 1
+    assert metrics["total_tickets"] >= 2
+
 
 # =========================================================================
 # Additional Edge Cases & End-to-End Lifecycle Verification
