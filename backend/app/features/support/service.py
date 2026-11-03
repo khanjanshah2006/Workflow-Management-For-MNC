@@ -1,8 +1,8 @@
 import uuid
 from datetime import datetime, timezone
-from typing import List, Optional, Union
+from typing import List, Optional, Union, Dict, Any
 from sqlalchemy.orm import Session
-from sqlalchemy import desc
+from sqlalchemy import desc, func
 
 from app.core.exceptions import NotFoundError, ValidationError, ForbiddenError
 from app.core.rbac import require_role, is_it_support, has_any_role
@@ -15,6 +15,7 @@ from app.features.support.schemas import (
     TicketAssignIn,
     TicketNoteIn,
     TicketStatusUpdateIn,
+    QueueMetricsOut,
 )
 from app.services import notification_service
 
@@ -38,7 +39,7 @@ def get_ticket_or_404(db: Session, ticket_id: int) -> SupportTicket:
 
 def get_ticket_detail_scoped(db: Session, ticket_id: int, actor: Any) -> SupportTicket:
     """
-    Get ticket detail ensuring ordinary employees cannot see other employees' tickets (US-26).
+    Get ticket detail ensuring ordinary employees cannot see other employees' tickets (US-26, US-27).
     IT_SUPPORT and SYSTEM_ADMIN can view all tickets.
     """
     ticket = get_ticket_or_404(db, ticket_id)
@@ -76,14 +77,15 @@ def list_tickets(
     status: Optional[str] = None,
     category: Optional[str] = None,
     assigned_to: Optional[Union[uuid.UUID, str]] = None,
+    priority: Optional[str] = None,
     skip: int = 0,
     limit: int = 50,
     actor: Optional[Any] = None,
 ) -> List[SupportTicket]:
     """
     IT staff queue view with query filters:
-    ?status=open&category=hardware&assigned_to=uuid
-    Restricted to IT_SUPPORT and SYSTEM_ADMIN roles.
+    ?status=open&category=hardware&assigned_to=uuid&priority=HIGH
+    Restricted to IT_SUPPORT and SYSTEM_ADMIN roles (US-27).
     """
     if actor is not None:
         require_role(actor, allowed=ALLOWED_TRIAGE_ROLES)
@@ -97,6 +99,10 @@ def list_tickets(
     # Filter by category
     if category:
         query = query.filter(SupportTicket.category.ilike(category.strip()))
+
+    # Filter by priority
+    if priority:
+        query = query.filter(SupportTicket.priority.ilike(priority.strip()))
 
     # Filter by assigned_to
     if assigned_to:
@@ -112,6 +118,30 @@ def list_tickets(
     return query.order_by(desc(SupportTicket.created_at)).offset(skip).limit(limit).all()
 
 
+def get_queue_metrics(db: Session, actor: Any) -> Dict[str, int]:
+    """
+    Aggregate queue summary metrics for IT Support triage dashboard (US-27).
+    Restricted to IT_SUPPORT and SYSTEM_ADMIN roles.
+    """
+    require_role(actor, allowed=ALLOWED_TRIAGE_ROLES)
+
+    open_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == TicketStatus.OPEN.value).scalar() or 0
+    in_progress_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == TicketStatus.IN_PROGRESS.value).scalar() or 0
+    resolved_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == TicketStatus.RESOLVED.value).scalar() or 0
+    escalated_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.status == TicketStatus.ESCALATED.value).scalar() or 0
+    unassigned_count = db.query(func.count(SupportTicket.id)).filter(SupportTicket.assigned_to.is_(None)).scalar() or 0
+    total_tickets = db.query(func.count(SupportTicket.id)).scalar() or 0
+
+    return {
+        "open_count": open_count,
+        "in_progress_count": in_progress_count,
+        "resolved_count": resolved_count,
+        "escalated_count": escalated_count,
+        "unassigned_count": unassigned_count,
+        "total_tickets": total_tickets,
+    }
+
+
 def assign_ticket(
     db: Session,
     ticket_id: int,
@@ -119,7 +149,7 @@ def assign_ticket(
     actor: Any,
 ) -> SupportTicket:
     """
-    Assign ticket to an IT staff member.
+    Assign ticket to an IT staff member (US-27).
     Verifies target assignee holds IT_SUPPORT role.
     Appends ASSIGNED activity and writes audit log.
     """
@@ -147,11 +177,15 @@ def assign_ticket(
     ticket.updated_at = now_utc
 
     # 4. Create ASSIGNED activity entry
+    note_msg = f"Assigned to {target_assignee.email} ({target_assignee.account_id})"
+    if payload.reassignment_reason:
+        note_msg += f". Note: {payload.reassignment_reason}"
+
     activity = TicketActivity(
         ticket_id=ticket.id,
         actor_id=getattr(actor, "account_id", None),
         action=TicketActivityType.ASSIGNED.value,
-        note=f"Assigned to {target_assignee.email} ({target_assignee.account_id})",
+        note=note_msg,
         created_at=now_utc,
     )
     db.add(activity)
@@ -179,7 +213,7 @@ def add_troubleshooting_note(
     actor: Any,
 ) -> TicketActivity:
     """
-    Append internal troubleshooting note to ticket_activity.
+    Append internal troubleshooting note to ticket_activity (US-27).
     Updates ticket updated_at and creates NOTE_ADDED activity entry.
     """
     require_role(actor, allowed=ALLOWED_TRIAGE_ROLES)
@@ -224,7 +258,7 @@ def update_ticket_status(
     actor: Any,
 ) -> SupportTicket:
     """
-    Transition status (open -> in_progress -> resolved).
+    Transition status (open -> in_progress -> resolved) (US-27).
     If marking resolved, notifies reporter via notification service.
     Appends STATUS_CHANGED activity entry and writes audit log.
     """
