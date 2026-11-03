@@ -222,3 +222,4 @@ def test_get_my_tickets_isolation(client, seed_users):
     assert len(bob_tickets) == 1
     assert bob_tickets[0]["reporter_id"] == str(seed_users["emp2"].account_id)
     assert "Bob" in bob_tickets[0]["subject"]
+
