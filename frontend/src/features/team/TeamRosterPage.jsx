@@ -6,7 +6,7 @@ import { teamApi } from "../../api/teamApi.js";
  * TeamRosterPage (US-37: [S1-FE-4] Team Lead Team Roster View)
  *
  * Implements graceful loading skeletons, empty state, error state with retry,
- * and live data cards.
+ * live data cards, and an initial Wave 2 placeholder for Team Tasks.
  */
 export default function TeamRosterPage() {
   const [searchParams] = useSearchParams();
@@ -247,6 +247,38 @@ export default function TeamRosterPage() {
           </div>
         </div>
       )}
+
+      {/* Team Tasks Placeholder Container (Wave 2) */}
+      <section className="tasks-placeholder-section" aria-labelledby="team-tasks-heading">
+        <div className="tasks-placeholder-header">
+          <div className="tasks-heading-row">
+            <h2 id="team-tasks-heading" className="tasks-title">Team Tasks</h2>
+            <span className="wave2-badge">Wave 2 Feature</span>
+          </div>
+          <p className="tasks-subtitle">
+            Sprint 4 work tracking and task lifecycle management for team members.
+          </p>
+        </div>
+
+        <div className="tasks-placeholder-card">
+          <div className="placeholder-content">
+            <div className="tasks-icon" aria-hidden="true">📋</div>
+            <h3 className="placeholder-headline">Team task information will be available in Wave 2</h3>
+            <p className="placeholder-subtext">
+              Task assignment (US-09), progress tracking (US-10), work review (US-12), and task
+              reassignment (US-14) will be integrated here during Wave 2. Team Leads will be able
+              to view, filter, and assign tasks directly to team members from this dashboard.
+            </p>
+            <div className="placeholder-roadmap">
+              <span className="roadmap-pill">✓ US-37 Roster Foundation (Current)</span>
+              <span className="roadmap-arrow">→</span>
+              <span className="roadmap-pill roadmap-pill-upcoming">US-09 Task Assignment</span>
+              <span className="roadmap-arrow">→</span>
+              <span className="roadmap-pill roadmap-pill-upcoming">US-10 Progress Tracking</span>
+            </div>
+          </div>
+        </div>
+      </section>
     </section>
   );
 }
