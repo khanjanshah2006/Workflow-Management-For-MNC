@@ -212,6 +212,46 @@
           "response": []
         },
         {
+          "name": "GET Ticket Queue Metrics (US-27)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200 OK\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Metrics summary properties exist\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('open_count');",
+                  "    pm.expect(json).to.have.property('in_progress_count');",
+                  "    pm.expect(json).to.have.property('resolved_count');",
+                  "    pm.expect(json).to.have.property('unassigned_count');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/queue/metrics",
+              "host": ["{{base_url}}"],
+              "path": ["api", "v1", "support", "tickets", "queue", "metrics"]
+            },
+            "description": "Get summary metrics for IT Support ticket queue dashboard (US-27)."
+          },
+          "response": []
+        },
+        {
           "name": "GET IT Staff Ticket Queue - Filtered (US-27)",
           "event": [
             {
