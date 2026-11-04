@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import List, Optional
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_validator, field_validator
 
 
 class TicketCreateIn(BaseModel):
@@ -21,6 +21,47 @@ class TicketCreateIn(BaseModel):
             data["subject"] = subject_val
             data["title"] = subject_val
         return data
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketAssignIn(BaseModel):
+    assigned_to: UUID = Field(..., description="UUID of the IT Support staff member account to assign")
+    reassignment_reason: Optional[str] = Field(None, description="Optional explanation for assignment or reassignment")
+
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+
+class TicketReassignIn(BaseModel):
+    assigned_to: UUID = Field(..., description="UUID of the new IT Support assignee")
+    reassignment_reason: Optional[str] = Field(None, description="Reason for reassigning ticket")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketNoteIn(BaseModel):
+    note: str = Field(..., min_length=1, description="Troubleshooting or investigation note")
+
+    @field_validator("note")
+    @classmethod
+    def validate_non_empty_note(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Troubleshooting note cannot be empty or whitespace only")
+        return v.strip()
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketStatusUpdateIn(BaseModel):
+    status: str = Field(..., description="Target status: open, in_progress, resolved, escalated, closed")
+    resolution_notes: Optional[str] = Field(None, description="Optional notes explaining status change or resolution")
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TicketEscalateIn(BaseModel):
+    reason: str = Field(..., min_length=5, description="Reason for escalation to higher-level support/admin")
+    target_role: Optional[str] = Field("SYSTEM_ADMIN", description="Target role receiving escalation")
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -64,3 +105,16 @@ class TicketOut(BaseModel):
 class TicketListOut(BaseModel):
     total: int
     tickets: List[TicketOut]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class QueueMetricsOut(BaseModel):
+    open_count: int
+    in_progress_count: int
+    resolved_count: int
+    escalated_count: int
+    unassigned_count: int
+    total_tickets: int
+
+    model_config = ConfigDict(from_attributes=True)
