@@ -13,6 +13,8 @@ from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    ElevatedAccessGrantCreate,
+    ElevatedAccessGrantResponse,
     SystemParameterResponse,
     SystemParameterUpdate,
     UserAccountCreate,
@@ -37,6 +39,10 @@ class SystemParameterNotFoundError(Exception):
 
 
 class InvalidParameterValueError(Exception):
+    pass
+
+
+class InvalidExpirationError(Exception):
     pass
 
 
@@ -271,4 +277,67 @@ class AdminService:
         )
 
         return SystemParameterResponse.model_validate(updated)
+
+    # ==========================================
+    # Elevated Access Service Methods (US-45)
+    # ==========================================
+
+    @staticmethod
+    def grant_elevated_access(
+        db: Session,
+        payload: ElevatedAccessGrantCreate,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> ElevatedAccessGrantResponse:
+        """Grant a time-bound elevated role privilege with mandatory future expiration."""
+        # 1. Target user exists check
+        user = AdminRepository.get_by_id(db, account_id=payload.user_id)
+        if not user:
+            raise UserNotFoundError(f"User account with ID '{payload.user_id}' not found.")
+
+        # 2. Expiration validation (must be in the future)
+        now = datetime.now(timezone.utc)
+        expires_at = payload.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at <= now:
+            raise InvalidExpirationError("Elevated access grant expiration must be in the future.")
+
+        # 3. Create elevated access grant
+        grant = AdminRepository.create_elevated_grant(
+            db=db,
+            user_id=payload.user_id,
+            granted_role=payload.granted_role,
+            granted_by=admin_user.account_id,
+            expires_at=expires_at,
+            reason=payload.reason,
+        )
+
+        # 4. Audit log creation
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="ELEVATED_ACCESS_GRANT",
+            entity_ref_id=str(grant.id),
+            account_id=admin_user.account_id,
+            old_value=None,
+            new_value={
+                "user_id": str(grant.user_id),
+                "granted_role": grant.granted_role,
+                "expires_at": grant.expires_at.isoformat(),
+                "reason": grant.reason,
+            },
+            ip_address=ip_address,
+        )
+
+        return ElevatedAccessGrantResponse.model_validate(grant)
+
+    @staticmethod
+    def list_active_elevated_grants(db: Session) -> List[ElevatedAccessGrantResponse]:
+        """List all currently active, unexpired, and unrevoked elevated access grants."""
+        now = datetime.now(timezone.utc)
+        grants = AdminRepository.list_active_elevated_grants(db=db, now=now)
+        return [ElevatedAccessGrantResponse.model_validate(g) for g in grants]
+
 

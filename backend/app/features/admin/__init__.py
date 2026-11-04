@@ -2,6 +2,8 @@ from app.features.admin.router import router as admin_router
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    ElevatedAccessGrantCreate,
+    ElevatedAccessGrantResponse,
     SystemParameterResponse,
     SystemParameterUpdate,
     UserAccountCreate,
@@ -28,4 +30,6 @@ __all__ = [
     "BackupStatusResponse",
     "SystemParameterResponse",
     "SystemParameterUpdate",
+    "ElevatedAccessGrantCreate",
+    "ElevatedAccessGrantResponse",
 ]
