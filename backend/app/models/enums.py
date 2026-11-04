@@ -35,9 +35,8 @@ class TeamStatus(str, enum.Enum):
 
 
 class MilestoneStatus(str, enum.Enum):
-    PENDING = "PENDING"
-    COMPLETED = "COMPLETED"
-    MISSED = "MISSED"
+    PENDING = "pending"
+    COMPLETED = "completed"
 
 
 class TaskStatus(str, enum.Enum):

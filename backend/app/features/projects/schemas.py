@@ -1,8 +1,8 @@
 from datetime import date, datetime
 from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus
+from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus
 
 
 # ==========================================
@@ -96,3 +96,76 @@ class TeamMemberResponse(BaseModel):
     team_id: int
     emp_id: int
     joined_on: date
+
+
+# ==========================================
+# Milestone Schemas (US-08)
+# ==========================================
+
+class MilestoneCreate(BaseModel):
+    """Payload to create a milestone within a project (US-08)."""
+    title: str = Field(..., min_length=1, max_length=255, description="Milestone title")
+    description: Optional[str] = Field(None, description="Detailed milestone description")
+    target_date: date = Field(..., description="Target completion date for the milestone")
+    status: Optional[MilestoneStatus] = Field(default=MilestoneStatus.PENDING, description="Milestone status ('pending', 'completed')")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: str) -> str:
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Milestone title cannot be blank")
+        return cleaned
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        if v is None:
+            return MilestoneStatus.PENDING
+        if isinstance(v, str):
+            clean = v.strip().lower()
+            return MilestoneStatus(clean)
+        return v
+
+
+class MilestoneUpdate(BaseModel):
+    """Payload to update an existing milestone (US-08)."""
+    title: Optional[str] = Field(None, min_length=1, max_length=255, description="Updated milestone title")
+    description: Optional[str] = Field(None, description="Updated milestone description")
+    target_date: Optional[date] = Field(None, description="Updated target date")
+    status: Optional[MilestoneStatus] = Field(None, description="Updated status ('pending' or 'completed')")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return None
+        cleaned = v.strip()
+        if not cleaned:
+            raise ValueError("Milestone title cannot be blank")
+        return cleaned
+
+    @field_validator("status", mode="before")
+    @classmethod
+    def normalize_status(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str):
+            clean = v.strip().lower()
+            return MilestoneStatus(clean)
+        return v
+
+
+class MilestoneResponse(BaseModel):
+    """Milestone record view (US-08)."""
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    project_id: int
+    title: str
+    description: Optional[str] = None
+    target_date: date
+    status: MilestoneStatus
+    completed_at: Optional[datetime] = None
+    created_at: datetime
+
