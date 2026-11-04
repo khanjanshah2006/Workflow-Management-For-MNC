@@ -76,12 +76,12 @@ def get_employee(
     "/{id}/workload",
     response_model=EmployeeWorkloadResponse,
     summary="Get cross-project workload metrics for an employee (US-39)",
-    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage.",
+    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Restricted to PMs and Admins.",
 )
 def get_employee_workload(
     id: int,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(get_current_user),
+    current_user: UserAccount = Depends(require_role(["PM", "PROJECT_MANAGER", "ADMIN"])),
 ) -> EmployeeWorkloadResponse:
     try:
         return EmployeeService.get_employee_workload(db=db, emp_id=id)

@@ -345,6 +345,9 @@ class ProjectService:
         if not project:
             raise ProjectNotFoundError(project_id)
 
+        if current_user:
+            ProjectService._verify_pm_ownership(db, project, current_user)
+
         # Retrieve eligible active employees
         eligible_employees = ProjectRepository.get_eligible_employees(db, project_id)
         if not eligible_employees:
