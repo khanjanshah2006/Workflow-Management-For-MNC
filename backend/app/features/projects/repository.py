@@ -9,6 +9,7 @@ from app.models.client import Client
 from app.models.employee import Employee
 from app.models.team import Team, TeamMember
 from app.models.milestone import ProjectMilestone
+from app.models.enums import CommonStatus
 
 
 class ProjectRepository:
@@ -213,4 +214,30 @@ class ProjectRepository:
         else:
             db.delete(milestone)
         db.flush()
+
+    @staticmethod
+    def get_eligible_employees(db: Session, project_id: int) -> List[Employee]:
+        """
+        Query all ACTIVE employees who are not actively assigned to the given project_id (US-39).
+        Excludes employees with active project_assignment (released_on IS NULL).
+        """
+        assigned_emp_subquery = (
+            db.query(ProjectAssignment.emp_id)
+            .filter(
+                ProjectAssignment.project_id == project_id,
+                ProjectAssignment.released_on.is_(None),
+            )
+            .subquery()
+        )
+
+        return (
+            db.query(Employee)
+            .filter(
+                Employee.status == CommonStatus.ACTIVE,
+                ~Employee.emp_id.in_(assigned_emp_subquery),
+            )
+            .order_by(Employee.emp_id.asc())
+            .all()
+        )
+
 
