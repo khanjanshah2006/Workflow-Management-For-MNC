@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectsPage from "./features/projects/pages/ProjectsPage";
+import TeamRosterPage from "./features/team/TeamRosterPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -83,6 +84,9 @@ function App() {
             />
             <Route path="/projects" element={<ProjectsPage />} />
             <Route path="/projects/:projectId" element={<ProjectsPage />} />
+            <Route path="/team" element={<TeamRosterPage />} />
+            <Route path="/team/roster" element={<TeamRosterPage />} />
+            <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
             <Route
               path="/tasks"
               element={
