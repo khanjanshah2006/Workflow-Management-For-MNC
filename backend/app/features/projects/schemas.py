@@ -1,8 +1,9 @@
 from datetime import date, datetime
-from typing import Optional, List
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing import Optional, List, Any
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus
+from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus, CommonStatus
+from app.features.employees.schemas import EmployeeWorkloadResponse
 
 
 # ==========================================
@@ -168,4 +169,55 @@ class MilestoneResponse(BaseModel):
     status: MilestoneStatus
     completed_at: Optional[datetime] = None
     created_at: datetime
+
+
+# ==========================================
+# Eligible Employees & Workload Schemas (US-39)
+# ==========================================
+
+class EligibleEmployeeResponse(BaseModel):
+    """Eligible employee with aggregated cross-project workload metrics (US-39)."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    emp_id: int = Field(..., description="Employee ID")
+    employee_id: Optional[int] = Field(None, description="Employee ID alias")
+    emp_code: str = Field(..., description="Employee code (EMP-XXXX)")
+    full_name: str = Field(..., description="Full name of employee")
+    email: str = Field(..., description="Corporate email address")
+    phone: Optional[str] = Field(None, description="Phone number")
+    designation: str = Field(..., description="Designation / job title")
+    dept_id: Optional[int] = Field(None, description="Department ID")
+    department_name: Optional[str] = Field(None, description="Department name")
+    status: CommonStatus = Field(default=CommonStatus.ACTIVE, description="Employment status")
+    date_of_joining: Optional[date] = Field(None, description="Date of joining")
+
+    # Aggregated workload metrics
+    active_projects_count: int = Field(default=0, description="Active projects count")
+    open_tasks_count: int = Field(default=0, description="Open tasks count across all projects")
+    utilization_pct: float = Field(default=0.0, description="Calculated utilization percentage")
+    workload: Optional[EmployeeWorkloadResponse] = Field(None, description="Nested workload details")
+
+    @model_validator(mode="before")
+    @classmethod
+    def sync_employee_ids_before(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            emp_id = data.get("emp_id") or data.get("employee_id")
+            if emp_id is not None:
+                data["emp_id"] = emp_id
+                data["employee_id"] = emp_id
+        return data
+
+    @model_validator(mode="after")
+    def sync_employee_ids_after(self) -> "EligibleEmployeeResponse":
+        if self.employee_id is None:
+            self.employee_id = self.emp_id
+        if self.workload is None:
+            self.workload = EmployeeWorkloadResponse(
+                employee_id=self.emp_id,
+                active_projects_count=self.active_projects_count,
+                open_tasks_count=self.open_tasks_count,
+                utilization_pct=self.utilization_pct,
+            )
+        return self
+
 

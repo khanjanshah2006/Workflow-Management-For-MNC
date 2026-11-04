@@ -1,9 +1,31 @@
 from datetime import date
-from typing import Optional
+from typing import Optional, Any
 from uuid import UUID
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, model_validator
 
 from app.models.enums import CommonStatus, UserType
+
+
+class EmployeeWorkloadResponse(BaseModel):
+    """Aggregate workload and capacity metrics for an employee (US-39)."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    employee_id: int = Field(..., description="Employee ID")
+    active_projects_count: int = Field(default=0, description="Number of currently active project assignments")
+    open_tasks_count: int = Field(default=0, description="Number of open, non-completed tasks across all projects")
+    utilization_pct: float = Field(default=0.0, description="Calculated utilization percentage based on active allocations")
+
+    @model_validator(mode="before")
+    @classmethod
+    def populate_employee_id(cls, data: Any) -> Any:
+        if isinstance(data, dict):
+            if "employee_id" not in data and "emp_id" in data:
+                data["employee_id"] = data["emp_id"]
+        return data
+
+    @property
+    def emp_id(self) -> int:
+        return self.employee_id
 
 
 class DepartmentSummary(BaseModel):
