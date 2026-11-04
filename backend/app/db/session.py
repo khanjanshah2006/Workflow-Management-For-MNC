@@ -5,6 +5,10 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 
 load_dotenv()
+# Also check backend/.env explicitly so it loads regardless of cwd
+_backend_env = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".env"))
+if os.path.exists(_backend_env):
+    load_dotenv(_backend_env)
 
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql://postgres:postgres@localhost:5432/postgres")
 
@@ -16,10 +20,7 @@ elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("p
 
 # Configure reliable SQLAlchemy connection pooling against Supabase PostgreSQL or SQLite
 if DATABASE_URL.startswith("sqlite"):
-    engine = create_engine(
-        DATABASE_URL,
-        connect_args={"check_same_thread": False},
-    )
+    engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
     engine = create_engine(
         DATABASE_URL,

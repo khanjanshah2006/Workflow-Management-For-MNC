@@ -637,3 +637,620 @@ button {
     font-size: 9px;
   }
 }
+
+/* ==========================================================================
+   Team Roster Styles (US-37: [S1-FE-4] Team Lead Team Roster View)
+   ========================================================================== */
+
+.roster-page-container {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.page-header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.page-main-heading {
+  font-size: 26px;
+  font-weight: 800;
+  color: #1a2332;
+  margin: 6px 0 8px;
+  letter-spacing: -0.5px;
+}
+
+.roster-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.team-badge-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1px solid #e3e8f0;
+  padding: 6px 12px;
+  border-radius: 9px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.team-context-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7b889b;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.team-select-dropdown {
+  background: transparent;
+  border: none;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3b49df;
+  cursor: pointer;
+  outline: none;
+  padding-right: 4px;
+}
+
+.team-select-dropdown:focus {
+  outline: 2px solid #c7d2fe;
+  border-radius: 4px;
+}
+
+.team-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 700;
+  color: #3b49df;
+}
+
+.team-pill-indicator {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #3b49df;
+}
+
+.roster-refresh-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border: 1px solid #d5dbe5;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #374151;
+  transition: all 140ms ease;
+}
+
+.roster-refresh-button:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #3b49df;
+  color: #3b49df;
+}
+
+.roster-refresh-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Error Banner */
+.roster-error-banner {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 10px;
+  padding: 14px 18px;
+  color: #9b2c2c;
+}
+
+.error-banner-icon {
+  font-size: 20px;
+  flex-shrink: 0;
+}
+
+.error-banner-content {
+  flex: 1;
+}
+
+.error-banner-title {
+  margin: 0 0 3px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #9b2c2c;
+}
+
+.error-banner-desc {
+  margin: 0;
+  font-size: 12px;
+  color: #c53030;
+  line-height: 1.4;
+}
+
+.retry-button {
+  background: #e53e3e;
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 140ms ease;
+}
+
+.retry-button:hover:not(:disabled) {
+  background: #c53030;
+}
+
+.retry-button:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Section Meta Row */
+.roster-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.section-meta-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.section-heading {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  color: #202b3c;
+  letter-spacing: -0.2px;
+}
+
+.roster-live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: #2b6cb0;
+  background: #ebf8ff;
+  border: 1px solid #bee3f8;
+  padding: 3px 9px;
+  border-radius: 20px;
+}
+
+.live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #3182ce;
+  animation: pulse-dot 2s infinite ease-in-out;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.85); }
+}
+
+/* Team Member Cards Grid */
+.team-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(290px, 1fr));
+  gap: 16px;
+}
+
+.team-member-card {
+  background: #ffffff;
+  border: 1px solid #e3e8f0;
+  border-radius: 12px;
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
+
+.team-member-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.06);
+  border-color: #cbd5e1;
+}
+
+.card-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.member-avatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #4f46e5 0%, #3b82f6 100%);
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 800;
+  display: grid;
+  place-items: center;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 6px rgba(79, 70, 229, 0.25);
+  flex-shrink: 0;
+}
+
+/* Badges */
+.status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 9px;
+  border-radius: 20px;
+  letter-spacing: 0.2px;
+}
+
+.status-badge-active {
+  color: #1e7048;
+  background: #eefbf3;
+  border: 1px solid #c3edd3;
+}
+
+.status-badge-inactive {
+  color: #718096;
+  background: #edf2f7;
+  border: 1px solid #cbd5e0;
+}
+
+.status-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+}
+
+.status-dot-active {
+  background: #27ae60;
+}
+
+.status-dot-inactive {
+  background: #a0aec0;
+}
+
+/* Card Body */
+.card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.member-name {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  color: #1a2332;
+  letter-spacing: -0.2px;
+}
+
+.member-role {
+  font-size: 13px;
+  color: #4b5563;
+  font-weight: 500;
+}
+
+.member-contact {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 12px;
+}
+
+.contact-icon {
+  color: #9ca3af;
+  font-size: 12px;
+}
+
+.member-email {
+  color: #3b49df;
+  text-decoration: none;
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.member-email:hover {
+  text-decoration: underline;
+}
+
+.member-footer-info {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid #f1f4f9;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  color: #8b95a5;
+}
+
+.footer-label {
+  font-weight: 500;
+}
+
+.footer-value {
+  font-weight: 600;
+  color: #64748b;
+}
+
+/* Loading Skeletons */
+.skeleton-card {
+  pointer-events: none;
+}
+
+.skeleton-circle {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #e9ecef;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-badge {
+  width: 58px;
+  height: 22px;
+  border-radius: 20px;
+  background: #e9ecef;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-line {
+  background: #e9ecef;
+  border-radius: 4px;
+  position: relative;
+  overflow: hidden;
+}
+
+.skeleton-name {
+  width: 65%;
+  height: 16px;
+  margin-bottom: 4px;
+}
+
+.skeleton-role {
+  width: 45%;
+  height: 13px;
+  margin-bottom: 4px;
+}
+
+.skeleton-email {
+  width: 80%;
+  height: 12px;
+  margin-top: 4px;
+}
+
+.skeleton-circle::after,
+.skeleton-badge::after,
+.skeleton-line::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  transform: translateX(-100%);
+  background-image: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0) 0,
+    rgba(255, 255, 255, 0.6) 50%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Empty State */
+.roster-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 56px 24px;
+  background: #ffffff;
+  border: 1px dashed #d5dbe5;
+  border-radius: 14px;
+  gap: 12px;
+}
+
+.roster-empty-state .empty-symbol {
+  font-size: 38px;
+  margin-bottom: 4px;
+}
+
+.roster-empty-state .empty-title {
+  margin: 0;
+  font-size: 17px;
+  font-weight: 750;
+  color: #1a2332;
+}
+
+.roster-empty-state .empty-description {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  max-width: 440px;
+  line-height: 1.5;
+}
+
+.empty-refresh-button {
+  margin-top: 8px;
+  background: #3b49df;
+}
+
+.empty-refresh-button:hover {
+  background: #2e3cb9;
+}
+
+/* ==========================================================================
+   Wave 2 Team Tasks Placeholder Container
+   ========================================================================== */
+
+.tasks-placeholder-section {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 12px;
+  padding-top: 24px;
+  border-top: 1px solid #e7ebf2;
+}
+
+.tasks-placeholder-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tasks-heading-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.tasks-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 800;
+  color: #1a2332;
+  letter-spacing: -0.3px;
+}
+
+.wave2-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #6b21a8;
+  background: #f3e8ff;
+  border: 1px solid #e9d5ff;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.tasks-subtitle {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.tasks-placeholder-card {
+  background: #fbfcfe;
+  border: 1px dashed #cbd5e1;
+  border-radius: 12px;
+  padding: 36px 28px;
+}
+
+.placeholder-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 12px;
+  max-width: 600px;
+  margin: 0 auto;
+}
+
+.tasks-icon {
+  font-size: 32px;
+  margin-bottom: 2px;
+}
+
+.placeholder-headline {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 750;
+  color: #1e293b;
+}
+
+.placeholder-subtext {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.6;
+}
+
+.placeholder-roadmap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+
+.roadmap-pill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  padding: 3px 9px;
+  border-radius: 12px;
+}
+
+.roadmap-pill-upcoming {
+  color: #64748b;
+  background: #f1f5f9;
+  border-color: #e2e8f0;
+}
+
+.roadmap-arrow {
+  color: #94a3b8;
+  font-size: 11px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .page-header-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .roster-header-actions {
+    justify-content: space-between;
+  }
+
+  .team-cards-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .tasks-placeholder-card {
+    padding: 24px 16px;
+  }
+}
+

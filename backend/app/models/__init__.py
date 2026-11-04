@@ -21,7 +21,7 @@ from app.models.hr_manager import HRManager
 from app.models.client import Client
 from app.models.project import Project, ProjectAssignment
 from app.models.team import Team, TeamMember
-from app.models.milestone import Milestone
+from app.models.milestone import ProjectMilestone, Milestone
 from app.models.task import Task, TaskComment
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.leave import LeaveType, LeaveRequest
@@ -53,6 +53,7 @@ __all__ = [
     "ProjectAssignment",
     "Team",
     "TeamMember",
+    "ProjectMilestone",
     "Milestone",
     "Task",
     "TaskComment",
