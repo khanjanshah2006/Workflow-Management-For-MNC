@@ -15,6 +15,9 @@ from app.features.projects.schemas import (
     TeamResponse,
     TeamMemberAdd,
     TeamMemberResponse,
+    MilestoneCreate,
+    MilestoneUpdate,
+    MilestoneResponse,
 )
 from app.features.projects.service import (
     ProjectService,
@@ -29,6 +32,7 @@ from app.features.projects.service import (
     TeamMemberAlreadyExistsError,
     InvalidDateRangeError,
     UnauthorizedProjectAccessError,
+    MilestoneNotFoundError,
 )
 
 router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
@@ -274,3 +278,122 @@ def list_team_members(
         return ProjectService.list_team_members(db=db, project_id=project_id, team_id=team_id)
     except TeamNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+# ==========================================
+# Milestone Endpoints (US-08)
+# ==========================================
+
+@router.post(
+    "/{id}/milestones",
+    response_model=MilestoneResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a project milestone (US-08)",
+    description="PM adds milestone. Validates target_date is between project start_date and end_date.",
+)
+def create_milestone(
+    id: int,
+    payload: MilestoneCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(pm_or_admin_guard),
+) -> MilestoneResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return ProjectService.create_milestone(
+            db=db,
+            project_id=id,
+            payload=payload,
+            current_user=current_user,
+            ip_address=client_ip,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidDateRangeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{id}/milestones",
+    response_model=List[MilestoneResponse],
+    summary="List project milestones (US-08)",
+    description="Lists project milestones ordered by target_date ASC.",
+)
+def list_milestones(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+) -> List[MilestoneResponse]:
+    try:
+        return ProjectService.list_milestones(db=db, project_id=id, current_user=current_user)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.put(
+    "/{id}/milestones/{mid}",
+    response_model=MilestoneResponse,
+    summary="Update project milestone (US-08)",
+    description="Update details or mark completed (sets completed_at = now()).",
+)
+def update_milestone(
+    id: int,
+    mid: int,
+    payload: MilestoneUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(pm_or_admin_guard),
+) -> MilestoneResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return ProjectService.update_milestone(
+            db=db,
+            project_id=id,
+            milestone_id=mid,
+            payload=payload,
+            current_user=current_user,
+            ip_address=client_ip,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except MilestoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidDateRangeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.delete(
+    "/{id}/milestones/{mid}",
+    status_code=status.HTTP_200_OK,
+    summary="Delete project milestone (US-08)",
+    description="Soft delete or remove milestone.",
+)
+def delete_milestone(
+    id: int,
+    mid: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(pm_or_admin_guard),
+) -> dict:
+    client_ip = request.client.host if request.client else None
+    try:
+        return ProjectService.delete_milestone(
+            db=db,
+            project_id=id,
+            milestone_id=mid,
+            current_user=current_user,
+            ip_address=client_ip,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except MilestoneNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+

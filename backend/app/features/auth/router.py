@@ -1,54 +1,159 @@
 from fastapi import APIRouter, Depends, Request, Response, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.features.auth.schemas import (
     LoginRequest,
+    LoginResponse,
     TokenResponse,
     RefreshTokenRequest,
     TokenRefreshResponse,
+    MfaSetupResponse,
+    MfaVerifyRequest,
+    MfaLoginRequest,
+    MfaStatusResponse,
 )
 from app.features.auth.service import AuthService
+from app.models.user_account import UserAccount
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
 
 
 @router.post(
     "/login",
-    response_model=TokenResponse,
+    response_model=LoginResponse,
     status_code=status.HTTP_200_OK,
-    summary="Authenticate user, return tokens, and set HttpOnly refresh cookie",
+    summary="Authenticate user (triggers MFA challenge if enabled - US-01, US-31)",
 )
 def login(
     payload: LoginRequest,
     response: Response,
     request: Request,
     db: Session = Depends(get_db),
-) -> TokenResponse:
+) -> LoginResponse:
     """
-    Authenticate a user using registered email and password.
-    Returns JWT access & refresh tokens in the JSON response AND sets
-    the refresh_token as a secure HttpOnly cookie for browser security.
+    Authenticate user credentials.
+    - If MFA is enabled on the account, returns an ephemeral mfa_token requiring TOTP completion.
+    - If MFA is not enabled, returns access/refresh tokens and sets the secure HttpOnly cookie.
     """
-    tokens = AuthService.authenticate_user(
+    result = AuthService.authenticate_user(
         db=db,
         email=payload.email,
         password=payload.password,
         ip_address=request.client.host if request.client else None,
     )
 
-    # Set HttpOnly refresh token cookie
+    # If MFA challenge is required, return immediately without setting session cookie
+    if result.mfa_required:
+        return result
+
+    # Set HttpOnly refresh token cookie on direct success
+    if result.refresh_token:
+        response.set_cookie(
+            key="refresh_token",
+            value=result.refresh_token,
+            httponly=True,
+            samesite="lax",
+            secure=False,
+            max_age=7 * 24 * 3600,
+            path="/api/v1/auth",
+        )
+
+    return result
+
+
+@router.post(
+    "/mfa/setup",
+    response_model=MfaSetupResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Generate TOTP MFA secret and provisioning URI (US-31)",
+)
+def setup_mfa(
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MfaSetupResponse:
+    """
+    Generate a new random TOTP secret for the authenticated user.
+    Returns secret key and standard otpauth:// URI to import into authenticator apps.
+    """
+    return AuthService.setup_mfa(db=db, user=current_user)
+
+
+@router.post(
+    "/mfa/verify",
+    status_code=status.HTTP_200_OK,
+    summary="Verify 6-digit TOTP code and enable MFA (US-31)",
+)
+def verify_mfa(
+    payload: MfaVerifyRequest,
+    request: Request,
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Submit a 6-digit TOTP code to confirm authenticator configuration and activate MFA.
+    """
+    return AuthService.verify_and_enable_mfa(
+        db=db,
+        user=current_user,
+        code=payload.code,
+        ip_address=request.client.host if request.client else None,
+    )
+
+
+@router.post(
+    "/mfa/login",
+    response_model=TokenResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Complete two-factor authentication login challenge (US-31)",
+)
+def mfa_login(
+    payload: MfaLoginRequest,
+    response: Response,
+    request: Request,
+    db: Session = Depends(get_db),
+) -> TokenResponse:
+    """
+    Submit ephemeral mfa_token and current 6-digit TOTP code to complete authentication.
+    Issues final access token and sets the HttpOnly refresh token cookie.
+    """
+    tokens = AuthService.complete_mfa_login(
+        db=db,
+        mfa_token=payload.mfa_token,
+        code=payload.code,
+        ip_address=request.client.host if request.client else None,
+    )
+
     response.set_cookie(
         key="refresh_token",
         value=tokens.refresh_token,
-        httponly=True,        # Prevents client-side JS (XSS) from reading the token
-        samesite="lax",       # Protects against CSRF attacks
-        secure=False,         # False allows HTTP during local dev; set to True in HTTPS production
-        max_age=7 * 24 * 3600,# 7 days
-        path="/api/v1/auth",  # Only sent to auth endpoints
+        httponly=True,
+        samesite="lax",
+        secure=False,
+        max_age=7 * 24 * 3600,
+        path="/api/v1/auth",
     )
 
     return tokens
+
+
+@router.get(
+    "/mfa/status",
+    response_model=MfaStatusResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Check current user MFA status",
+)
+def mfa_status(
+    current_user: UserAccount = Depends(get_current_user),
+) -> MfaStatusResponse:
+    """
+    Returns whether MFA is currently enabled for the authenticated user.
+    """
+    return MfaStatusResponse(
+        is_mfa_enabled=bool(current_user.is_mfa_enabled),
+        email=current_user.email,
+    )
 
 
 @router.post(
@@ -64,9 +169,7 @@ def refresh_token(
     db: Session = Depends(get_db),
 ) -> TokenRefreshResponse:
     """
-    Obtain a fresh access token. The refresh token can be provided either:
-    1. In the HttpOnly cookie (automatic from browsers), OR
-    2. In the JSON request body (for Postman/mobile clients).
+    Obtain a fresh access token using either the HttpOnly cookie or the request body.
     """
     token_str = (
         payload.refresh_token

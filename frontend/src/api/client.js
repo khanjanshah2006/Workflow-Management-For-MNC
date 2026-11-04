@@ -1,12 +1,14 @@
 /**
- * Standardized HTTP API Client for WorkSphere.
- * Manages baseURL, Authorization headers, and API error formatting.
+ * WorkSphere Core API Client
+ * Handles baseURL, JWT token injection, headers, and standardized error extraction.
  */
 
-const BASE_URL = import.meta.env.VITE_API_URL || "";
+const BASE_URL =
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  "http://localhost:8000";
 
-class ApiError extends Error {
-  constructor(message, status, data) {
+export class ApiError extends Error {
+  constructor(message, status = 0, data = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -15,10 +17,12 @@ class ApiError extends Error {
 }
 
 export function getStoredToken() {
+  if (typeof localStorage === "undefined") return "";
   return localStorage.getItem("wms_access_token") || "";
 }
 
 export function setStoredToken(token) {
+  if (typeof localStorage === "undefined") return;
   if (token) {
     localStorage.setItem("wms_access_token", token);
   } else {
@@ -49,7 +53,7 @@ async function request(endpoint, options = {}) {
     response = await fetch(url, config);
   } catch (networkError) {
     throw new ApiError(
-      `Network connection failed: Unable to connect to backend at ${BASE_URL || window.location.origin}. Verify server is running.`,
+      `Network connection failed: Unable to reach backend at ${BASE_URL}. Ensure the backend server is running.`,
       0,
       { originalError: networkError.message }
     );
