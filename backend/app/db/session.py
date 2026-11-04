@@ -18,7 +18,7 @@ if DATABASE_URL.startswith("postgres://"):
 elif DATABASE_URL.startswith("postgresql://") and not DATABASE_URL.startswith("postgresql+"):
     DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg2://", 1)
 
-# Configure reliable SQLAlchemy connection pooling against Supabase PostgreSQL
+# Configure reliable SQLAlchemy connection pooling against Supabase PostgreSQL or SQLite
 if DATABASE_URL.startswith("sqlite"):
     engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
 else:
@@ -29,6 +29,7 @@ else:
         max_overflow=10,
         pool_recycle=120,        # Recycle connections every 2 minutes before Supabase idle timeout
         pool_timeout=30,
+        connect_args={"connect_timeout": 3},
     )
 
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
