@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    SystemParameterResponse,
+    SystemParameterUpdate,
     UserAccountCreate,
     UserAccountFilter,
     UserAccountPaginationResponse,
@@ -18,6 +20,8 @@ from app.features.admin.schemas import (
 from app.features.admin.service import (
     AdminService,
     EmailAlreadyExistsError,
+    InvalidParameterValueError,
+    SystemParameterNotFoundError,
     UserNotFoundError,
 )
 from app.models.enums import UserType
@@ -190,3 +194,51 @@ def get_backup_status(
     current_user: UserAccount = Depends(admin_guard),
 ) -> BackupStatusResponse:
     return AdminService.get_backup_status(db=db)
+
+
+# ==========================================
+# System Parameters Endpoints (US-46)
+# ==========================================
+
+@router.get(
+    "/system-params",
+    response_model=List[SystemParameterResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List all system configuration parameters (US-46)",
+    description="Retrieve all operational system parameters (session timeout, upload limits, etc.). Restricted to ADMIN.",
+)
+def list_system_parameters(
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> List[SystemParameterResponse]:
+    return AdminService.list_system_parameters(db=db)
+
+
+@router.put(
+    "/system-params/{key}",
+    response_model=SystemParameterResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update system configuration parameter (US-46)",
+    description="Update a system configuration parameter with strict value_type validation and audit logging. Restricted to ADMIN.",
+)
+def update_system_parameter(
+    key: str,
+    payload: SystemParameterUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> SystemParameterResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return AdminService.update_system_parameter(
+            db=db,
+            key=key,
+            payload=payload,
+            admin_user=current_user,
+            ip_address=client_ip,
+        )
+    except SystemParameterNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidParameterValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+

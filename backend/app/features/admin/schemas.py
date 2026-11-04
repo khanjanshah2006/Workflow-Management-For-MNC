@@ -56,3 +56,25 @@ class BackupStatusResponse(BaseModel):
     last_verified_at: datetime
     active_connections: int
     details: str
+
+
+# ==========================================
+# System Parameters Schemas (US-46)
+# ==========================================
+
+class SystemParameterResponse(BaseModel):
+    """View model for a system-wide configuration parameter."""
+    model_config = ConfigDict(from_attributes=True)
+
+    key: str
+    value: str
+    value_type: str
+    description: Optional[str] = None
+    updated_at: datetime
+    updated_by: Optional[UUID] = None
+
+
+class SystemParameterUpdate(BaseModel):
+    """Payload to update an operational parameter value."""
+    value: str = Field(..., min_length=1, max_length=500, description="String representation of parameter value matching its type")
+

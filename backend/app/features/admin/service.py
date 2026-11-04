@@ -1,6 +1,7 @@
+import json
 import math
 from datetime import datetime, timezone
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import text
@@ -12,6 +13,8 @@ from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    SystemParameterResponse,
+    SystemParameterUpdate,
     UserAccountCreate,
     UserAccountFilter,
     UserAccountPaginationResponse,
@@ -26,6 +29,14 @@ class UserNotFoundError(Exception):
 
 
 class EmailAlreadyExistsError(Exception):
+    pass
+
+
+class SystemParameterNotFoundError(Exception):
+    pass
+
+
+class InvalidParameterValueError(Exception):
     pass
 
 
@@ -191,3 +202,73 @@ class AdminService:
             active_connections=checked_out,
             details=f"Point-In-Time Recovery (PITR) active. Pool status: {checked_out}/{pool_size} active connections.",
         )
+
+    # ==========================================
+    # System Parameter Service Methods (US-46)
+    # ==========================================
+
+    @staticmethod
+    def validate_parameter_value(value_type: str, value: str) -> None:
+        """Validate that string value conforms to value_type."""
+        v_type = value_type.strip().lower()
+        if v_type == "integer":
+            try:
+                int(value)
+            except (ValueError, TypeError):
+                raise InvalidParameterValueError(f"Value '{value}' is not a valid integer.")
+        elif v_type == "boolean":
+            if value.strip().lower() not in ("true", "false", "1", "0"):
+                raise InvalidParameterValueError(f"Value '{value}' is not a valid boolean ('true' or 'false').")
+        elif v_type == "json":
+            try:
+                json.loads(value)
+            except Exception:
+                raise InvalidParameterValueError(f"Value '{value}' is not valid JSON.")
+        elif v_type == "string":
+            if not isinstance(value, str):
+                raise InvalidParameterValueError("Value must be a string.")
+
+    @staticmethod
+    def list_system_parameters(db: Session) -> List[SystemParameterResponse]:
+        """List all operational system parameters."""
+        items = AdminRepository.list_system_parameters(db=db)
+        return [SystemParameterResponse.model_validate(item) for item in items]
+
+    @staticmethod
+    def update_system_parameter(
+        db: Session,
+        key: str,
+        payload: SystemParameterUpdate,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> SystemParameterResponse:
+        """Update system parameter with strict value_type validation and audit logging."""
+        param = AdminRepository.get_system_parameter(db=db, key=key)
+        if not param:
+            raise SystemParameterNotFoundError(f"System parameter '{key}' not found.")
+
+        # Validate that payload.value conforms to param.value_type
+        AdminService.validate_parameter_value(param.value_type, payload.value)
+
+        old_val = param.value
+        updated = AdminRepository.update_system_parameter(
+            db=db,
+            param=param,
+            new_value=payload.value,
+            updated_by=admin_user.account_id,
+        )
+
+        # Audit log parameter update
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="SYSTEM_PARAMETER",
+            entity_ref_id=key,
+            account_id=admin_user.account_id,
+            old_value={"value": old_val},
+            new_value={"value": updated.value},
+            ip_address=ip_address,
+        )
+
+        return SystemParameterResponse.model_validate(updated)
+
