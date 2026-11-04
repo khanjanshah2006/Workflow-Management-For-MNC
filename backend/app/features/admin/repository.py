@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.features.admin.schemas import UserAccountFilter
 from app.models.enums import UserType
 from app.models.user_account import UserAccount
+from app.models.system_parameter import SystemParameter
 
 
 class AdminRepository:
@@ -78,3 +79,31 @@ class AdminRepository:
         db.commit()
         db.refresh(user)
         return user
+
+    # ==========================================
+    # System Parameter Repository Methods (US-46)
+    # ==========================================
+
+    @staticmethod
+    def list_system_parameters(db: Session) -> List[SystemParameter]:
+        """Fetch all operational system parameters ordered by key."""
+        return db.query(SystemParameter).order_by(SystemParameter.key.asc()).all()
+
+    @staticmethod
+    def get_system_parameter(db: Session, key: str) -> Optional[SystemParameter]:
+        """Fetch a single system parameter by unique key."""
+        return db.query(SystemParameter).filter(SystemParameter.key == key.strip()).first()
+
+    @staticmethod
+    def update_system_parameter(
+        db: Session,
+        param: SystemParameter,
+        new_value: str,
+        updated_by: UUID,
+    ) -> SystemParameter:
+        """Update system parameter value and modifier."""
+        param.value = new_value
+        param.updated_by = updated_by
+        db.commit()
+        db.refresh(param)
+        return param
