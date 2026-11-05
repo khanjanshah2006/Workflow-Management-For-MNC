@@ -28,6 +28,17 @@ from app.features.projects.schemas import (
 )
 
 
+PROJECT_STATUS_TRANSITIONS = {
+    ProjectStatus.PLANNED: frozenset({ProjectStatus.ACTIVE, ProjectStatus.CANCELLED}),
+    ProjectStatus.ACTIVE: frozenset(
+        {ProjectStatus.ON_HOLD, ProjectStatus.COMPLETED, ProjectStatus.CANCELLED}
+    ),
+    ProjectStatus.ON_HOLD: frozenset({ProjectStatus.ACTIVE, ProjectStatus.CANCELLED}),
+    ProjectStatus.COMPLETED: frozenset({ProjectStatus.CANCELLED}),
+    ProjectStatus.CANCELLED: frozenset(),
+}
+
+
 # ==========================================
 # Domain Exceptions
 # ==========================================
@@ -285,19 +296,8 @@ class ProjectService:
 
         ProjectService._verify_pm_ownership(db, project, current_user)
 
-        allowed_transitions = {
-            ProjectStatus.PLANNED: {ProjectStatus.ACTIVE, ProjectStatus.CANCELLED},
-            ProjectStatus.ACTIVE: {
-                ProjectStatus.ON_HOLD,
-                ProjectStatus.COMPLETED,
-                ProjectStatus.CANCELLED,
-            },
-            ProjectStatus.ON_HOLD: {ProjectStatus.ACTIVE, ProjectStatus.CANCELLED},
-            ProjectStatus.COMPLETED: {ProjectStatus.CANCELLED},
-            ProjectStatus.CANCELLED: set(),
-        }
         previous_status = project.status
-        if new_status not in allowed_transitions[previous_status]:
+        if new_status not in PROJECT_STATUS_TRANSITIONS[previous_status]:
             raise InvalidProjectStatusTransitionError(previous_status, new_status)
 
         project.status = new_status
