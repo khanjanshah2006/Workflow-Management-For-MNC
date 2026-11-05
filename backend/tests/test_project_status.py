@@ -6,14 +6,14 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request
 from pydantic import ValidationError
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.db.base import Base
-from app.features.projects.router import pm_or_admin_guard, update_project_status
+from app.features.projects.router import pm_or_admin_guard, router as project_router, update_project_status
 from app.features.projects.schemas import ProjectStatusUpdate
 from app.models.audit_log import AuditLog
 from app.models.client import Client
@@ -260,3 +260,14 @@ def test_assigned_pm_can_transition_project(setup_api):
     response = client.put("/api/v1/projects/1/status", json={"status": "ACTIVE"})
     assert response.status_code == 200
 
+
+def test_status_endpoint_is_published_in_openapi():
+    app = FastAPI()
+    app.include_router(project_router)
+    operation = app.openapi()["paths"]["/api/v1/projects/{id}/status"]["put"]
+
+    assert operation["summary"] == "Update project lifecycle status (US-36)"
+    assert {"400", "403", "404", "422"}.issubset(operation["responses"])
+    assert operation["requestBody"]["content"]["application/json"]["schema"]["$ref"].endswith(
+        "/ProjectStatusUpdate"
+    )
