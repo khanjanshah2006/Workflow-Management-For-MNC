@@ -2,7 +2,7 @@ import os
 import unittest
 from datetime import datetime, timezone, timedelta
 from uuid import uuid4
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, HTTPException
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -239,6 +239,72 @@ class TestAdminSystemParamsAndElevatedAccess(unittest.TestCase):
 
         res3 = self.client.get("/api/v1/projects/pm-only-zone")
         self.assertEqual(res3.status_code, 403)
+
+    def test_non_admin_forbidden(self):
+        """Non-admin access must return 403 Forbidden across all admin endpoints."""
+        self.app.dependency_overrides[get_current_user] = lambda: self.employee
+
+        # GET system-params
+        res1 = self.client.get("/api/v1/admin/system-params")
+        self.assertEqual(res1.status_code, 403)
+
+        # PUT system-params/{key}
+        res2 = self.client.put("/api/v1/admin/system-params/session_timeout_minutes", json={"value": "90"})
+        self.assertEqual(res2.status_code, 403)
+
+        # POST elevated-access
+        future_time = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        res3 = self.client.post(
+            "/api/v1/admin/elevated-access",
+            json={
+                "user_id": str(self.employee.account_id),
+                "granted_role": "PM",
+                "expires_at": future_time,
+                "reason": "Unauthorized attempt",
+            },
+        )
+        self.assertEqual(res3.status_code, 403)
+
+        # GET elevated-access/active
+        res4 = self.client.get("/api/v1/admin/elevated-access/active")
+        self.assertEqual(res4.status_code, 403)
+
+    def test_expired_grant_ignored(self):
+        """User with expired grant is treated as having baseline role only (403)."""
+        self.app.dependency_overrides[get_current_user] = lambda: self.employee
+
+        db = self.TestingSessionLocal()
+        past_exp = datetime.now(timezone.utc) - timedelta(hours=2)
+        expired_grant = ElevatedAccessGrant(
+            user_id=self.employee.account_id,
+            granted_by=self.admin.account_id,
+            granted_role="PM",
+            reason="Expired elevation grant",
+            expires_at=past_exp,
+        )
+        db.add(expired_grant)
+        db.commit()
+        db.close()
+
+        res = self.client.get("/api/v1/projects/pm-only-zone")
+        self.assertEqual(res.status_code, 403)
+
+    def test_deps_require_roles_hook(self):
+        """Verify require_roles from app.core.deps works as specified in issue hook."""
+        from app.core.deps import require_roles
+
+        guard = require_roles(["ADMIN"])
+        db = self.TestingSessionLocal()
+        # Admin should pass
+        res = guard(current_user=self.admin, db=db)
+        self.assertEqual(res.account_id, self.admin.account_id)
+
+        # Employee without grant should raise 403
+        with self.assertRaises(HTTPException) as ctx:
+            guard(current_user=self.employee, db=db)
+        self.assertEqual(ctx.exception.status_code, 403)
+        db.close()
+
 
 
 if __name__ == "__main__":
