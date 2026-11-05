@@ -205,6 +205,7 @@ def test_invalid_transition_returns_descriptive_400_without_audit(setup_api, ini
     {"status": ["ACTIVE"]},
     {"status": {"$ne": "PLANNED"}},
     {"status": 1},
+    {"status": "ACTIVE", "status; DROP TABLE project;--": "x"},
 ])
 def test_invalid_or_injection_status_payloads_rejected(setup_api, payload):
     client, db, _, _ = setup_api
