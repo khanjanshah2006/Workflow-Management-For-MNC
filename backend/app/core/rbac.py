@@ -107,3 +107,8 @@ def require_role(
 
     return role_dependency
 
+
+# Plural alias matching issue specification
+require_roles = require_role
+
+
