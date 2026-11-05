@@ -39,7 +39,9 @@ class ProjectResponse(BaseModel):
 
 class ProjectStatusUpdate(BaseModel):
     """Requested lifecycle status for a project."""
-    status: ProjectStatus
+    model_config = ConfigDict(extra="forbid")
+
+    status: ProjectStatus = Field(..., examples=["ACTIVE"])
 
 
 class ProjectStatusResponse(BaseModel):
