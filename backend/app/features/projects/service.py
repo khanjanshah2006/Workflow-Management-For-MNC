@@ -15,6 +15,7 @@ from app.features.projects.repository import ProjectRepository
 from app.features.projects.schemas import (
     ProjectCreate,
     ProjectResponse,
+    ProjectStatusResponse,
     ProjectAssignmentCreate,
     ProjectAssignmentResponse,
     TeamCreate,
@@ -96,6 +97,13 @@ class InvalidDateRangeError(ProjectServiceError):
 class UnauthorizedProjectAccessError(ProjectServiceError):
     def __init__(self, message: str = "You are not authorized to manage this project"):
         super().__init__(message)
+
+
+class InvalidProjectStatusTransitionError(ProjectServiceError):
+    def __init__(self, current_status: ProjectStatus, requested_status: ProjectStatus):
+        super().__init__(
+            f"Project status cannot transition from {current_status.value} to {requested_status.value}"
+        )
 
 
 class MilestoneNotFoundError(ProjectServiceError):
@@ -261,6 +269,52 @@ class ProjectService:
         if not project:
             raise ProjectNotFoundError(project_id)
         return ProjectResponse.model_validate(project)
+
+    @staticmethod
+    def update_project_status(
+        db: Session,
+        project_id: int,
+        new_status: ProjectStatus,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> ProjectStatusResponse:
+        """Apply an allowed lifecycle transition for the assigned PM or an admin."""
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        ProjectService._verify_pm_ownership(db, project, current_user)
+
+        allowed_transitions = {
+            ProjectStatus.PLANNED: {ProjectStatus.ACTIVE, ProjectStatus.CANCELLED},
+            ProjectStatus.ACTIVE: {
+                ProjectStatus.ON_HOLD,
+                ProjectStatus.COMPLETED,
+                ProjectStatus.CANCELLED,
+            },
+            ProjectStatus.ON_HOLD: {ProjectStatus.ACTIVE, ProjectStatus.CANCELLED},
+            ProjectStatus.COMPLETED: {ProjectStatus.CANCELLED},
+            ProjectStatus.CANCELLED: set(),
+        }
+        previous_status = project.status
+        if new_status not in allowed_transitions[previous_status]:
+            raise InvalidProjectStatusTransitionError(previous_status, new_status)
+
+        project.status = new_status
+        db.commit()
+        db.refresh(project)
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="PROJECT",
+            entity_ref_id=str(project.project_id),
+            account_id=current_user.account_id,
+            old_value={"status": previous_status.value},
+            new_value={"status": new_status.value},
+            ip_address=ip_address,
+        )
+        return ProjectStatusResponse(project_id=project.project_id, status=project.status)
 
     # ------------------------------------------
     # Staffing / Assignment Operations (US-07)
