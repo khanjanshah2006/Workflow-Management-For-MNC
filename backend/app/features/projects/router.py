@@ -121,6 +121,12 @@ def get_project(
     response_model=ProjectStatusResponse,
     summary="Update project lifecycle status (US-36)",
     description="Transition a project through its allowed lifecycle states. Restricted to its assigned PM and System Admins.",
+    responses={
+        status.HTTP_400_BAD_REQUEST: {"description": "Requested lifecycle transition is not allowed."},
+        status.HTTP_403_FORBIDDEN: {"description": "Caller is not the assigned Project Manager or a System Admin."},
+        status.HTTP_404_NOT_FOUND: {"description": "Project does not exist."},
+        422: {"description": "Request body or project ID is invalid."},
+    },
 )
 def update_project_status(
     id: int,
