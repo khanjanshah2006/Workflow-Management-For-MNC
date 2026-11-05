@@ -9,6 +9,8 @@ from app.models.user_account import UserAccount
 from app.features.projects.schemas import (
     ProjectCreate,
     ProjectResponse,
+    ProjectStatusUpdate,
+    ProjectStatusResponse,
     ProjectAssignmentCreate,
     ProjectAssignmentResponse,
     TeamCreate,
@@ -32,6 +34,7 @@ from app.features.projects.service import (
     TeamMemberAlreadyExistsError,
     InvalidDateRangeError,
     UnauthorizedProjectAccessError,
+    InvalidProjectStatusTransitionError,
     MilestoneNotFoundError,
 )
 
@@ -111,6 +114,36 @@ def get_project(
         return ProjectService.get_project(db=db, project_id=project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.put(
+    "/{id}/status",
+    response_model=ProjectStatusResponse,
+    summary="Update project lifecycle status (US-36)",
+    description="Transition a project through its allowed lifecycle states. Restricted to its assigned PM and System Admins.",
+)
+def update_project_status(
+    id: int,
+    payload: ProjectStatusUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(pm_or_admin_guard),
+) -> ProjectStatusResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return ProjectService.update_project_status(
+            db=db,
+            project_id=id,
+            new_status=payload.status,
+            current_user=current_user,
+            ip_address=client_ip,
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidProjectStatusTransitionError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 # ==========================================
