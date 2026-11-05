@@ -5,6 +5,7 @@ import NotificationBell from "../common/NotificationBell";
 const navigation = [
   { path: "/dashboard", label: "Dashboard", icon: "▦" },
   { path: "/projects", label: "Projects", icon: "◇" },
+  { path: "/team", label: "Team Roster", icon: "👥" },
   { path: "/tasks", label: "Tasks", icon: "✓" },
   { path: "/profile", label: "My Profile", icon: "○" },
 ];
@@ -16,7 +17,11 @@ export default function AppLayout() {
 
   const currentPage =
     navigation.find((item) => item.path === location.pathname)?.label ??
-    "Dashboard";
+    (location.pathname.startsWith("/team")
+      ? "Team Roster"
+      : location.pathname.startsWith("/projects")
+      ? "Projects"
+      : "Dashboard");
 
   return (
     <div
