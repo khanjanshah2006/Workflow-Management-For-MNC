@@ -82,4 +82,5 @@ desktop.ini
 *.log
 *.sqlite
 *.sqlite3
+*.db
 alembic.log

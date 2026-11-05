@@ -1,3 +1,4 @@
+import os
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -11,6 +12,7 @@ from app.features.profile import profile_router
 from app.features.projects import project_router
 from app.features.employees import employee_router
 from app.features.admin import admin_router
+from app.features.notifications import notification_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
 from app.models.user_account import UserAccount
@@ -18,12 +20,13 @@ from app.models.user_account import UserAccount
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Pre-warm connection pool on startup so the first request doesn't pay connection penalty
-    try:
-        with SessionLocal() as db:
-            db.execute(text("SELECT 1"))
-    except Exception:
-        pass
+    # Pre-warm connection pool on startup unless in testing environment
+    if not os.getenv("TESTING"):
+        try:
+            with SessionLocal() as db:
+                db.execute(text("SELECT 1"))
+        except Exception:
+            pass
     yield
 
 
@@ -51,6 +54,7 @@ app.include_router(profile_router)
 app.include_router(project_router)
 app.include_router(employee_router)
 app.include_router(admin_router)
+app.include_router(notification_router)
 
 
 @app.get("/", tags=["Root"])
