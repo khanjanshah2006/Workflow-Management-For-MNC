@@ -11,7 +11,7 @@ import {
 } from "@tanstack/react-query";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
-import ProjectsPage from "./features/projects/pages/ProjectsPage";
+import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
 import "./App.css";
 
@@ -84,7 +84,7 @@ function App() {
               }
             />
             <Route path="/projects" element={<ProjectListPage />} />
-            <Route path="/projects/:projectId" element={<ProjectsPage />} />
+            <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="/team" element={<TeamRosterPage />} />
             <Route path="/team/roster" element={<TeamRosterPage />} />
             <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
