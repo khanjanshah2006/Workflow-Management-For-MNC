@@ -3,6 +3,9 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.employee import Employee
+from app.models.team import Team, TeamMember
+from app.models.enums import CommonStatus
 from .schemas import DepartmentCreate, DepartmentUpdate
 
 
@@ -70,3 +73,31 @@ def update(
 def delete(db: Session, department: Department) -> None:
     db.delete(department)
     db.flush()
+
+
+# ==========================================
+# Team Member Repository Functions (US-37)
+# ==========================================
+
+
+def get_team_by_id(db: Session, team_id: int) -> Team | None:
+    """Fetch a team record by primary key."""
+    return db.get(Team, team_id)
+
+
+def get_active_members_for_team(db: Session, team_id: int) -> list[Employee]:
+    """
+    Query all ACTIVE employees assigned to the given team via team_member join.
+    Uses parameterized SQLAlchemy ORM select query (SQLi safe).
+    """
+    stmt = (
+        select(Employee)
+        .join(TeamMember, TeamMember.emp_id == Employee.emp_id)
+        .where(
+            TeamMember.team_id == team_id,
+            Employee.status == CommonStatus.ACTIVE,
+        )
+        .order_by(Employee.emp_id.asc())
+    )
+    return list(db.scalars(stmt).all())
+

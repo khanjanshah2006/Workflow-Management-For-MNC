@@ -10,7 +10,7 @@ import {
   QueryClientProvider,
 } from "@tanstack/react-query";
 import AppLayout from "./components/layout/AppLayout";
-import ProjectsPage from "./features/projects/pages/ProjectsPage";
+import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
 import "./App.css";
@@ -83,7 +83,7 @@ function App() {
                 />
               }
             />
-            <Route path="/projects" element={<ProjectsPage />} />
+            <Route path="/projects" element={<ProjectListPage />} />
             <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
             <Route path="/team" element={<TeamRosterPage />} />
             <Route path="/team/roster" element={<TeamRosterPage />} />
