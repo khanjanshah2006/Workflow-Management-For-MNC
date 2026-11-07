@@ -1028,6 +1028,289 @@
             "description": "Ordinary employees cannot view tickets submitted by other employees (403 Forbidden)."
           },
           "response": []
+        },
+        {
+          "name": "GET Ticket Queue Metrics (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/queue/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "queue",
+                "metrics"
+              ]
+            },
+            "description": "IT Support triage dashboard metrics."
+          },
+          "response": []
+        },
+        {
+          "name": "GET IT Staff Ticket Queue - Filtered (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets?status=open&category=hardware",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "open"
+                },
+                {
+                  "key": "category",
+                  "value": "hardware"
+                }
+              ]
+            },
+            "description": "IT staff triage queue view with multi-attribute filtering."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Ticket to IT Staff (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"{{it_staff_id}}\",\n  \"reassignment_reason\": \"Allocated to Tier 2 specialist\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Assign ticket to an IT staff member."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Ticket - Reject Non-IT Staff (422 Error) (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assigned_to\": \"{{employee_id}}\",\n  \"reassignment_reason\": \"Invalid assignment test\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Validates that ticket can only be assigned to users with IT_SUPPORT role (returns 422)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Append Troubleshooting Note (US-27)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Investigated hardware. Replaced faulty display ribbon cable.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/notes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "notes"
+              ]
+            },
+            "description": "Appends internal note to ticket activity log and updates ticket updated_at."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Transition Status to In Progress (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\",\n  \"resolution_notes\": \"Beginning hardware diagnostics.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Transition status from open to in_progress."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Transition Status to Resolved - Triggers Notification (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{it_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_notes\": \"Replaced display ribbon cable. Tested and confirmed operational.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Transition status to resolved and notifies reporter via notification service."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Triage Queue - Unauthorized Role 403 Forbidden (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ]
+            },
+            "description": "Ordinary employees cannot access IT triage queue (403 Forbidden)."
+          },
+          "response": []
         }
       ]
     },
