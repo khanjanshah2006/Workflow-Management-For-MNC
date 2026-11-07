@@ -9,9 +9,11 @@ from app.models.milestone import ProjectMilestone
 from app.models.user_account import UserAccount
 from app.models.client import Client
 from app.models.employee import Employee
-from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction, MilestoneStatus
+from app.models.department import Department
+from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction, MilestoneStatus, CommonStatus
 from app.core.audit import write_audit_log
 from app.features.projects.repository import ProjectRepository
+from app.features.employees.repository import EmployeeRepository
 from app.features.projects.schemas import (
     ProjectCreate,
     ProjectResponse,
@@ -24,6 +26,8 @@ from app.features.projects.schemas import (
     MilestoneCreate,
     MilestoneUpdate,
     MilestoneResponse,
+    EligibleEmployeeResponse,
+    EmployeeWorkloadResponse,
 )
 
 
@@ -323,6 +327,74 @@ class ProjectService:
             raise ProjectNotFoundError(project_id)
         assignments = ProjectRepository.list_project_assignments(db, project_id)
         return [ProjectAssignmentResponse.model_validate(a) for a in assignments]
+
+    @staticmethod
+    def get_eligible_employees(
+        db: Session,
+        project_id: int,
+        current_user: Optional[UserAccount] = None,
+    ) -> List[EligibleEmployeeResponse]:
+        """
+        List active employees eligible to be staffed on project_id, joining their aggregate workload (US-39).
+        - Verifies project exists (raises ProjectNotFoundError).
+        - Excludes employees already actively staffed on this project (released_on IS NULL).
+        - Excludes INACTIVE employees.
+        - Computes cross-project workload metrics (active_projects_count, open_tasks_count, utilization_pct).
+        """
+        project = ProjectRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise ProjectNotFoundError(project_id)
+
+        if current_user:
+            ProjectService._verify_pm_ownership(db, project, current_user)
+
+        # Retrieve eligible active employees
+        eligible_employees = ProjectRepository.get_eligible_employees(db, project_id)
+        if not eligible_employees:
+            return []
+
+        # Batch workload metrics
+        emp_ids = [e.emp_id for e in eligible_employees]
+        workload_map = EmployeeRepository.get_batch_workload_metrics(db, emp_ids)
+
+        # Department map
+        dept_ids = {e.dept_id for e in eligible_employees if e.dept_id}
+        dept_map = {}
+        if dept_ids:
+            departments = db.query(Department).filter(Department.dept_id.in_(dept_ids)).all()
+            dept_map = {d.dept_id: d.name for d in departments}
+
+        results = []
+        for emp in eligible_employees:
+            metrics = workload_map.get(emp.emp_id, {
+                "employee_id": emp.emp_id,
+                "active_projects_count": 0,
+                "open_tasks_count": 0,
+                "utilization_pct": 0.0,
+            })
+            workload_obj = EmployeeWorkloadResponse(**metrics)
+            results.append(
+                EligibleEmployeeResponse(
+                    emp_id=emp.emp_id,
+                    employee_id=emp.emp_id,
+                    emp_code=emp.emp_code,
+                    full_name=emp.full_name,
+                    email=emp.email,
+                    phone=emp.phone,
+                    designation=emp.designation,
+                    dept_id=emp.dept_id,
+                    department_name=dept_map.get(emp.dept_id),
+                    status=emp.status,
+                    date_of_joining=emp.date_of_joining,
+                    active_projects_count=metrics["active_projects_count"],
+                    open_tasks_count=metrics["open_tasks_count"],
+                    utilization_pct=metrics["utilization_pct"],
+                    workload=workload_obj,
+                )
+            )
+
+        return results
+
 
     # ------------------------------------------
     # Team & Membership Operations (US-07)

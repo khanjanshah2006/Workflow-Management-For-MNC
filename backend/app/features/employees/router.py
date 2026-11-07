@@ -12,6 +12,7 @@ from app.features.employees.schemas import (
     EmployeeStatusUpdate,
     EmployeeSummaryResponse,
     EmployeeDetailResponse,
+    EmployeeWorkloadResponse,
 )
 from app.features.employees.service import (
     EmployeeService,
@@ -64,6 +65,26 @@ def get_employee(
 ) -> EmployeeDetailResponse:
     try:
         return EmployeeService.get_employee(db=db, emp_id=emp_id)
+    except EmployeeNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{id}/workload",
+    response_model=EmployeeWorkloadResponse,
+    summary="Get cross-project workload metrics for an employee (US-39)",
+    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Restricted to PMs and Admins.",
+)
+def get_employee_workload(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(require_role(["PM", "PROJECT_MANAGER", "ADMIN"])),
+) -> EmployeeWorkloadResponse:
+    try:
+        return EmployeeService.get_employee_workload(db=db, emp_id=id)
     except EmployeeNotFoundError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
