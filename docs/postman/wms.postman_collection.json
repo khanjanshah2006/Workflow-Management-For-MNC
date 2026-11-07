@@ -1060,6 +1060,128 @@
             "description": "Stream filtered enterprise audit records as a CSV download (Admin only - US-47)."
           },
           "response": []
+        },
+        {
+          "name": "GET List System Parameters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params"
+              ]
+            },
+            "description": "List all global system parameters. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update System Parameter",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"value\": \"120\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params/session_timeout_minutes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params",
+                "session_timeout_minutes"
+              ]
+            },
+            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Grant Time-Bound Elevated Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"b8c56c22-0941-4cfa-81a2-c13e4b77f154\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"2026-12-31T23:59:59Z\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access"
+              ]
+            },
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Active Elevated Access Grants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "active"
+              ]
+            },
+            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
+          },
+          "response": []
         }
       ]
     }

@@ -49,3 +49,16 @@ def get_current_user(
         )
 
     return user
+
+
+def require_roles(*args, **kwargs):
+    """
+    Role-Based Access Control (RBAC) guard hook checking baseline and
+    active time-bound elevated access grants (US-45).
+    """
+    from app.core.rbac import require_role
+    return require_role(*args, **kwargs)
+
+
+require_role = require_roles
+
