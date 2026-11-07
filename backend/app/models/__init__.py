@@ -28,6 +28,7 @@ from app.models.leave import LeaveType, LeaveRequest
 from app.models.skill import Skill, EmployeeSkill
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
+from app.models.support import SupportTicket, TicketActivity
 
 __all__ = [
     "Base",
@@ -65,4 +66,6 @@ __all__ = [
     "EmployeeSkill",
     "Notification",
     "AuditLog",
+    "SupportTicket",
+    "TicketActivity",
 ]
