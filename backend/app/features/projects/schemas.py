@@ -38,6 +38,19 @@ class ProjectResponse(BaseModel):
     pm_id: int
 
 
+class ProjectStatusUpdate(BaseModel):
+    """Requested lifecycle status for a project."""
+    model_config = ConfigDict(extra="forbid")
+
+    status: ProjectStatus = Field(..., examples=["ACTIVE"])
+
+
+class ProjectStatusResponse(BaseModel):
+    """Project status after a lifecycle transition."""
+    project_id: int
+    status: ProjectStatus
+
+
 # ==========================================
 # Project Staffing / Assignment Schemas
 # ==========================================
