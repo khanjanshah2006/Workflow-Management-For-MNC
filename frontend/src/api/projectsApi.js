@@ -45,7 +45,7 @@ export async function listProjects({ skip = 0, limit = 20 } = {}) {
 }
 
 /**
- * Retrieve details for a single project (US-06).
+ * Retrieve details for a single project (US-06 / US-08).
  *
  * @param {number|string} projectId
  * @returns {Promise<Object>} Project details
@@ -119,6 +119,36 @@ export async function assignEmployee(projectId, payload) {
   return apiClient.post(`/api/v1/projects/${projectId}/assign`, payload);
 }
 
+/**
+ * List milestones for a project ordered chronologically (US-08).
+ * @param {number|string} projectId
+ * @returns {Promise<Array<Object>>}
+ */
+export async function getMilestones(projectId) {
+  return apiClient.get(`/api/v1/projects/${projectId}/milestones`);
+}
+
+/**
+ * Create a milestone in a project (US-08).
+ * @param {number|string} projectId
+ * @param {{ title: string, description?: string, target_date: string }} payload
+ * @returns {Promise<Object>}
+ */
+export async function createMilestone(projectId, payload) {
+  return apiClient.post(`/api/v1/projects/${projectId}/milestones`, payload);
+}
+
+/**
+ * Transition project lifecycle status (US-36).
+ * Documented contract: PUT /api/v1/projects/{id}/status -> { status }
+ * @param {number|string} projectId
+ * @param {string} status - Target status ('ACTIVE', 'ON_HOLD', 'COMPLETED', 'CANCELLED')
+ * @returns {Promise<{ project_id: number, status: string }>}
+ */
+export async function updateProjectStatus(projectId, status) {
+  return apiClient.put(`/api/v1/projects/${projectId}/status`, { status });
+}
+
 export const projectsApi = {
   getProjects,
   listProjects,
@@ -127,6 +157,9 @@ export const projectsApi = {
   getProjectAssignments,
   getEligibleEmployees,
   assignEmployee,
+  getMilestones,
+  createMilestone,
+  updateProjectStatus,
 };
 
 export default projectsApi;
