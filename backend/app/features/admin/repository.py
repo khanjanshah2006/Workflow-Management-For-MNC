@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy.orm import Session
@@ -5,6 +6,8 @@ from sqlalchemy.orm import Session
 from app.features.admin.schemas import UserAccountFilter
 from app.models.enums import UserType
 from app.models.user_account import UserAccount
+from app.models.system_parameter import SystemParameter
+from app.models.elevated_access_grant import ElevatedAccessGrant
 
 
 class AdminRepository:
@@ -78,3 +81,86 @@ class AdminRepository:
         db.commit()
         db.refresh(user)
         return user
+
+    # ==========================================
+    # System Parameter Repository Methods (US-46)
+    # ==========================================
+
+    @staticmethod
+    def list_system_parameters(db: Session) -> List[SystemParameter]:
+        """Fetch all operational system parameters ordered by key."""
+        return db.query(SystemParameter).order_by(SystemParameter.key.asc()).all()
+
+    @staticmethod
+    def get_system_parameter(db: Session, key: str) -> Optional[SystemParameter]:
+        """Fetch a single system parameter by unique key."""
+        return db.query(SystemParameter).filter(SystemParameter.key == key.strip()).first()
+
+    @staticmethod
+    def update_system_parameter(
+        db: Session,
+        param: SystemParameter,
+        new_value: str,
+        updated_by: UUID,
+    ) -> SystemParameter:
+        """Update system parameter value and modifier."""
+        param.value = new_value
+        param.updated_by = updated_by
+        db.commit()
+        db.refresh(param)
+        return param
+
+    # ==========================================
+    # Elevated Access Repository Methods (US-45)
+    # ==========================================
+
+    @staticmethod
+    def create_elevated_grant(
+        db: Session,
+        user_id: UUID,
+        granted_role: str,
+        granted_by: UUID,
+        expires_at: datetime,
+        reason: str,
+    ) -> ElevatedAccessGrant:
+        """Create a new time-bound elevated access grant."""
+        grant = ElevatedAccessGrant(
+            user_id=user_id,
+            granted_role=granted_role.strip().upper(),
+            granted_by=granted_by,
+            expires_at=expires_at,
+            reason=reason.strip(),
+        )
+        db.add(grant)
+        db.commit()
+        db.refresh(grant)
+        return grant
+
+    @staticmethod
+    def list_active_elevated_grants(db: Session, now: datetime) -> List[ElevatedAccessGrant]:
+        """Fetch all unexpired, unrevoked elevated access grants."""
+        return (
+            db.query(ElevatedAccessGrant)
+            .filter(
+                ElevatedAccessGrant.revoked_at.is_(None),
+                ElevatedAccessGrant.expires_at > now,
+            )
+            .order_by(ElevatedAccessGrant.expires_at.asc())
+            .all()
+        )
+
+    @staticmethod
+    def get_elevated_grant_by_id(db: Session, grant_id: int) -> Optional[ElevatedAccessGrant]:
+        """Fetch an elevated access grant by primary key."""
+        return db.query(ElevatedAccessGrant).filter(ElevatedAccessGrant.id == grant_id).first()
+
+    @staticmethod
+    def revoke_elevated_grant(
+        db: Session, grant: ElevatedAccessGrant, revoked_at: datetime
+    ) -> ElevatedAccessGrant:
+        """Mark an elevated grant as revoked immediately."""
+        grant.revoked_at = revoked_at
+        db.commit()
+        db.refresh(grant)
+        return grant
+
