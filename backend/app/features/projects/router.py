@@ -18,6 +18,7 @@ from app.features.projects.schemas import (
     MilestoneCreate,
     MilestoneUpdate,
     MilestoneResponse,
+    EligibleEmployeeResponse,
 )
 from app.features.projects.service import (
     ProjectService,
@@ -165,6 +166,25 @@ def list_project_assignments(
         return ProjectService.list_assignments(db=db, project_id=project_id)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{id}/eligible-employees",
+    response_model=List[EligibleEmployeeResponse],
+    summary="List eligible employees for project staffing (US-39)",
+    description="Retrieve active employees not already staffed on this project, joined with their cross-project workload metrics. Restricted to managing PM and Admins.",
+)
+def get_eligible_employees(
+    id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(pm_or_admin_guard),
+) -> List[EligibleEmployeeResponse]:
+    try:
+        return ProjectService.get_eligible_employees(db=db, project_id=id, current_user=current_user)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 # ==========================================
