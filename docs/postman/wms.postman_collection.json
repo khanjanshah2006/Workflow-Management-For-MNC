@@ -1044,7 +1044,128 @@
     {
       "name": "09 Support",
       "description": "Internal and client support tickets (features/support)",
-      "item": []
+      "item": [
+        {
+          "name": "POST Submit Support Ticket (US-26)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Laptop keyboard keys not responding\",\n  \"description\": \"Keys E, R, and T are unresponsive on internal company laptop.\",\n  \"category\": \"hardware\",\n  \"priority\": \"MEDIUM\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ]
+            },
+            "description": "Employee submits support ticket. Auto-generates sequential ticket_number and initial CREATED activity."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Support Tickets (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/my",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "my"
+              ]
+            },
+            "description": "Returns tickets submitted by current authenticated employee."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Ticket Details and Chronological Activities (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}"
+              ]
+            },
+            "description": "Returns ticket details with full chronological activity log."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Other Employee Ticket - 403 Forbidden (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{other_employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}"
+              ]
+            },
+            "description": "Ordinary employees cannot view tickets submitted by other employees (403 Forbidden)."
+          },
+          "response": []
+        }
+      ]
     },
     {
       "name": "10 Admin",

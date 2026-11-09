@@ -7,6 +7,8 @@ class UserType(str, enum.Enum):
     HR = "HR"
     CLIENT = "CLIENT"
     ADMIN = "ADMIN"
+    IT_SUPPORT = "IT_SUPPORT"
+    SYSTEM_ADMIN = "SYSTEM_ADMIN"
 
 
 class CommonStatus(str, enum.Enum):

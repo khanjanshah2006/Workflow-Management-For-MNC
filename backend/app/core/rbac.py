@@ -52,8 +52,11 @@ def _check_user_role(
             return False
 
         if db is not None:
-            if _has_matching_active_grant(db):
-                return user
+            try:
+                if _has_matching_active_grant(db):
+                    return user
+            except Exception:
+                pass
         else:
             from app.db.session import SessionLocal
 
