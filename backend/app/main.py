@@ -6,7 +6,7 @@ from sqlalchemy import text
 
 from app.db.session import SessionLocal
 from app.features.auth.router import router as auth_router
-from app.features.departments.router import router as department_router
+from app.features.departments.router import router as department_router, team_router
 from app.features.audit import audit_router
 from app.features.profile import profile_router
 from app.features.projects import project_router
@@ -50,6 +50,7 @@ app.add_middleware(
 # Register feature routers
 app.include_router(auth_router)
 app.include_router(department_router)
+app.include_router(team_router)
 app.include_router(audit_router)
 app.include_router(profile_router)
 app.include_router(project_router)

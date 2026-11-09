@@ -587,6 +587,142 @@
             "description": "Update employee status (ACTIVE/INACTIVE) and sync account login. Restricted to HR/Admin."
           },
           "response": []
+        },
+        {
+          "name": "GET Team Members Roster (US-37)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR Manager and SysAdmin can query any team's roster.\n- PM can query any team roster.\n- Team Lead can query their own assigned team.\n- 403 Forbidden if querying other teams or if non-lead employee / client.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2013 Active Team Members",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"employee_id\": 2,\n    \"emp_code\": \"EMP-DEV-02\",\n    \"full_name\": \"John Reese\",\n    \"email\": \"member@company.com\",\n    \"designation\": \"Senior Backend Engineer\"\n  }\n]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "200 OK \u2013 Empty Team",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access forbidden: you are not authorized to view team 2\"\n}",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "404 Not Found \u2013 Team Non-existent",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Team with ID 99999 not found\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        },
+        {
+          "name": "GET Team Tasks Stub (US-37)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "tasks"
+              ]
+            },
+            "description": "US-37: Stub endpoint returning [] until S3 tasks land.\n\nAccess rules:\n- Same RBAC rules as members endpoint.\n- Returns empty array [] cleanly."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2013 Tasks Stub",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "403 Forbidden \u2013 Other Team",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access forbidden: you are not authorized to view team 2\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
         }
       ]
     },
@@ -1179,6 +1315,128 @@
               ]
             },
             "description": "Stream filtered enterprise audit records as a CSV download (Admin only - US-47)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List System Parameters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params"
+              ]
+            },
+            "description": "List all global system parameters. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update System Parameter",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"value\": \"120\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params/session_timeout_minutes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params",
+                "session_timeout_minutes"
+              ]
+            },
+            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Grant Time-Bound Elevated Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"b8c56c22-0941-4cfa-81a2-c13e4b77f154\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"2026-12-31T23:59:59Z\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access"
+              ]
+            },
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Active Elevated Access Grants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "active"
+              ]
+            },
+            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
           },
           "response": []
         }

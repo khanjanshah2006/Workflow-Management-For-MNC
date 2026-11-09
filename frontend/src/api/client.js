@@ -5,6 +5,7 @@
 
 const BASE_URL =
   (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_URL) ||
+  (typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL) ||
   "http://localhost:8000";
 
 export class ApiError extends Error {
@@ -16,17 +17,43 @@ export class ApiError extends Error {
   }
 }
 
+let activeTokenGetter = null;
+
+/**
+ * Registers an optional external token provider (e.g. in-memory session adapter).
+ * @param {(() => string|null)|null} getter
+ */
+export function setTokenGetter(getter) {
+  activeTokenGetter = typeof getter === "function" ? getter : null;
+}
+
 export function getStoredToken() {
+  if (activeTokenGetter) {
+    try {
+      const active = activeTokenGetter();
+      if (active) return active;
+    } catch {
+      // Fallback to localStorage
+    }
+  }
   if (typeof localStorage === "undefined") return "";
-  return localStorage.getItem("wms_access_token") || "";
+  try {
+    return localStorage.getItem("wms_access_token") || "";
+  } catch {
+    return "";
+  }
 }
 
 export function setStoredToken(token) {
   if (typeof localStorage === "undefined") return;
-  if (token) {
-    localStorage.setItem("wms_access_token", token);
-  } else {
-    localStorage.removeItem("wms_access_token");
+  try {
+    if (token) {
+      localStorage.setItem("wms_access_token", token);
+    } else {
+      localStorage.removeItem("wms_access_token");
+    }
+  } catch {
+    // Ignore storage quota / restricted environments
   }
 }
 
@@ -44,6 +71,7 @@ async function request(endpoint, options = {}) {
   }
 
   const config = {
+    credentials: "include",
     ...options,
     headers,
   };
@@ -80,10 +108,32 @@ async function request(endpoint, options = {}) {
   }
 
   if (!response.ok) {
-    const message =
+    let message =
       (data && (data.detail || data.message || data.error)) ||
       `Request failed with status ${response.status} (${response.statusText})`;
+
+    if (Array.isArray(message)) {
+      message = message
+        .map((err) => {
+          const loc = Array.isArray(err.loc)
+            ? err.loc.filter((part) => part !== "body").join(".")
+            : "";
+          return loc ? `${loc}: ${err.msg}` : err.msg || JSON.stringify(err);
+        })
+        .join("; ");
+    } else if (typeof message !== "string") {
+      message = JSON.stringify(message);
+    }
+
     throw new ApiError(message, response.status, data);
+  }
+
+  if (options.includeHeaders) {
+    return {
+      data,
+      headers: response.headers,
+      status: response.status,
+    };
   }
 
   return data;
@@ -104,5 +154,6 @@ export const apiClient = {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     }),
   delete: (endpoint, options = {}) => request(endpoint, { ...options, method: "DELETE" }),
+  request,
   BASE_URL,
 };

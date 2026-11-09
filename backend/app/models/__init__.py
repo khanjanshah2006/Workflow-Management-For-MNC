@@ -29,6 +29,8 @@ from app.models.skill import Skill, EmployeeSkill
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
 from app.models.support import SupportTicket, TicketActivity
+from app.models.system_parameter import SystemParameter
+from app.models.elevated_access_grant import ElevatedAccessGrant
 
 __all__ = [
     "Base",
@@ -68,4 +70,6 @@ __all__ = [
     "AuditLog",
     "SupportTicket",
     "TicketActivity",
+    "SystemParameter",
+    "ElevatedAccessGrant",
 ]
