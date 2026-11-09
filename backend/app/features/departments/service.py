@@ -1,10 +1,15 @@
 import json
+from typing import Any
 from uuid import UUID
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models.department import Department
+from app.models.employee import Employee
+from app.models.team import Team
+from app.models.user_account import UserAccount
 from app.models.audit_log import AuditLog
-from app.models.enums import AuditAction
+from app.models.enums import AuditAction, UserType
 from app.features.departments import repository
 from app.features.departments.schemas import DepartmentCreate, DepartmentUpdate
 
@@ -28,6 +33,23 @@ class DepartmentAlreadyExistsError(DepartmentServiceError):
     def __init__(self, name: str):
         self.name = name
         super().__init__(f"Department with name '{name}' already exists")
+
+
+class TeamNotFoundError(DepartmentServiceError):
+    """Raised when a requested team is not found."""
+
+    def __init__(self, team_id: int):
+        self.team_id = team_id
+        super().__init__(f"Team with ID {team_id} not found")
+
+
+class TeamAccessForbiddenError(DepartmentServiceError):
+    """Raised when caller lacks authorization to access the given team."""
+
+    def __init__(self, team_id: int):
+        self.team_id = team_id
+        super().__init__(f"Access forbidden: you are not authorized to view team {team_id}")
+
 
 
 def _record_audit_log(
@@ -176,3 +198,84 @@ def delete_department(
 
     repository.delete(db, department)
     db.commit()
+
+
+# ==========================================
+# Team Member & Task Services (US-37)
+# ==========================================
+
+
+def _resolve_employee_for_account(db: Session, account_id: UUID) -> Employee | None:
+    """Find the linked employee record for a given user account."""
+    stmt = select(Employee).where(Employee.account_id == account_id)
+    return db.scalars(stmt).first()
+
+
+def _assert_team_access(
+    db: Session,
+    team: Team,
+    current_user: UserAccount,
+) -> None:
+    """
+    Enforce US-37 RBAC scope:
+    - HR and ADMIN (SysAdmin) can query any team's roster.
+    - PM can query any team roster (project oversight).
+    - Team Lead (EMPLOYEE where team.lead_emp_id == employee.emp_id) can query their own assigned team.
+    - Other employees or clients attempting to query teams they do not lead receive 403 Forbidden.
+    """
+    user_type_val = (
+        current_user.user_type.value
+        if hasattr(current_user.user_type, "value")
+        else str(current_user.user_type)
+    ).upper()
+
+    # HR, Admin, PM have unrestricted read access to team rosters
+    if user_type_val in ("HR", "HR_MANAGER", "ADMIN", "PM", "PROJECT_MANAGER"):
+        return
+
+    # Employee must be the designated Team Lead for this specific team
+    if user_type_val == "EMPLOYEE":
+        emp = _resolve_employee_for_account(db, current_user.account_id)
+        if emp is not None and team.lead_emp_id == emp.emp_id:
+            return
+
+    # All other roles or non-lead employees are forbidden
+    raise TeamAccessForbiddenError(team.team_id)
+
+
+def get_team_members(
+    db: Session,
+    team_id: int,
+    current_user: UserAccount,
+) -> list[Employee]:
+    """
+    Retrieve active employees assigned to team_id.
+    - 404 if team does not exist.
+    - 403 if user is not authorized.
+    - Returns [] cleanly if team has no active members.
+    """
+    team = repository.get_team_by_id(db, team_id)
+    if team is None:
+        raise TeamNotFoundError(team_id)
+
+    _assert_team_access(db, team, current_user)
+    return repository.get_active_members_for_team(db, team_id)
+
+
+def get_team_tasks(
+    db: Session,
+    team_id: int,
+    current_user: UserAccount,
+) -> list[Any]:
+    """
+    Stub endpoint returning [] until S3 tasks land.
+    - 404 if team does not exist.
+    - 403 if user is not authorized.
+    """
+    team = repository.get_team_by_id(db, team_id)
+    if team is None:
+        raise TeamNotFoundError(team_id)
+
+    _assert_team_access(db, team, current_user)
+    return []
+

@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -8,6 +8,10 @@ from app.db.session import get_db
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    ElevatedAccessGrantCreate,
+    ElevatedAccessGrantResponse,
+    SystemParameterResponse,
+    SystemParameterUpdate,
     UserAccountCreate,
     UserAccountFilter,
     UserAccountPaginationResponse,
@@ -18,6 +22,9 @@ from app.features.admin.schemas import (
 from app.features.admin.service import (
     AdminService,
     EmailAlreadyExistsError,
+    InvalidExpirationError,
+    InvalidParameterValueError,
+    SystemParameterNotFoundError,
     UserNotFoundError,
 )
 from app.models.enums import UserType
@@ -190,3 +197,97 @@ def get_backup_status(
     current_user: UserAccount = Depends(admin_guard),
 ) -> BackupStatusResponse:
     return AdminService.get_backup_status(db=db)
+
+
+# ==========================================
+# System Parameters Endpoints (US-46)
+# ==========================================
+
+@router.get(
+    "/system-params",
+    response_model=List[SystemParameterResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List all system configuration parameters (US-46)",
+    description="Retrieve all operational system parameters (session timeout, upload limits, etc.). Restricted to ADMIN.",
+)
+def list_system_parameters(
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> List[SystemParameterResponse]:
+    return AdminService.list_system_parameters(db=db)
+
+
+@router.put(
+    "/system-params/{key}",
+    response_model=SystemParameterResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update system configuration parameter (US-46)",
+    description="Update a system configuration parameter with strict value_type validation and audit logging. Restricted to ADMIN.",
+)
+def update_system_parameter(
+    key: str,
+    payload: SystemParameterUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> SystemParameterResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return AdminService.update_system_parameter(
+            db=db,
+            key=key,
+            payload=payload,
+            admin_user=current_user,
+            ip_address=client_ip,
+        )
+    except SystemParameterNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidParameterValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+# ==========================================
+# Time-Bound Elevated Access Endpoints (US-45)
+# ==========================================
+
+@router.post(
+    "/elevated-access",
+    response_model=ElevatedAccessGrantResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Grant time-bound elevated access (US-45)",
+    description="Grants temporary role privilege to a user account with explicit expiration and business justification. Restricted to ADMIN.",
+)
+def grant_elevated_access(
+    payload: ElevatedAccessGrantCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> ElevatedAccessGrantResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return AdminService.grant_elevated_access(
+            db=db,
+            payload=payload,
+            admin_user=current_user,
+            ip_address=client_ip,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except InvalidExpirationError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get(
+    "/elevated-access/active",
+    response_model=List[ElevatedAccessGrantResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List active elevated access grants (US-45)",
+    description="Retrieve all unexpired, unrevoked elevated access grants across the system. Restricted to ADMIN.",
+)
+def list_active_elevated_grants(
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(admin_guard),
+) -> List[ElevatedAccessGrantResponse]:
+    return AdminService.list_active_elevated_grants(db=db)
+
+
