@@ -14,6 +14,17 @@ from app.features.profile.service import ProfileService
 
 router = APIRouter(prefix="/api/v1/profile", tags=["Profile"])
 
+INTERNAL_EMPLOYEE_ROLES = [
+    "EMPLOYEE",
+    "PM",
+    "PROJECT_MANAGER",
+    "HR",
+    "HR_MANAGER",
+    "ADMIN",
+    "IT_SUPPORT",
+    "SYSTEM_ADMIN",
+]
+
 
 @router.get(
     "/me",
@@ -23,12 +34,12 @@ router = APIRouter(prefix="/api/v1/profile", tags=["Profile"])
     description="Retrieve the authenticated employee's full organizational profile, department, and manager/lead details.",
 )
 def get_my_profile(
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE"])),
+    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
     Fetch the currently authenticated employee's profile.
-    Restricted to users with EMPLOYEE role.
+    Restricted to internal employee accounts.
     """
     return ProfileService.get_my_profile(db=db, current_user=current_user)
 
@@ -38,12 +49,12 @@ def get_my_profile(
     response_model=ProfileResponse,
     status_code=status.HTTP_200_OK,
     summary="Update current employee contact details (US-03)",
-    description="Update permitted contact fields (phone, address, emergency contact). All changes are recorded in the audit trail.",
+    description="Update permitted contact fields (phone, address, emergency contact, bio). All changes are recorded in the audit trail.",
 )
 def update_my_profile(
     payload: ProfileUpdateRequest,
     request: Request,
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE"])),
+    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
@@ -67,11 +78,11 @@ def update_my_profile(
     description="Retrieve technical and domain skills assigned to the authenticated employee with proficiency levels and experience.",
 )
 def get_my_skills(
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE"])),
+    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
     db: Session = Depends(get_db),
 ) -> List[SkillResponse]:
     """
     Retrieve all assigned skills and proficiency ratings for the logged-in employee.
-    Restricted to users with EMPLOYEE role.
+    Restricted to internal employee accounts.
     """
     return ProfileService.get_my_skills(db=db, current_user=current_user)
