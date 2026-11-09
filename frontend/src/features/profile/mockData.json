@@ -1,0 +1,26 @@
+{
+  "emp_id": 1,
+  "account_id": "9b1deb4d-3b7d-4bad-9bdd-2b0d7b3dcb6d",
+  "emp_code": "EMP-2023-0104",
+  "full_name": "Alex Morgan",
+  "email": "alex.morgan@worksphere.internal",
+  "phone": "+1 555-234-5678",
+  "designation": "Senior Workflow Engineer",
+  "date_of_joining": "2023-03-15",
+  "status": "ACTIVE",
+  "department": {
+    "dept_id": 2,
+    "name": "Engineering & Technology",
+    "description": "Enterprise Core Systems and Platform Services"
+  },
+  "manager": {
+    "emp_id": 5,
+    "emp_code": "EMP-2021-0012",
+    "full_name": "Jordan Taylor",
+    "email": "jordan.taylor@worksphere.internal",
+    "designation": "Director of Engineering"
+  },
+  "emergency_contact": "Taylor Morgan (Spouse) +1 555-876-5432",
+  "bio": "Specializing in enterprise systems architecture, workflow orchestration, and high-performance UI engineering."
+}
+
