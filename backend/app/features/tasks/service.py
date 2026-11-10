@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.audit import write_audit_log
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
-from app.features.tasks.schemas import TaskAssignRequest, TaskResponse
+from app.features.tasks.schemas import TaskAssignRequest, TaskReassignRequest, TaskResponse
 from app.models.enums import AuditAction, UserType
 from app.models.employee import Employee
 from app.models.task import Task
@@ -26,6 +26,15 @@ class AssigneeNotEligibleError(Exception):
 
 class TaskAssignmentForbiddenError(Exception):
     pass
+
+
+class SameAssigneeError(Exception):
+    pass
+
+
+class InvalidReassignmentReasonError(Exception):
+    pass
+
 
 
 class TaskService:
@@ -156,3 +165,96 @@ class TaskService:
             db.commit()
 
         return TaskResponse.model_validate(updated_task)
+
+    @staticmethod
+    def reassign_task(
+        db: Session,
+        task_id: int,
+        payload: TaskReassignRequest,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> TaskResponse:
+        """
+        Reassign an active task to another team member (US-14).
+        Enforces distinct assignee (new != old), reason min length (10 chars),
+        team eligibility, audit logging, and dual notifications to previous & new assignees.
+        """
+        # 1. Fetch task
+        task = TaskRepository.get_task_by_id(db, task_id=task_id)
+        if not task:
+            raise TaskNotFoundError(f"Task with ID {task_id} not found.")
+
+        # 2. Authorize caller
+        TaskService.check_can_manage_task(db, current_user=current_user, task=task)
+
+        # 3. Validate reason length (min 10 characters)
+        clean_reason = payload.reason.strip() if payload.reason else ""
+        if len(clean_reason) < 10:
+            raise InvalidReassignmentReasonError("Reassignment reason must be at least 10 characters.")
+
+        # 4. Enforce new assignee differs from current assignee
+        if task.assigned_to == payload.new_assignee_id:
+            raise SameAssigneeError("Cannot reassign task to the current assignee.")
+
+        # 5. Fetch target new assignee
+        new_assignee = TaskRepository.get_employee_by_id(db, emp_id=payload.new_assignee_id)
+        if not new_assignee:
+            raise AssigneeNotFoundError(f"Employee with ID {payload.new_assignee_id} not found.")
+
+        # 6. Verify eligibility in team/project roster
+        if not TaskRepository.is_employee_eligible_assignee(db, emp_id=new_assignee.emp_id, task=task):
+            raise AssigneeNotEligibleError(
+                f"Employee with ID {payload.new_assignee_id} is not an active member of the task team."
+            )
+
+        previous_assignee_id = task.assigned_to
+        previous_assignee = (
+            TaskRepository.get_employee_by_id(db, emp_id=previous_assignee_id)
+            if previous_assignee_id
+            else None
+        )
+
+        # 7. Persist reassignment
+        updated_task = TaskRepository.reassign_task(
+            db, task=task, new_assignee_id=new_assignee.emp_id
+        )
+
+        # 8. Record structured audit log entry
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="TASK",
+            entity_ref_id=str(task.task_id),
+            account_id=current_user.account_id,
+            old_value={"assigned_to": previous_assignee_id},
+            new_value={"assigned_to": new_assignee.emp_id, "reason": clean_reason},
+            ip_address=ip_address,
+        )
+
+        # 9. Dual notification hooks
+        # A. Notification for the new assignee
+        if new_assignee.account_id:
+            NotificationService.create_notification(
+                db=db,
+                user_id=new_assignee.account_id,
+                type="TASK_ASSIGNED",
+                title="New Task Assigned",
+                message=f"You have been assigned to task #{task.task_id}: '{task.title}'",
+                link=f"/tasks/{task.task_id}",
+            )
+
+        # B. Notification for the previous assignee (if exists)
+        if previous_assignee and previous_assignee.account_id:
+            NotificationService.create_notification(
+                db=db,
+                user_id=previous_assignee.account_id,
+                type="TASK_REASSIGNED",
+                title="Task Reassigned",
+                message=f"Task #{task.task_id} ('{task.title}') has been reassigned to another team member. Reason: {clean_reason}",
+                link=f"/tasks/{task.task_id}",
+            )
+
+        db.commit()
+        return TaskResponse.model_validate(updated_task)
+
+
