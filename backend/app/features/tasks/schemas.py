@@ -39,3 +39,4 @@ class TaskResponse(BaseModel):
     due_date: Optional[date] = None
     completed_at: Optional[datetime] = None
     created_at: datetime
+
