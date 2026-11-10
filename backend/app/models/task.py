@@ -9,6 +9,7 @@ class Task(Base):
     task_id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey("project.project_id", ondelete="CASCADE"), nullable=False, index=True)
     milestone_id = Column(Integer, ForeignKey("project_milestone.id", ondelete="SET NULL"), nullable=True, index=True)
+    team_id = Column(Integer, ForeignKey("team.team_id", ondelete="SET NULL"), nullable=True, index=True)
     assigned_to = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True, index=True)
     created_by = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True)
     title = Column(String(200), nullable=False)
