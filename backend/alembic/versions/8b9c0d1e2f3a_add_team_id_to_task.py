@@ -39,3 +39,4 @@ def downgrade() -> None:
     if 'team_id' in task_columns:
         op.drop_index(op.f('ix_task_team_id'), table_name='task')
         op.drop_column('task', 'team_id')
+
