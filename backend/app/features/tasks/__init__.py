@@ -10,6 +10,8 @@ from app.features.tasks.service import (
     AssigneeNotFoundError,
     AssigneeNotEligibleError,
     TaskAssignmentForbiddenError,
+    SameAssigneeError,
+    InvalidReassignmentReasonError,
 )
 from app.features.tasks.router import router as tasks_router
 
@@ -23,5 +25,7 @@ __all__ = [
     "AssigneeNotFoundError",
     "AssigneeNotEligibleError",
     "TaskAssignmentForbiddenError",
+    "SameAssigneeError",
+    "InvalidReassignmentReasonError",
     "tasks_router",
 ]
