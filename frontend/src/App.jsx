@@ -13,6 +13,7 @@ import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
+import SecurityOpsPage from "./features/admin/SecurityOpsPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -106,6 +107,8 @@ function App() {
                 />
               }
             />
+            <Route path="/admin" element={<Navigate to="/admin/security" replace />} />
+            <Route path="/admin/security" element={<SecurityOpsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
