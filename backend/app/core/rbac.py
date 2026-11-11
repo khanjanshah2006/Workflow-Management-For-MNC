@@ -15,8 +15,10 @@ def _check_user_role(user: UserAccount, allowed_roles: Sequence[str]) -> UserAcc
     )
 
     # Normalize allowed roles for comparison (case-insensitive & stripping underscores/spaces if needed)
-    allowed_normalized = {str(r).strip().upper() for r in allowed_roles}
-    user_normalized = user_type_val.strip().upper()
+    allowed_normalized = {
+        str(r).strip().upper().replace(" ", "_") for r in allowed_roles
+    }
+    user_normalized = user_type_val.strip().upper().replace(" ", "_")
 
     if user_normalized not in allowed_normalized:
         raise HTTPException(
