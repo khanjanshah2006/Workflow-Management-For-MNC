@@ -7,7 +7,6 @@ from app.features.notifications.service import NotificationService
 from app.features.tasks.schemas import TaskCommentResponse
 from app.models.employee import Employee
 from app.models.enums import UserType
-from app.models.notification import Notification
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
 from app.models.task import Task, TaskComment
