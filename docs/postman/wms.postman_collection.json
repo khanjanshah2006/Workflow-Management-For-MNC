@@ -1144,7 +1144,94 @@
     {
       "name": "07 Client Portal",
       "description": "External client view and deliverables access (features/client_portal)",
-      "item": []
+      "item": [
+        {
+          "name": "GET Client Contracted Projects (US-20)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "    pm.environment.set('client_project_id', data[0].project_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects"
+              ]
+            },
+            "description": "Lists all projects contracted to the authenticated CLIENT user with high-level milestone completion metrics. Strictly redacts internal employee/task data."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Client Project Milestones (US-21)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects/{{client_project_id}}/milestones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects",
+                "{{client_project_id}}",
+                "milestones"
+              ]
+            },
+            "description": "Lists non-deleted delivery milestones for a contracted project belonging to the authenticated CLIENT user. Returns 404 if project does not exist or belongs to another client."
+          },
+          "response": []
+        }
+      ]
     },
     {
       "name": "08 Reporting",
