@@ -102,8 +102,6 @@ def get_review_queue(
         page=page,
         limit=limit,
     )
-
-
 @router.post(
     "/{id}/submit",
     response_model=TaskSubmissionResponse,
@@ -207,8 +205,6 @@ def resubmit_task(
         payload=payload,
         current_user=current_user,
     )
-
-
 @router.get(
     "/{id}/submissions",
     response_model=List[TaskSubmissionResponse],

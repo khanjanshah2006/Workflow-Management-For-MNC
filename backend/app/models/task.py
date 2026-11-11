@@ -26,7 +26,7 @@ class Task(Base):
         CheckConstraint("due_date IS NULL OR start_date IS NULL OR due_date >= start_date", name="chk_task_dates"),
     )
 
-    submissions = relationship("TaskSubmission", back_populates="task", cascade="all, delete-orphan", order_by="TaskSubmission.submitted_at.desc()")
+    submissions = relationship("TaskSubmission", back_populates="task", cascade="all, delete-orphan", order_by="TaskSubmission.submitted_at.asc()")
     comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
 
 
@@ -81,4 +81,3 @@ class TaskSubmission(Base):
     @property
     def new_file_url(self) -> str | None:
         return self.file_url
-
