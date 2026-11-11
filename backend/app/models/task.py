@@ -35,6 +35,8 @@ class TaskComment(Base):
     comment_id = Column(Integer, primary_key=True, autoincrement=True)
     task_id = Column(Integer, ForeignKey("task.task_id", ondelete="CASCADE"), nullable=False, index=True)
     author_emp_id = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True)
+    author_name = Column(String(150), nullable=True)
+    author_role = Column(String(30), nullable=True)
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     edited_at = Column(DateTime(timezone=True), nullable=True)
