@@ -1128,6 +1128,71 @@
             "description": "Returns chronological list of all submissions recorded for this task."
           },
           "response": []
+        },
+        {
+          "name": "POST Add Task Comment (US-33)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Comments (US-33)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Returns the chronological task thread with author name, role badge, and timestamps. Clients and users outside the task project scope are forbidden."
+          },
+          "response": []
         }
       ]
     },
