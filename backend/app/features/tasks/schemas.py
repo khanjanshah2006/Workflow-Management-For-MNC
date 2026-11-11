@@ -63,8 +63,6 @@ class TaskResubmitResponse(BaseModel):
     message: str = "Task resubmitted successfully"
 
     model_config = ConfigDict(from_attributes=True)
-
-
 class TaskSubmissionResponse(BaseModel):
     submission_id: int = Field(..., description="Unique submission identifier")
     task_id: int = Field(..., description="Associated task identifier")
