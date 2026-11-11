@@ -589,7 +589,7 @@ def test_resubmit_success_transitions_status_to_in_review(client, db_session, se
     sub = (
         db_session.query(TaskSubmission)
         .filter(TaskSubmission.task_id == task.task_id)
-        .order_by(TaskSubmission.created_at.desc())
+        .order_by(TaskSubmission.submitted_at.desc())
         .first()
     )
     assert sub is not None
