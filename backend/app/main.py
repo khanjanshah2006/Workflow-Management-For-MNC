@@ -14,6 +14,7 @@ from app.features.employees import employee_router
 from app.features.admin import admin_router
 from app.features.notifications import notification_router
 from app.features.support import support_router
+from app.features.tasks import tasks_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
 from app.models.user_account import UserAccount
@@ -58,6 +59,7 @@ app.include_router(employee_router)
 app.include_router(admin_router)
 app.include_router(notification_router)
 app.include_router(support_router)
+app.include_router(tasks_router)
 
 
 @app.get("/", tags=["Root"])
