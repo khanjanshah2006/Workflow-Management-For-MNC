@@ -1,7 +1,7 @@
 """add stable author details to task comments
 
 Revision ID: 9c0d1e2f3a4b
-Revises: 8b9c0d1e2f3a
+Revises: 5c38d17a4e90, 5c71a8e2b109, 5c83b12a9e40, 6d7e9f0a1b2c, 7a8b9c0d1e2f, 8b9c0d1e2f3a
 Create Date: 2026-11-11
 """
 from typing import Sequence, Union
