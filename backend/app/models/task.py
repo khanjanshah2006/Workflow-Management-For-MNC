@@ -26,40 +26,8 @@ class Task(Base):
         CheckConstraint("due_date IS NULL OR start_date IS NULL OR due_date >= start_date", name="chk_task_dates"),
     )
 
-    submissions = relationship("TaskSubmission", back_populates="task", cascade="all, delete-orphan", order_by="desc(TaskSubmission.created_at)")
-
-
-class TaskSubmission(Base):
-    __tablename__ = "task_submission"
-
-    submission_id = Column(Integer, primary_key=True, autoincrement=True)
-    task_id = Column(Integer, ForeignKey("task.task_id", ondelete="CASCADE"), nullable=False, index=True)
-    submitted_by = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True, index=True)
-    remarks = Column(Text, nullable=True)
-    file_url = Column(String(500), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-
-    task = relationship("Task", back_populates="submissions")
-
-    @property
-    def submission_remarks(self) -> str | None:
-        return self.remarks
-
-    @property
-    def deliverable_file_url(self) -> str | None:
-        return self.file_url
-
-    @property
-    def submission_timestamp(self):
-        return self.created_at
-
-    @property
-    def revised_remarks(self) -> str | None:
-        return self.remarks
-
-    @property
-    def new_file_url(self) -> str | None:
-        return self.file_url
+    submissions = relationship("TaskSubmission", back_populates="task", cascade="all, delete-orphan", order_by="TaskSubmission.submitted_at.desc()")
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
 
 
 class TaskComment(Base):
@@ -71,3 +39,46 @@ class TaskComment(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     edited_at = Column(DateTime(timezone=True), nullable=True)
+
+    task = relationship("Task", back_populates="comments")
+
+
+class TaskSubmission(Base):
+    __tablename__ = "task_submission"
+
+    submission_id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey("task.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    submitted_by = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True, index=True)
+    remarks = Column(Text, nullable=False)
+    file_url = Column(String(500), nullable=True)
+    file_name = Column(String(255), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    task = relationship("Task", back_populates="submissions")
+    submitter = relationship("Employee", foreign_keys=[submitted_by])
+
+    @property
+    def created_at(self):
+        return self.submitted_at
+
+    @property
+    def submission_remarks(self) -> str | None:
+        return self.remarks
+
+    @property
+    def deliverable_file_url(self) -> str | None:
+        return self.file_url
+
+    @property
+    def submission_timestamp(self):
+        return self.submitted_at
+
+    @property
+    def revised_remarks(self) -> str | None:
+        return self.remarks
+
+    @property
+    def new_file_url(self) -> str | None:
+        return self.file_url
+

@@ -55,7 +55,7 @@ class TaskRepository:
             latest_submission = (
                 db.query(TaskSubmission)
                 .filter(TaskSubmission.task_id == task.task_id)
-                .order_by(desc(TaskSubmission.created_at))
+                .order_by(desc(TaskSubmission.submitted_at))
                 .first()
             )
             items.append((task, employee, latest_submission))
