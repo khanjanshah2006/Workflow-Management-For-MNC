@@ -15,7 +15,7 @@ from app.features.admin import admin_router
 from app.features.notifications import notification_router
 from app.features.support import support_router
 from app.features.tasks import tasks_router
-from app.features.client_portal import client_portal_router
+from app.features.client_portal import client_portal_router, project_deliverables_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
 from app.models.user_account import UserAccount
@@ -62,6 +62,7 @@ app.include_router(notification_router)
 app.include_router(support_router)
 app.include_router(tasks_router)
 app.include_router(client_portal_router)
+app.include_router(project_deliverables_router)
 
 
 @app.get("/", tags=["Root"])
