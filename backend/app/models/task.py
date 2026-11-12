@@ -47,7 +47,7 @@ class Task(Base):
     )
     comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
     project = relationship("Project", foreign_keys=[project_id])
-    milestone = relationship("Milestone", foreign_keys=[milestone_id])
+    milestone = relationship("ProjectMilestone", foreign_keys=[milestone_id])
     assignee = relationship("Employee", foreign_keys=[assigned_to])
     creator = relationship("Employee", foreign_keys=[created_by])
 
