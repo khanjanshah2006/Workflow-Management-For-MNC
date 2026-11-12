@@ -1,6 +1,7 @@
 from datetime import datetime
+from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class TaskSubmissionCreate(BaseModel):
@@ -31,5 +32,54 @@ class TaskSubmissionsListResponse(BaseModel):
     task_status: str
     submissions: List[TaskSubmissionResponse] = []
     total_submissions: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# US-10: Task Progress & Blocker Tracking Schemas
+# ============================================================================
+
+class TaskProgressStatus(str, Enum):
+    IN_PROGRESS = "IN_PROGRESS"
+    BLOCKED = "BLOCKED"
+
+
+class TaskProgressUpdateSchema(BaseModel):
+    status: TaskProgressStatus = Field(
+        ...,
+        description="Target task progress status (IN_PROGRESS or BLOCKED)",
+    )
+    progress_pct: int = Field(
+        ...,
+        ge=0,
+        le=100,
+        description="Task completion percentage between 0 and 99 (100% requires submitting via review flow)",
+    )
+    blocker_reason: Optional[str] = Field(
+        None,
+        description="Explanation of the blocker when status is BLOCKED (minimum 5 characters)",
+    )
+
+    @model_validator(mode="after")
+    def validate_blocker_reason(self) -> "TaskProgressUpdateSchema":
+        if self.status == TaskProgressStatus.BLOCKED:
+            if not self.blocker_reason or len(self.blocker_reason.strip()) < 5:
+                raise ValueError("blocker_reason is required and must be at least 5 characters when status is BLOCKED")
+        return self
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskProgressResponse(BaseModel):
+    task_id: int = Field(..., description="Unique task identifier")
+    project_id: int = Field(..., description="Associated project identifier")
+    team_id: Optional[int] = Field(None, description="Associated team identifier")
+    assigned_to: Optional[int] = Field(None, description="Assigned employee identifier")
+    title: str = Field(..., description="Task title")
+    status: str = Field(..., description="Current status of the task")
+    progress_pct: int = Field(0, description="Current progress percentage (0-100)")
+    blocker_reason: Optional[str] = Field(None, description="Current blocker explanation if blocked")
+    completed_at: Optional[datetime] = Field(None, description="Timestamp when the task was completed")
 
     model_config = ConfigDict(from_attributes=True)
