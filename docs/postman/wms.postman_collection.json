@@ -1021,6 +1021,179 @@
       "description": "Task tracking and sprint boards (features/tasks)",
       "item": [
         {
+          "name": "POST Create Task (US-09)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": 1,\n  \"team_id\": 2,\n  \"milestone_id\": 4,\n  \"assigned_to\": 12,\n  \"title\": \"Implement JWT Refresh Token Flow\",\n  \"description\": \"Store refresh tokens with rotation and 7-day TTL.\",\n  \"priority\": \"HIGH\",\n  \"start_date\": \"2026-11-10\",\n  \"due_date\": \"2026-11-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Create a new task in TODO status with progress_pct=0 and rejection_count=0. Allowed roles: TEAM_LEAD, PM, ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Tasks (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/my-tasks?status=TODO&priority=HIGH&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "my-tasks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "TODO"
+                },
+                {
+                  "key": "priority",
+                  "value": "HIGH"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List paginated tasks strictly assigned to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Details (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "1"
+              ]
+            },
+            "description": "Fetch full task details including project name, milestone title, creator, and assignee details."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Project Tasks (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/tasks?team_id=2&milestone_id=4&status=TODO&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "team_id",
+                  "value": "2"
+                },
+                {
+                  "key": "milestone_id",
+                  "value": "4"
+                },
+                {
+                  "key": "status",
+                  "value": "TODO"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List all tasks for a project, filterable by team_id, milestone_id, and status."
+          },
+          "response": []
+        },
+        {
           "name": "POST Submit Completed Task (Multipart with File) (US-11)",
           "request": {
             "method": "POST",
