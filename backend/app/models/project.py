@@ -1,4 +1,5 @@
-from sqlalchemy import Column, Integer, String, Text, Date, ForeignKey, Enum, CheckConstraint, func
+from sqlalchemy import Boolean, Column, Integer, String, Text, Date, ForeignKey, Enum, CheckConstraint, func
+from sqlalchemy.sql import expression
 from app.db.base import Base
 from app.models.enums import PriorityLevel, ProjectStatus
 
@@ -16,6 +17,12 @@ class Project(Base):
     end_date = Column(Date, nullable=True)
     priority = Column(Enum(PriorityLevel, name="priority_level_enum"), default=PriorityLevel.MEDIUM, nullable=False)
     status = Column(Enum(ProjectStatus, name="project_status_enum"), default=ProjectStatus.PLANNED, nullable=False, index=True)
+    is_team_visible_to_client = Column(
+        Boolean,
+        default=False,
+        server_default=expression.false(),
+        nullable=False,
+    )
 
     __table_args__ = (
         CheckConstraint("end_date IS NULL OR end_date >= start_date", name="chk_project_dates"),
