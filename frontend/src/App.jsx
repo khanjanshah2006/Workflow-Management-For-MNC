@@ -13,6 +13,8 @@ import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
+import ProfilePage from "./features/profile/ProfilePage";
+import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -97,15 +99,10 @@ function App() {
                 />
               }
             />
-            <Route
-              path="/profile"
-              element={
-                <PagePlaceholder
-                  title="My Profile"
-                  description="Your profile information will appear here."
-                />
-              }
-            />
+            <Route path="/support" element={<ITSupportDashboard />} />
+            <Route path="/support/tickets" element={<ITSupportDashboard />} />
+            <Route path="/it-support" element={<ITSupportDashboard />} />
+            <Route path="/profile" element={<ProfilePage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

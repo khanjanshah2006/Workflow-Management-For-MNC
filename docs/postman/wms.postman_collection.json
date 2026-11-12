@@ -1021,6 +1021,115 @@
       "description": "Task tracking and sprint boards (features/tasks)",
       "item": [
         {
+          "name": "POST Submit Completed Task (Multipart with File) (US-11)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "remarks",
+                  "value": "Completed feature implementation, unit tests, and attached test evidence.",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "deliverable_evidence.pdf",
+                  "description": "Deliverable evidence file (.pdf, .zip, .tar.gz, .png, .jpg, .docx <= 25MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submit"
+              ]
+            },
+            "description": "Employee marks task as ready for review, submits completion remarks, and attaches deliverable file. Transitions task status to IN_REVIEW and notifies Team Lead."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Completed Task (JSON Payload) (US-11)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Completed documentation and backend endpoints. Test coverage is 100%.\",\n  \"file_url\": \"https://storage.example.com/artifacts/build_v1.zip\",\n  \"file_name\": \"build_v1.zip\",\n  \"file_size_bytes\": 1048576\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submit"
+              ]
+            },
+            "description": "Employee submits completion remarks and optional external file URL in JSON payload."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Submissions (US-11)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions"
+              ]
+            },
+            "description": "Returns chronological list of all submissions recorded for this task."
+          },
+          "response": []
+        },
+        {
           "name": "PUT Assign Task",
           "request": {
             "method": "PUT",

@@ -2,10 +2,14 @@ from app.features.tasks.schemas import (
     TaskAssignRequest,
     TaskReassignRequest,
     TaskResponse,
+    TaskSubmissionCreate,
+    TaskSubmissionResponse,
+    TaskSubmissionsListResponse,
 )
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.service import (
     TaskService,
+    TaskSubmissionService,
     TaskNotFoundError,
     AssigneeNotFoundError,
     AssigneeNotEligibleError,
@@ -19,8 +23,12 @@ __all__ = [
     "TaskAssignRequest",
     "TaskReassignRequest",
     "TaskResponse",
+    "TaskSubmissionCreate",
+    "TaskSubmissionResponse",
+    "TaskSubmissionsListResponse",
     "TaskRepository",
     "TaskService",
+    "TaskSubmissionService",
     "TaskNotFoundError",
     "AssigneeNotFoundError",
     "AssigneeNotEligibleError",
