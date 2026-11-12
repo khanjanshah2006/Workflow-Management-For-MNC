@@ -7,9 +7,11 @@ from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
 from app.features.notifications.service import NotificationService
+from app.features.tasks.repository import TaskRepository
+from app.features.tasks.schemas import TaskCreate
 from app.models.audit_log import AuditAction
 from app.models.employee import Employee
-from app.models.enums import TaskStatus, UserType
+from app.models.enums import PriorityLevel, TaskStatus, UserType
 from app.models.task import Task, TaskSubmission
 from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
@@ -287,3 +289,181 @@ class TaskSubmissionService:
             .all()
         )
         return submissions
+
+
+class TaskService:
+    """Service layer for S3 Task Lifecycle CRUD (US-09, US-32)."""
+
+    @staticmethod
+    def create_task(
+        db: Session,
+        payload: TaskCreate,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> Task:
+        """Create a new task with RBAC, team-membership, and date-range validation."""
+        actor_emp = TaskRepository.get_employee_by_account_id(db, actor.account_id)
+
+        project = TaskRepository.get_project_by_id(db, payload.project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project with ID {payload.project_id} not found.",
+            )
+
+        team = TaskRepository.get_team_by_id(db, payload.team_id)
+        if not team:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Team with ID {payload.team_id} not found.",
+            )
+
+        # RBAC: PM, ADMIN, SYSTEM_ADMIN, or the Team Lead of the target team
+        is_privileged = actor.user_type in (
+            UserType.PM,
+            UserType.ADMIN,
+            UserType.SYSTEM_ADMIN,
+        )
+        is_team_lead = (
+            actor.user_type == UserType.EMPLOYEE
+            and actor_emp is not None
+            and team.lead_emp_id == actor_emp.emp_id
+        )
+        if not is_privileged and not is_team_lead:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Only a Team Lead, PM, or Admin can create tasks.",
+            )
+
+        if payload.milestone_id is not None:
+            milestone = TaskRepository.get_milestone_by_id(db, payload.milestone_id)
+            if not milestone:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Milestone with ID {payload.milestone_id} not found.",
+                )
+
+        if (
+            payload.start_date is not None
+            and payload.due_date is not None
+            and payload.due_date < payload.start_date
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="due_date cannot be earlier than start_date.",
+            )
+
+        if payload.assigned_to is not None:
+            assignee = TaskRepository.get_employee_by_id(db, payload.assigned_to)
+            if not assignee:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"Assignee employee with ID {payload.assigned_to} not found.",
+                )
+            if not TaskRepository.is_active_team_member(
+                db, payload.team_id, payload.assigned_to
+            ):
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Assignee is not an active member of the specified team.",
+                )
+
+        task = Task(
+            project_id=payload.project_id,
+            team_id=payload.team_id,
+            milestone_id=payload.milestone_id,
+            assigned_to=payload.assigned_to,
+            created_by=actor_emp.emp_id if actor_emp else None,
+            title=payload.title,
+            description=payload.description,
+            priority=payload.priority,
+            status=TaskStatus.TODO,
+            progress_pct=0,
+            rejection_count=0,
+            start_date=payload.start_date,
+            due_date=payload.due_date,
+        )
+        TaskRepository.create_task(db, task)
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="TASK",
+            entity_ref_id=str(task.task_id),
+            account_id=actor.account_id,
+            new_value={
+                "title": task.title,
+                "project_id": task.project_id,
+                "team_id": task.team_id,
+                "assigned_to": task.assigned_to,
+                "status": task.status.value,
+            },
+            ip_address=ip_address,
+        )
+
+        # Ensure task is committed even if write_audit_log swallowed an audit error
+        db.commit()
+        return TaskRepository.get_task_by_id(db, task.task_id) or task
+
+    @staticmethod
+    def get_task(db: Session, task_id: int) -> Task:
+        """Fetch full task details by ID (US-32)."""
+        task = TaskRepository.get_task_by_id(db, task_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found.",
+            )
+        return task
+
+    @staticmethod
+    def list_my_tasks(
+        db: Session,
+        actor: UserAccount,
+        status_filter: Optional[TaskStatus] = None,
+        priority_filter: Optional[PriorityLevel] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[Task], int]:
+        """List tasks strictly assigned to the authenticated user's employee record."""
+        actor_emp = TaskRepository.get_employee_by_account_id(db, actor.account_id)
+        if not actor_emp:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Employee record not found for the authenticated user.",
+            )
+        return TaskRepository.list_my_tasks(
+            db=db,
+            emp_id=actor_emp.emp_id,
+            status=status_filter,
+            priority=priority_filter,
+            page=page,
+            limit=limit,
+        )
+
+    @staticmethod
+    def list_project_tasks(
+        db: Session,
+        project_id: int,
+        team_id: Optional[int] = None,
+        milestone_id: Optional[int] = None,
+        status_filter: Optional[TaskStatus] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Tuple[List[Task], int]:
+        """List tasks for a project with optional team, milestone, and status filters."""
+        project = TaskRepository.get_project_by_id(db, project_id)
+        if not project:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Project with ID {project_id} not found.",
+            )
+        return TaskRepository.list_project_tasks(
+            db=db,
+            project_id=project_id,
+            team_id=team_id,
+            milestone_id=milestone_id,
+            status=status_filter,
+            page=page,
+            limit=limit,
+        )
