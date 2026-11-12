@@ -1019,7 +1019,78 @@
     {
       "name": "04 Tasks",
       "description": "Task tracking and sprint boards (features/tasks)",
-      "item": []
+      "item": [
+        {
+          "name": "PUT Assign Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_id\": 14\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/1/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "1",
+                "assign"
+              ]
+            },
+            "description": "Assign an unassigned task to an active team member (US-09). Allowed roles: TEAM_LEAD, PM, ADMIN. Dispatches real-time notification to assignee and records audit log."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reassign Task",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"new_assignee_id\": 16,\n  \"reason\": \"Previous assignee on medical leave; shifting sprint workload.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/1/reassign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "1",
+                "reassign"
+              ]
+            },
+            "description": "Reassign an active task to another team member with mandatory justification (US-14). Dispatches dual notifications to new and previous assignees and records an audit log."
+          },
+          "response": []
+        }
+      ]
     },
     {
       "name": "05 Leave",
