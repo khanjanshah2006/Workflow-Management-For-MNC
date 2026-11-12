@@ -1,4 +1,5 @@
 from sqlalchemy import Column, Integer, String, Text, Date, DateTime, ForeignKey, Enum, CheckConstraint, func
+from sqlalchemy.orm import relationship
 from app.db.base import Base
 from app.models.enums import PriorityLevel, TaskStatus
 
@@ -25,6 +26,9 @@ class Task(Base):
         CheckConstraint("due_date IS NULL OR start_date IS NULL OR due_date >= start_date", name="chk_task_dates"),
     )
 
+    submissions = relationship("TaskSubmission", back_populates="task", cascade="all, delete-orphan", order_by="TaskSubmission.submitted_at.asc()")
+    comments = relationship("TaskComment", back_populates="task", cascade="all, delete-orphan")
+
 
 class TaskComment(Base):
     __tablename__ = "task_comment"
@@ -35,3 +39,22 @@ class TaskComment(Base):
     content = Column(Text, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     edited_at = Column(DateTime(timezone=True), nullable=True)
+
+    task = relationship("Task", back_populates="comments")
+
+
+class TaskSubmission(Base):
+    __tablename__ = "task_submission"
+
+    submission_id = Column(Integer, primary_key=True, autoincrement=True)
+    task_id = Column(Integer, ForeignKey("task.task_id", ondelete="CASCADE"), nullable=False, index=True)
+    submitted_by = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True, index=True)
+    remarks = Column(Text, nullable=False)
+    file_url = Column(String(500), nullable=True)
+    file_name = Column(String(255), nullable=True)
+    file_size_bytes = Column(Integer, nullable=True)
+    submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    task = relationship("Task", back_populates="submissions")
+    submitter = relationship("Employee", foreign_keys=[submitted_by])
+

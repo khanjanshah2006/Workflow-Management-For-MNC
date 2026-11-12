@@ -1,6 +1,6 @@
 """add team_id to task
 
-Revision ID: 8b9c0d1e2f3a
+Revision ID: 9c0d1e2f3a4b
 Revises: 4b29f01e7a32
 Create Date: 2026-11-10 10:00:00.000000
 
@@ -12,7 +12,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision: str = '8b9c0d1e2f3a'
+revision: str = '9c0d1e2f3a4b'
 down_revision: Union[str, Sequence[str], None] = '4b29f01e7a32'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -39,4 +39,3 @@ def downgrade() -> None:
     if 'team_id' in task_columns:
         op.drop_index(op.f('ix_task_team_id'), table_name='task')
         op.drop_column('task', 'team_id')
-
