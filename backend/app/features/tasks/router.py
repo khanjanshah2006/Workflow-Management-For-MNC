@@ -5,8 +5,11 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
+from app.features.tasks.comments import TaskCommentService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
+    TaskCommentCreate,
+    TaskCommentResponse,
     TaskResubmitResponse,
     TaskResubmitSchema,
     TaskReviewQueueItem,
@@ -102,6 +105,42 @@ def get_review_queue(
         page=page,
         limit=limit,
     )
+@router.post(
+    "/{id}/comments",
+    response_model=TaskCommentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a task comment (US-33)",
+    description="Adds a chronological task thread comment and notifies the task counterpart.",
+)
+def create_task_comment(
+    id: int,
+    payload: TaskCommentCreate,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> TaskCommentResponse:
+    return TaskCommentService.create_comment(
+        db=db,
+        task_id=id,
+        content=payload.content,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{id}/comments",
+    response_model=List[TaskCommentResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List task comments chronologically (US-33)",
+    description="Returns the task discussion thread with author names, role badges, and timestamps.",
+)
+def get_task_comments(
+    id: int,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> List[TaskCommentResponse]:
+    return TaskCommentService.list_comments(db=db, task_id=id, current_user=current_user)
+
+
 @router.post(
     "/{id}/submit",
     response_model=TaskSubmissionResponse,
