@@ -1468,6 +1468,81 @@
             "description": "Lists non-deleted delivery milestones for a contracted project belonging to the authenticated CLIENT user. Returns 404 if project does not exist or belongs to another client."
           },
           "response": []
+        },
+        {
+          "name": "GET Export Project Report PDF (US-41)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects/1/report/export",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects",
+                "1",
+                "report",
+                "export"
+              ]
+            },
+            "description": "Streams a downloadable PDF progress report for a project. Allowed for CLIENT (own projects), PM, and ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Toggle Client Team Visibility (US-42)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"is_team_visible_to_client\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/client-visibility",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "client-visibility"
+              ]
+            },
+            "description": "Toggle whether team member names/roles are visible to external clients in PDF reports. Allowed for PM and ADMIN."
+          },
+          "response": []
         }
       ]
     },
