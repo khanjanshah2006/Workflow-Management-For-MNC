@@ -68,3 +68,27 @@ class ClientProjectSummaryResponse(BaseModel):
     )
     milestones_summary: MilestoneSummaryCount
 
+
+# ------------------------------------------------------------------
+# Client Visibility Toggle schemas (US-42)
+# ------------------------------------------------------------------
+
+class ClientVisibilityUpdate(BaseModel):
+    """Payload to toggle whether team member names/roles are visible to clients."""
+
+    is_team_visible_to_client: bool = Field(
+        ...,
+        description="Whether individual team member names and designations are visible in client exports.",
+    )
+
+
+class ClientVisibilityResponse(BaseModel):
+    """Response after updating a project's client visibility setting."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    project_id: int
+    project_code: str
+    name: str
+    is_team_visible_to_client: bool
+
