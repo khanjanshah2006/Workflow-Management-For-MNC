@@ -47,6 +47,7 @@ class TaskStatus(str, enum.Enum):
     IN_REVIEW = "IN_REVIEW"
     DONE = "DONE"
     BLOCKED = "BLOCKED"
+    REJECTED = "REJECTED"
 
 
 class DeliverableStatus(str, enum.Enum):
