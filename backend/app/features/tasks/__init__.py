@@ -8,10 +8,16 @@ from app.features.tasks.schemas import (
     TaskSubmissionResponse,
     TaskSubmissionsListResponse,
 )
+from app.features.tasks.service import (
+    TaskProgressService,
+    TaskSubmissionService,
+)
 
 __all__ = [
     "tasks_router",
     "TaskRepository",
+    "TaskProgressService",
+    "TaskSubmissionService",
     "TaskProgressStatus",
     "TaskProgressUpdateSchema",
     "TaskProgressResponse",
