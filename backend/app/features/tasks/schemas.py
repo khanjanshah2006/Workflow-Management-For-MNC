@@ -1,7 +1,7 @@
 from datetime import datetime
 from enum import Enum
 from typing import List, Optional
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class TaskSubmissionCreate(BaseModel):
@@ -32,6 +32,37 @@ class TaskSubmissionsListResponse(BaseModel):
     task_status: str
     submissions: List[TaskSubmissionResponse] = []
     total_submissions: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# US-33: Task Comments Schemas
+# ============================================================================
+
+class TaskCommentCreate(BaseModel):
+    content: str = Field(..., min_length=1, max_length=2000)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("content")
+    @classmethod
+    def content_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("Comment content must not be blank.")
+        return value
+
+
+class TaskCommentResponse(BaseModel):
+    comment_id: int
+    task_id: int
+    author_emp_id: Optional[int] = None
+    author_name: str
+    author_role: str
+    content: str
+    created_at: datetime
+    edited_at: Optional[datetime] = None
 
     model_config = ConfigDict(from_attributes=True)
 
