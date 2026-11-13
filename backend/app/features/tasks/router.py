@@ -5,8 +5,15 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
-from app.features.tasks.schemas import TaskSubmissionResponse
-from app.features.tasks.service import TaskSubmissionService
+from app.features.tasks.schemas import (
+    TaskProgressResponse,
+    TaskProgressUpdateSchema,
+    TaskSubmissionResponse,
+)
+from app.features.tasks.service import (
+    TaskProgressService,
+    TaskSubmissionService,
+)
 from app.models.user_account import UserAccount
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["Tasks"])
@@ -113,3 +120,40 @@ def get_task_submissions(
         task_id=id,
         current_user=current_user,
     )
+
+
+@router.put(
+    "/{id}/progress",
+    response_model=TaskProgressResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update task progress and blocker status (US-10)",
+    description=(
+        "Allows assigned employees or the Team Lead to update task status (IN_PROGRESS, BLOCKED), "
+        "update completion percentage (0-99%), and record blocker explanations. "
+        "Flagging as BLOCKED triggers an automatic notification to the Team Lead."
+    ),
+)
+def update_task_progress(
+    id: int,
+    payload: TaskProgressUpdateSchema,
+    request: Request,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "TEAM_LEAD", "ADMIN"])),
+    db: Session = Depends(get_db),
+) -> TaskProgressResponse:
+    """
+    Update progress percentage (0-99) or mark task as BLOCKED (US-10).
+    - Status == 'BLOCKED' requires blocker_reason (min 5 chars) -> 422
+    - Progress == 100% is rejected -> 400 (must use /submit review flow)
+    - Non-assigned employees rejected -> 403
+    - Dispatches TASK_BLOCKED notification to Team Lead when blocked.
+    """
+    ip_address = request.client.host if request.client else None
+    task = TaskProgressService.update_progress(
+        db=db,
+        task_id=id,
+        payload=payload,
+        current_user=current_user,
+        ip_address=ip_address,
+    )
+    return task
+
