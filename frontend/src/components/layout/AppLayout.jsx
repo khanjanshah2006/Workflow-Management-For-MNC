@@ -9,6 +9,7 @@ const navigation = [
   { path: "/tasks", label: "Tasks", icon: "✓" },
   { path: "/support", label: "IT Support", icon: "🛠" },
   { path: "/profile", label: "My Profile", icon: "○" },
+  { path: "/admin/users", label: "User Admin", icon: "👤" },
 ];
 
 export default function AppLayout() {
@@ -24,6 +25,8 @@ export default function AppLayout() {
       ? "Projects"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
+      : location.pathname.startsWith("/admin")
+      ? "User Admin"
       : "Dashboard");
 
   return (
