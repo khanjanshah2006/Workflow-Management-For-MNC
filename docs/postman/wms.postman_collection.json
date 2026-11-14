@@ -1021,6 +1021,179 @@
       "description": "Task tracking and sprint boards (features/tasks)",
       "item": [
         {
+          "name": "POST Create Task (US-09)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"project_id\": 1,\n  \"team_id\": 2,\n  \"milestone_id\": 4,\n  \"assigned_to\": 12,\n  \"title\": \"Implement JWT Refresh Token Flow\",\n  \"description\": \"Store refresh tokens with rotation and 7-day TTL.\",\n  \"priority\": \"HIGH\",\n  \"start_date\": \"2026-11-10\",\n  \"due_date\": \"2026-11-15\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks"
+              ]
+            },
+            "description": "Create a new task in TODO status with progress_pct=0 and rejection_count=0. Allowed roles: TEAM_LEAD, PM, ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Tasks (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/my-tasks?status=TODO&priority=HIGH&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "my-tasks"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "TODO"
+                },
+                {
+                  "key": "priority",
+                  "value": "HIGH"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List paginated tasks strictly assigned to the authenticated user."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Details (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "1"
+              ]
+            },
+            "description": "Fetch full task details including project name, milestone title, creator, and assignee details."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Project Tasks (US-32)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{access_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/tasks?team_id=2&milestone_id=4&status=TODO&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "tasks"
+              ],
+              "query": [
+                {
+                  "key": "team_id",
+                  "value": "2"
+                },
+                {
+                  "key": "milestone_id",
+                  "value": "4"
+                },
+                {
+                  "key": "status",
+                  "value": "TODO"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List all tasks for a project, filterable by team_id, milestone_id, and status."
+          },
+          "response": []
+        },
+        {
           "name": "POST Submit Completed Task (Multipart with File) (US-11)",
           "request": {
             "method": "POST",
@@ -1126,6 +1299,145 @@
               ]
             },
             "description": "Returns chronological list of all submissions recorded for this task."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Add Task Comment (US-33)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Comments (US-33)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Returns the chronological task thread with author name, role badge, and timestamps. Clients and users outside the task project scope are forbidden."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (In Progress) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"progress_pct\": 50,\n  \"blocker_reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Assigned employee or Team Lead updates completion percentage (0-99%) and sets status to IN_PROGRESS. Progress at 100% must be submitted via /submit."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (Flag as Blocked) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BLOCKED\",\n  \"progress_pct\": 45,\n  \"blocker_reason\": \"Awaiting database migration approval from DevOps\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Flags task as BLOCKED with mandatory blocker reason (min 5 characters). Automatically triggers real-time TASK_BLOCKED notification to the Team Lead."
           },
           "response": []
         }
