@@ -616,7 +616,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Active Team Members",
+              "name": "200 OK – Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -629,7 +629,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK \u2013 Empty Team",
+              "name": "200 OK – Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -642,7 +642,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "name": "403 Forbidden – Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -655,7 +655,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found \u2013 Team Non-existent",
+              "name": "404 Not Found – Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -697,7 +697,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Tasks Stub",
+              "name": "200 OK – Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -710,7 +710,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team",
+              "name": "403 Forbidden – Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1331,7 +1331,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -1438,6 +1438,80 @@
               ]
             },
             "description": "Flags task as BLOCKED with mandatory blocker reason (min 5 characters). Automatically triggers real-time TASK_BLOCKED notification to the Team Lead."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Review Task - Approve (US-12)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"feedback\": \"Code approved, unit tests pass with 98% coverage.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "review"
+              ]
+            },
+            "description": "Team Lead or PM approves submitted task. Marks status as DONE, sets progress to 100%, updates milestone, and notifies employee."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Review Task - Reject with Feedback (US-12)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\",\n  \"feedback\": \"Missing error handling for expired tokens in auth router.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "review"
+              ]
+            },
+            "description": "Team Lead or PM rejects submitted task requesting revisions. Sets status to REJECTED, records feedback, increments rejection_count, and notifies employee."
           },
           "response": []
         }
