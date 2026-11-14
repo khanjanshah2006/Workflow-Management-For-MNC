@@ -17,6 +17,8 @@ class Task(Base):
     description = Column(Text, nullable=True)
     priority = Column(Enum(PriorityLevel, name="priority_level_enum"), default=PriorityLevel.MEDIUM, nullable=False)
     status = Column(Enum(TaskStatus, name="task_status_enum"), default=TaskStatus.TODO, nullable=False, index=True)
+    progress_pct = Column(Integer, default=0, nullable=False)
+    blocker_reason = Column(Text, nullable=True)
     start_date = Column(Date, nullable=True)
     due_date = Column(Date, nullable=True)
     completed_at = Column(DateTime(timezone=True), nullable=True)
