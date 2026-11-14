@@ -41,6 +41,8 @@ class ProfileResponse(BaseModel):
     status: CommonStatus
     department: Optional[DepartmentInfo] = None
     manager: Optional[ManagerInfo] = None
+    emergency_contact: Optional[str] = None
+    bio: Optional[str] = None
 
 
 class ProfileUpdateRequest(BaseModel):
@@ -48,6 +50,7 @@ class ProfileUpdateRequest(BaseModel):
     phone: Optional[str] = Field(None, max_length=50, description="Contact phone number")
     address: Optional[str] = Field(None, max_length=255, description="Residential contact address")
     emergency_contact: Optional[str] = Field(None, max_length=100, description="Emergency contact person and number")
+    bio: Optional[str] = Field(None, max_length=500, description="Short personal biography")
 
 
 class SkillResponse(BaseModel):
