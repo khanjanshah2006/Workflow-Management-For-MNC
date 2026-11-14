@@ -2,6 +2,7 @@ from datetime import date, datetime
 from enum import Enum
 from typing import List, Optional
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from app.models.enums import PriorityLevel, TaskStatus
 
 from app.models.enums import PriorityLevel, TaskStatus
 
@@ -50,6 +51,10 @@ class TaskResponse(BaseModel):
 # Task Submission Schemas (US-11)
 # ============================================================================
 
+# ============================================================================
+# US-11: Task Submission Schemas
+# ============================================================================
+
 class TaskSubmissionCreate(BaseModel):
     remarks: str = Field(..., min_length=1, description="Remarks and summary of work done for submission")
     file_url: Optional[str] = Field(None, max_length=500, description="Optional pre-existing deliverable URL")
@@ -78,6 +83,61 @@ class TaskSubmissionsListResponse(BaseModel):
     task_status: str
     submissions: List[TaskSubmissionResponse] = []
     total_submissions: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# US-13: Task Review Queue & Resubmit Schemas
+# ============================================================================
+
+class TaskResubmitSchema(BaseModel):
+    revised_remarks: str = Field(..., description="Remarks describing fixes and updates made following rejection")
+    new_file_url: Optional[str] = Field(None, description="URL pointing to the revised deliverable or evidence archive")
+
+    @model_validator(mode="before")
+    @classmethod
+    def allow_aliases(cls, data: object) -> object:
+        if isinstance(data, dict):
+            if "revised_remarks" not in data and "remarks" in data:
+                data["revised_remarks"] = data["remarks"]
+            if "new_file_url" not in data and "file_url" in data:
+                data["new_file_url"] = data["file_url"]
+        return data
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskReviewQueueItem(BaseModel):
+    task_id: int
+    title: str
+    description: Optional[str] = None
+    priority: str
+    status: str
+    team_id: Optional[int] = None
+    project_id: Optional[int] = None
+    milestone_id: Optional[int] = None
+    assigned_to: Optional[int] = None
+    assignee_name: Optional[str] = None
+    submission_remarks: Optional[str] = None
+    deliverable_file_url: Optional[str] = None
+    submission_timestamp: Optional[datetime] = None
+    created_at: Optional[datetime] = None
+    due_date: Optional[date] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskResubmitResponse(BaseModel):
+    task_id: int
+    title: str
+    status: str
+    team_id: Optional[int] = None
+    assigned_to: Optional[int] = None
+    submission_id: Optional[int] = None
+    revised_remarks: Optional[str] = None
+    new_file_url: Optional[str] = None
+    message: str = "Task resubmitted successfully"
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -160,3 +220,144 @@ class TaskProgressResponse(BaseModel):
     completed_at: Optional[datetime] = Field(None, description="Timestamp when the task was completed")
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# S3: Task Lifecycle Schemas (US-09, US-32)
+# ============================================================================
+
+class TaskCreate(BaseModel):
+    project_id: int = Field(..., ge=1)
+    team_id: int = Field(..., ge=1)
+    milestone_id: Optional[int] = Field(None, ge=1)
+    assigned_to: Optional[int] = Field(None, ge=1)
+    title: str = Field(..., min_length=1, max_length=200)
+    description: Optional[str] = None
+    priority: PriorityLevel = PriorityLevel.MEDIUM
+    start_date: Optional[date] = None
+    due_date: Optional[date] = None
+
+    @field_validator("title")
+    @classmethod
+    def title_must_not_be_blank(cls, value: str) -> str:
+        cleaned = value.strip()
+        if not cleaned:
+            raise ValueError("Task title must not be blank.")
+        return cleaned
+
+
+class ProjectSummary(BaseModel):
+    project_id: int
+    name: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class MilestoneSummary(BaseModel):
+    id: int
+    title: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EmployeeSummary(BaseModel):
+    emp_id: int
+    full_name: str
+    email: str
+    designation: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskDetailResponse(BaseModel):
+    task_id: int
+    project_id: int
+    team_id: int
+    milestone_id: Optional[int] = None
+    assigned_to: Optional[int] = None
+    created_by: Optional[int] = None
+    title: str
+    description: Optional[str] = None
+    priority: PriorityLevel
+    status: TaskStatus
+    progress_pct: int
+    start_date: Optional[date] = None
+    due_date: Optional[date] = None
+    completed_at: Optional[datetime] = None
+    rejection_count: int
+    rejection_feedback: Optional[str] = None
+    blocker_reason: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+    project: Optional[ProjectSummary] = None
+    milestone: Optional[MilestoneSummary] = None
+    assignee: Optional[EmployeeSummary] = None
+    creator: Optional[EmployeeSummary] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskSummaryResponse(BaseModel):
+    task_id: int
+    project_id: int
+    team_id: int
+    milestone_id: Optional[int] = None
+    assigned_to: Optional[int] = None
+    created_by: Optional[int] = None
+    title: str
+    priority: PriorityLevel
+    status: TaskStatus
+    progress_pct: int
+    start_date: Optional[date] = None
+    due_date: Optional[date] = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class PaginatedTasksResponse(BaseModel):
+    items: List[TaskSummaryResponse] = []
+    total: int
+    page: int
+    limit: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# US-12: Task Review Engine Schemas
+# ============================================================================
+
+class ReviewDecision(str, Enum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+
+
+class TaskReviewDecisionSchema(BaseModel):
+    decision: ReviewDecision = Field(..., description="Evaluation decision: APPROVE or REJECT")
+    feedback: Optional[str] = Field(None, description="Mandatory review feedback when rejecting (minimum 10 characters)")
+
+    @model_validator(mode="after")
+    def validate_rejection_feedback(self) -> "TaskReviewDecisionSchema":
+        if self.decision == ReviewDecision.REJECT:
+            if not self.feedback or len(self.feedback.strip()) < 10:
+                raise ValueError("Feedback is mandatory (minimum 10 characters) when rejecting a task.")
+        return self
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskReviewResponse(BaseModel):
+    task_id: int = Field(..., description="Task identifier")
+    status: str = Field(..., description="Current status of the task after evaluation")
+    progress_pct: int = Field(..., description="Task progress percentage (100 if approved)")
+    completed_at: Optional[datetime] = Field(None, description="Completion timestamp if approved")
+    rejection_feedback: Optional[str] = Field(None, description="Feedback explaining rejection reasons")
+    rejection_count: int = Field(..., description="Number of times task has been rejected")
+    milestone_id: Optional[int] = Field(None, description="Associated milestone identifier")
+    milestone_status: Optional[str] = Field(None, description="Status of the associated milestone after recalculation")
+    message: str = Field(..., description="Summary confirmation message")
+
+    model_config = ConfigDict(from_attributes=True)
+
