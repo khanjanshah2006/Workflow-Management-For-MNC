@@ -13,6 +13,7 @@ import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
+import SecurityOpsPage from "./features/admin/SecurityOpsPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import "./App.css";
@@ -103,6 +104,8 @@ function App() {
             <Route path="/support/tickets" element={<ITSupportDashboard />} />
             <Route path="/it-support" element={<ITSupportDashboard />} />
             <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/admin" element={<Navigate to="/admin/security" replace />} />
+            <Route path="/admin/security" element={<SecurityOpsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

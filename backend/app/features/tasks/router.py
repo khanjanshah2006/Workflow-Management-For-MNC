@@ -5,8 +5,13 @@ from sqlalchemy.orm import Session
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
+from app.features.tasks.comments import TaskCommentService
 from app.features.tasks.schemas import (
     TaskAssignRequest,
+    TaskCommentCreate,
+    TaskCommentResponse,
+    TaskProgressResponse,
+    TaskProgressUpdateSchema,
     TaskReassignRequest,
     TaskResponse,
     TaskSubmissionResponse,
@@ -18,6 +23,7 @@ from app.features.tasks.service import (
     SameAssigneeError,
     TaskAssignmentForbiddenError,
     TaskNotFoundError,
+    TaskProgressService,
     TaskService,
     TaskSubmissionService,
 )
@@ -103,6 +109,42 @@ def reassign_task(
 # ==========================================
 # Task Deliverables Submission (US-11)
 # ==========================================
+
+@router.post(
+    "/{id}/comments",
+    response_model=TaskCommentResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Add a task comment (US-33)",
+    description="Adds a chronological task thread comment and notifies the task counterpart.",
+)
+def create_task_comment(
+    id: int,
+    payload: TaskCommentCreate,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> TaskCommentResponse:
+    return TaskCommentService.create_comment(
+        db=db,
+        task_id=id,
+        content=payload.content,
+        current_user=current_user,
+    )
+
+
+@router.get(
+    "/{id}/comments",
+    response_model=List[TaskCommentResponse],
+    status_code=status.HTTP_200_OK,
+    summary="List task comments chronologically (US-33)",
+    description="Returns the task discussion thread with author names, role badges, and timestamps.",
+)
+def get_task_comments(
+    id: int,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> List[TaskCommentResponse]:
+    return TaskCommentService.list_comments(db=db, task_id=id, current_user=current_user)
+
 
 @router.post(
     "/{id}/submit",
@@ -205,3 +247,40 @@ def get_task_submissions(
         task_id=id,
         current_user=current_user,
     )
+
+
+@router.put(
+    "/{id}/progress",
+    response_model=TaskProgressResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Update task progress and blocker status (US-10)",
+    description=(
+        "Allows assigned employees or the Team Lead to update task status (IN_PROGRESS, BLOCKED), "
+        "update completion percentage (0-99%), and record blocker explanations. "
+        "Flagging as BLOCKED triggers an automatic notification to the Team Lead."
+    ),
+)
+def update_task_progress(
+    id: int,
+    payload: TaskProgressUpdateSchema,
+    request: Request,
+    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "TEAM_LEAD", "ADMIN"])),
+    db: Session = Depends(get_db),
+) -> TaskProgressResponse:
+    """
+    Update progress percentage (0-99) or mark task as BLOCKED (US-10).
+    - Status == 'BLOCKED' requires blocker_reason (min 5 chars) -> 422
+    - Progress == 100% is rejected -> 400 (must use /submit review flow)
+    - Non-assigned employees rejected -> 403
+    - Dispatches TASK_BLOCKED notification to Team Lead when blocked.
+    """
+    ip_address = request.client.host if request.client else None
+    task = TaskProgressService.update_progress(
+        db=db,
+        task_id=id,
+        payload=payload,
+        current_user=current_user,
+        ip_address=ip_address,
+    )
+    return task
+

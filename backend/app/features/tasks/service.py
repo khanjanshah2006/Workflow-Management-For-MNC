@@ -8,7 +8,13 @@ from sqlalchemy.orm import Session
 from app.core.audit import write_audit_log
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
-from app.features.tasks.schemas import TaskAssignRequest, TaskReassignRequest, TaskResponse
+from app.features.tasks.schemas import (
+    TaskAssignRequest,
+    TaskProgressStatus,
+    TaskProgressUpdateSchema,
+    TaskReassignRequest,
+    TaskResponse,
+)
 from app.models.audit_log import AuditAction
 from app.models.employee import Employee
 from app.models.enums import TaskStatus, UserType
@@ -543,3 +549,141 @@ class TaskSubmissionService:
             .all()
         )
         return submissions
+
+
+class TaskProgressService:
+    """Service layer handling task progress state machine transitions, blocker tracking, and Team Lead alerts (US-10)."""
+
+    @classmethod
+    def update_progress(
+        cls,
+        db: Session,
+        task_id: int,
+        payload: TaskProgressUpdateSchema,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> Task:
+        """
+        Update the progress status, percentage, and blocker information of an active task (US-10).
+
+        Business Rules:
+        - Permitted statuses: IN_PROGRESS, BLOCKED.
+        - progress_pct must be between 0 and 99 (100% requires submission via review flow, returning 400).
+        - If status == BLOCKED, blocker_reason is required (min 5 characters), returning 422 if missing.
+        - If status moves back to IN_PROGRESS, blocker_reason is cleared.
+        - Only assigned employee or Team Lead of that team may update progress, returning 403 otherwise.
+        - Auto-triggers TASK_BLOCKED notification to the Team Lead when flagged BLOCKED.
+        - Records structured audit log for audit compliance.
+        """
+        # 1. Fetch Task
+        task = TaskRepository.get_task_by_id(db, task_id)
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found.",
+            )
+
+        # 2. Fetch authenticated employee
+        employee = TaskRepository.get_employee_by_account_id(db, current_user.account_id)
+        is_admin = current_user.user_type in [UserType.ADMIN, UserType.SYSTEM_ADMIN]
+
+        if not employee and not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Employee profile not found for the authenticated user.",
+            )
+
+        # 3. Scope Check: Assigned employee, Team Lead of that team, or Admin
+        is_assigned = (task.assigned_to == employee.emp_id) if employee else False
+        is_lead = TaskRepository.is_team_lead_for_task(db, employee.emp_id, task) if employee else False
+
+        if not is_assigned and not is_lead and not is_admin:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Only the assigned employee or the Team Lead can update task progress.",
+            )
+
+        # 4. Progress Percentage Validation
+        if payload.progress_pct == 100:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Setting progress to 100% requires submitting the task for review via the /submit flow.",
+            )
+
+        if payload.progress_pct < 0 or payload.progress_pct > 99:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Progress percentage must be an integer between 0 and 99.",
+            )
+
+        # 5. Status & Blocker Reason Validation
+        if payload.status == TaskProgressStatus.BLOCKED:
+            if not payload.blocker_reason or len(payload.blocker_reason.strip()) < 5:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="blocker_reason is required (minimum 5 characters) when task is flagged as BLOCKED.",
+                )
+            target_status = TaskStatus.BLOCKED
+            target_blocker_reason = payload.blocker_reason.strip()
+        elif payload.status == TaskProgressStatus.IN_PROGRESS:
+            target_status = TaskStatus.IN_PROGRESS
+            target_blocker_reason = None
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid status '{payload.status}'. Permitted values are 'IN_PROGRESS' and 'BLOCKED'.",
+            )
+
+        # 6. Capture pre-update state for audit log
+        old_status = task.status.value if task.status else None
+        old_progress = getattr(task, "progress_pct", 0)
+        old_blocker = getattr(task, "blocker_reason", None)
+
+        # 7. Apply updates to task
+        task.status = target_status
+        task.progress_pct = payload.progress_pct
+        task.blocker_reason = target_blocker_reason
+        db.flush()
+
+        # 8. Notification Hook: When flagged BLOCKED, notify Team Lead
+        if target_status == TaskStatus.BLOCKED:
+            team = TaskRepository.get_team_for_task(db, task)
+            lead_emp = TaskRepository.get_team_lead_employee(db, team) if team else None
+            if lead_emp and lead_emp.account_id:
+                try:
+                    NotificationService.create_notification(
+                        db=db,
+                        user_id=lead_emp.account_id,
+                        type="TASK_BLOCKED",
+                        title="Task Flagged as Blocked",
+                        message=f"Task #{task.task_id} '{task.title}' has been flagged as BLOCKED. Reason: {target_blocker_reason}",
+                        link=f"/tasks/{task.task_id}",
+                    )
+                except Exception:
+                    # Notifications should not abort progress update transaction
+                    pass
+
+        # 9. Record Audit Log
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="TASK",
+            entity_ref_id=str(task.task_id),
+            account_id=current_user.account_id,
+            old_value={
+                "status": old_status,
+                "progress_pct": old_progress,
+                "blocker_reason": old_blocker,
+            },
+            new_value={
+                "status": target_status.value,
+                "progress_pct": task.progress_pct,
+                "blocker_reason": target_blocker_reason,
+            },
+            ip_address=ip_address,
+        )
+
+        db.commit()
+        db.refresh(task)
+        return task
+
