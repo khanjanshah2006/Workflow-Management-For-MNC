@@ -20,9 +20,11 @@ def _check_user_role(
         else str(user.user_type)
     )
 
-    # Normalize allowed roles for comparison
-    allowed_normalized = {str(r).strip().upper() for r in allowed_roles}
-    user_normalized = user_type_val.strip().upper()
+    # Normalize allowed roles for comparison (case-insensitive & stripping underscores/spaces if needed)
+    allowed_normalized = {
+        str(r).strip().upper().replace(" ", "_") for r in allowed_roles
+    }
+    user_normalized = user_type_val.strip().upper().replace(" ", "_")
 
     # 1. Baseline role match
     if user_normalized in allowed_normalized:
@@ -47,7 +49,9 @@ def _check_user_role(
                 .first()
             )
             if active_grant:
-                elevated_role_normalized = active_grant.granted_role.strip().upper()
+                elevated_role_normalized = (
+                    active_grant.granted_role.strip().upper().replace(" ", "_")
+                )
                 return elevated_role_normalized in allowed_normalized
             return False
 

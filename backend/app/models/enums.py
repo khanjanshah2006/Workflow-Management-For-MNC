@@ -3,6 +3,7 @@ import enum
 
 class UserType(str, enum.Enum):
     EMPLOYEE = "EMPLOYEE"
+    TEAM_LEAD = "TEAM_LEAD"
     PM = "PM"
     HR = "HR"
     CLIENT = "CLIENT"
