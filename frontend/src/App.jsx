@@ -1,133 +1,24 @@
-
 import {
   BrowserRouter,
   Routes,
   Route,
   Navigate,
   NavLink,
-  Outlet,
-  useLocation,
 } from "react-router-dom";
-import { useState } from "react";
 import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import AppLayout from "./components/layout/AppLayout";
+import ProjectListPage from "./features/projects/ProjectListPage";
+import ProjectDetailPage from "./features/projects/ProjectDetailPage";
+import TeamRosterPage from "./features/team/TeamRosterPage";
+import SecurityOpsPage from "./features/admin/SecurityOpsPage";
+import ProfilePage from "./features/profile/ProfilePage";
+import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import "./App.css";
 
 const queryClient = new QueryClient();
-
-const navigation = [
-  { path: "/dashboard", label: "Dashboard", icon: "▦" },
-  { path: "/projects", label: "Projects", icon: "◇" },
-  { path: "/tasks", label: "Tasks", icon: "✓" },
-  { path: "/profile", label: "My Profile", icon: "○" },
-];
-
-function AppLayout() {
-  const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const location = useLocation();
-
-  const currentPage =
-    navigation.find((item) => item.path === location.pathname)?.label ??
-    "Dashboard";
-
-  return (
-    <div
-      className={`app-shell ${collapsed ? "sidebar-collapsed" : ""} ${
-        mobileOpen ? "mobile-nav-open" : ""
-      }`}
-    >
-      {mobileOpen && (
-        <button
-          className="mobile-backdrop"
-          aria-label="Close navigation"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      <aside className="sidebar">
-        <div className="brand">
-          <div className="brand-mark">W</div>
-          <span className="brand-name">WorkSphere</span>
-          <button
-            className="collapse-button"
-            onClick={() => setCollapsed(!collapsed)}
-            aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-            title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-          >
-            {collapsed ? "→" : "←"}
-          </button>
-        </div>
-
-        <div className="workspace-label">WORKSPACE</div>
-
-        <nav className="navigation" aria-label="Main navigation">
-          {navigation.map((item) => (
-            <NavLink
-              key={item.path}
-              to={item.path}
-              title={collapsed ? item.label : undefined}
-              className={({ isActive }) =>
-                `nav-link ${isActive ? "nav-link-active" : ""}`
-              }
-              onClick={() => setMobileOpen(false)}
-            >
-              <span className="nav-icon">{item.icon}</span>
-              <span className="nav-label">{item.label}</span>
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="sidebar-bottom">
-          <div className="help-card">
-            <div className="help-dot">i</div>
-            <div className="help-copy">
-              <strong>Need help?</strong>
-              <span>Contact your administrator</span>
-            </div>
-          </div>
-          <div className="sidebar-version">WorkSphere · UI foundation</div>
-        </div>
-      </aside>
-
-      <div className="main-column">
-        <header className="topbar">
-          <button
-            className="mobile-menu-button"
-            onClick={() => setMobileOpen(true)}
-            aria-label="Open navigation"
-          >
-            ☰
-          </button>
-
-          <div className="breadcrumb">
-            <span>Workspace</span>
-            <span className="breadcrumb-separator">/</span>
-            <strong>{currentPage}</strong>
-          </div>
-
-          <div className="topbar-right">
-            <span className="environment-label">Development</span>
-            <div className="user-avatar" title="Demo profile">
-              U
-            </div>
-          </div>
-        </header>
-
-        <main className="main-content">
-          <Outlet />
-        </main>
-
-        <footer className="app-footer">
-          <span>WorkSphere</span>
-          <span>Enterprise Workflow Management</span>
-        </footer>
-      </div>
-    </div>
-  );
-}
 
 function PagePlaceholder({ title, description }) {
   return (
@@ -195,15 +86,11 @@ function App() {
                 />
               }
             />
-            <Route
-              path="/projects"
-              element={
-                <PagePlaceholder
-                  title="Projects"
-                  description="Your project workspace will appear here."
-                />
-              }
-            />
+            <Route path="/projects" element={<ProjectListPage />} />
+            <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
+            <Route path="/team" element={<TeamRosterPage />} />
+            <Route path="/team/roster" element={<TeamRosterPage />} />
+            <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
             <Route
               path="/tasks"
               element={
@@ -213,15 +100,12 @@ function App() {
                 />
               }
             />
-            <Route
-              path="/profile"
-              element={
-                <PagePlaceholder
-                  title="My Profile"
-                  description="Your profile information will appear here."
-                />
-              }
-            />
+            <Route path="/support" element={<ITSupportDashboard />} />
+            <Route path="/support/tickets" element={<ITSupportDashboard />} />
+            <Route path="/it-support" element={<ITSupportDashboard />} />
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/admin" element={<Navigate to="/admin/security" replace />} />
+            <Route path="/admin/security" element={<SecurityOpsPage />} />
             <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>

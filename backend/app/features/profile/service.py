@@ -45,6 +45,8 @@ class ProfileService:
             status=employee.status,
             department=dept_info,
             manager=manager_info,
+            emergency_contact=getattr(employee, "emergency_contact", None),
+            bio=getattr(employee, "bio", None),
         )
 
     @classmethod
@@ -91,6 +93,8 @@ class ProfileService:
             new_values["address"] = payload.address
         if payload.emergency_contact is not None:
             new_values["emergency_contact"] = payload.emergency_contact
+        if payload.bio is not None:
+            new_values["bio"] = payload.bio
 
         # Persist permitted update
         updated_employee = ProfileRepository.update_employee_contact(
@@ -98,6 +102,11 @@ class ProfileService:
             employee=employee,
             phone=payload.phone,
         )
+
+        if payload.emergency_contact is not None:
+            setattr(updated_employee, "emergency_contact", payload.emergency_contact)
+        if payload.bio is not None:
+            setattr(updated_employee, "bio", payload.bio)
 
         # Audit log recording state changes
         write_audit_log(

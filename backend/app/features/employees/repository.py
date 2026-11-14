@@ -144,3 +144,96 @@ class EmployeeRepository:
 
         db.flush()
         return employee
+
+    @staticmethod
+    def get_workload_metrics(db: Session, emp_id: int) -> dict:
+        """
+        Compute aggregate cross-project workload metrics for an employee (US-39):
+        - active_projects_count: count of active assignments (released_on IS NULL)
+        - open_tasks_count: count of non-completed tasks (status != DONE)
+        - utilization_pct: calculated allocation percentage (25.0% per active project)
+        """
+        from app.models.project import ProjectAssignment
+        from app.models.task import Task
+        from app.models.enums import TaskStatus
+
+        active_projects_count = (
+            db.query(func.count(func.distinct(ProjectAssignment.project_id)))
+            .filter(
+                ProjectAssignment.emp_id == emp_id,
+                ProjectAssignment.released_on.is_(None),
+            )
+            .scalar()
+            or 0
+        )
+
+        open_tasks_count = (
+            db.query(func.count(Task.task_id))
+            .filter(
+                Task.assigned_to == emp_id,
+                Task.status != TaskStatus.DONE,
+            )
+            .scalar()
+            or 0
+        )
+
+        utilization_pct = round(active_projects_count * 25.0, 2)
+
+        return {
+            "employee_id": emp_id,
+            "active_projects_count": active_projects_count,
+            "open_tasks_count": open_tasks_count,
+            "utilization_pct": float(utilization_pct),
+        }
+
+    @staticmethod
+    def get_batch_workload_metrics(db: Session, emp_ids: List[int]) -> dict:
+        """
+        Batch compute workload metrics for multiple employees in O(1) queries.
+        Returns a dict mapping emp_id -> metrics dict.
+        """
+        if not emp_ids:
+            return {}
+
+        from app.models.project import ProjectAssignment
+        from app.models.task import Task
+        from app.models.enums import TaskStatus
+
+        proj_counts = dict(
+            db.query(
+                ProjectAssignment.emp_id,
+                func.count(func.distinct(ProjectAssignment.project_id)),
+            )
+            .filter(
+                ProjectAssignment.emp_id.in_(emp_ids),
+                ProjectAssignment.released_on.is_(None),
+            )
+            .group_by(ProjectAssignment.emp_id)
+            .all()
+        )
+
+        task_counts = dict(
+            db.query(
+                Task.assigned_to,
+                func.count(Task.task_id),
+            )
+            .filter(
+                Task.assigned_to.in_(emp_ids),
+                Task.status != TaskStatus.DONE,
+            )
+            .group_by(Task.assigned_to)
+            .all()
+        )
+
+        result = {}
+        for eid in emp_ids:
+            act_proj = proj_counts.get(eid, 0)
+            op_tasks = task_counts.get(eid, 0)
+            result[eid] = {
+                "employee_id": eid,
+                "active_projects_count": act_proj,
+                "open_tasks_count": op_tasks,
+                "utilization_pct": float(round(act_proj * 25.0, 2)),
+            }
+        return result
+

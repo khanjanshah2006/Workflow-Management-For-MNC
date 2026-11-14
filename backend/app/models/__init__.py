@@ -21,14 +21,16 @@ from app.models.hr_manager import HRManager
 from app.models.client import Client
 from app.models.project import Project, ProjectAssignment
 from app.models.team import Team, TeamMember
-from app.models.milestone import Milestone
-from app.models.task import Task, TaskComment
+from app.models.milestone import ProjectMilestone, Milestone
+from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.leave import LeaveType, LeaveRequest
 from app.models.skill import Skill, EmployeeSkill
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
-from app.models.support_ticket import SupportTicket, TicketActivity
+from app.models.support import SupportTicket, TicketActivity
+from app.models.system_parameter import SystemParameter
+from app.models.elevated_access_grant import ElevatedAccessGrant
 
 __all__ = [
     "Base",
@@ -54,9 +56,11 @@ __all__ = [
     "ProjectAssignment",
     "Team",
     "TeamMember",
+    "ProjectMilestone",
     "Milestone",
     "Task",
     "TaskComment",
+    "TaskSubmission",
     "Deliverable",
     "DeliverableFeedback",
     "LeaveType",
@@ -67,4 +71,6 @@ __all__ = [
     "AuditLog",
     "SupportTicket",
     "TicketActivity",
+    "SystemParameter",
+    "ElevatedAccessGrant",
 ]

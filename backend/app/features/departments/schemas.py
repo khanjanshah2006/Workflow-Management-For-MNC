@@ -113,3 +113,46 @@ class DepartmentResponse(BaseModel):
     )
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# Team Members & Tasks Schemas (US-37)
+# ==========================================
+
+
+class TeamMemberOut(BaseModel):
+    """
+    Response schema for an active team member roster entry.
+
+    Conforms to US-37 Technical Scope:
+    employee_id, emp_code, full_name, email, designation.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+
+    employee_id: int = Field(
+        ...,
+        description="Unique employee identifier",
+        examples=[1],
+    )
+    emp_code: str = Field(
+        ...,
+        description="Employee corporate identifier code",
+        examples=["EMP001"],
+    )
+    full_name: str = Field(
+        ...,
+        description="Full display name of the employee",
+        examples=["Alice Johnson"],
+    )
+    email: str = Field(
+        ...,
+        description="Official company email address",
+        examples=["alice.johnson@company.com"],
+    )
+    designation: str = Field(
+        ...,
+        description="Employee designation or functional role",
+        examples=["Senior Backend Engineer"],
+    )
+
