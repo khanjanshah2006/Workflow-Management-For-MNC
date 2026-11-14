@@ -5,22 +5,29 @@ import uuid
 from typing import Any, List, Optional, Tuple
 from uuid import UUID
 from fastapi import HTTPException, UploadFile, status
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
+    ReviewDecision,
     TaskCreate,
     TaskProgressStatus,
     TaskProgressUpdateSchema,
     TaskResubmitResponse,
     TaskResubmitSchema,
+    TaskReviewDecisionSchema,
     TaskReviewQueueItem,
+    TaskReviewResponse,
 )
 from app.models.audit_log import AuditAction
 from app.models.employee import Employee
-from app.models.enums import PriorityLevel, TaskStatus, UserType
+from app.models.enums import MilestoneStatus, PriorityLevel, TaskStatus, UserType
+from app.models.milestone import ProjectMilestone
+from app.models.project import Project
+from app.models.project_manager import ProjectManager
 from app.models.task import Task, TaskSubmission
 from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
@@ -733,3 +740,218 @@ class TaskProgressService:
         db.commit()
         db.refresh(task)
         return task
+
+
+class TaskReviewService:
+    """Service layer handling task review decisions, evaluation state machine, milestone recalculation, and notifications (US-12)."""
+
+    @classmethod
+    def review_task(
+        cls,
+        db: Session,
+        task_id: int,
+        payload: TaskReviewDecisionSchema,
+        current_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> TaskReviewResponse:
+        """
+        Evaluate a submitted task (US-12): approve (completing task and updating milestones)
+        or reject (requesting revisions with mandatory feedback).
+        """
+        task = db.query(Task).filter(Task.task_id == task_id).first()
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found.",
+            )
+
+        user_type_str = str(
+            current_user.user_type.value if hasattr(current_user.user_type, "value") else current_user.user_type
+        ).upper()
+
+        is_authorized = False
+        if user_type_str in ("ADMIN", "SYSTEM_ADMIN"):
+            is_authorized = True
+        elif user_type_str in ("PM", "PROJECT_MANAGER"):
+            pm = db.query(ProjectManager).filter(ProjectManager.account_id == current_user.account_id).first()
+            project = db.query(Project).filter(Project.project_id == task.project_id).first()
+            if pm and project and project.pm_id == pm.pm_id:
+                is_authorized = True
+            elif not pm:
+                is_authorized = True
+            else:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden: Only the Project Manager assigned to this project can review this task.",
+                )
+        elif user_type_str in ("TEAM_LEAD", "EMPLOYEE"):
+            emp = db.query(Employee).filter(Employee.account_id == current_user.account_id).first()
+            if not emp:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Forbidden: Employee profile not found.",
+                )
+
+            # Check if user is the Team Lead of the assigned employee's team
+            is_lead_of_assigned_team = False
+            if task.assigned_to:
+                is_lead_of_assigned_team = (
+                    db.query(Team)
+                    .join(TeamMember, TeamMember.team_id == Team.team_id)
+                    .filter(TeamMember.emp_id == task.assigned_to, Team.lead_emp_id == emp.emp_id)
+                    .first()
+                    is not None
+                )
+
+            # If task.team_id is explicitly set
+            is_lead_of_task_team = False
+            if getattr(task, "team_id", None):
+                is_lead_of_task_team = (
+                    db.query(Team)
+                    .filter(Team.team_id == task.team_id, Team.lead_emp_id == emp.emp_id)
+                    .first()
+                    is not None
+                )
+
+            # If employee not mapped in TeamMember, fallback to team on the project
+            lead_for_project_team = False
+            if not is_lead_of_assigned_team and not is_lead_of_task_team and not db.query(TeamMember).filter(TeamMember.emp_id == task.assigned_to).first():
+                lead_for_project_team = (
+                    db.query(Team)
+                    .filter(Team.project_id == task.project_id, Team.lead_emp_id == emp.emp_id)
+                    .first()
+                    is not None
+                )
+
+            if is_lead_of_assigned_team or is_lead_of_task_team or lead_for_project_team:
+                is_authorized = True
+
+        if not is_authorized:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: Only the Team Lead of that task's team or the Project Manager can review.",
+            )
+
+        # Status Check: Must be IN_REVIEW
+        if task.status != TaskStatus.IN_REVIEW:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Task is not awaiting review.",
+            )
+
+        assigned_emp = db.query(Employee).filter(Employee.emp_id == task.assigned_to).first()
+        milestone_status_result = None
+
+        if payload.decision == ReviewDecision.APPROVE:
+            task.status = TaskStatus.DONE
+            task.progress_pct = 100
+            task.completed_at = func.now()
+
+            # Recalculate milestone progress: If all tasks in task.milestone_id are DONE, update milestone status
+            if task.milestone_id:
+                milestone_tasks = db.query(Task).filter(Task.milestone_id == task.milestone_id).all()
+                if milestone_tasks and all(t.status == TaskStatus.DONE or t.task_id == task.task_id for t in milestone_tasks):
+                    milestone = db.query(ProjectMilestone).filter(ProjectMilestone.id == task.milestone_id).first()
+                    if milestone:
+                        milestone.status = MilestoneStatus.COMPLETED
+                        milestone.completed_at = func.now()
+                        milestone_status_result = MilestoneStatus.COMPLETED.value
+                else:
+                    milestone = db.query(ProjectMilestone).filter(ProjectMilestone.id == task.milestone_id).first()
+                    if milestone:
+                        milestone_status_result = milestone.status.value if hasattr(milestone.status, "value") else str(milestone.status)
+
+            if assigned_emp and assigned_emp.account_id:
+                try:
+                    NotificationService.create_notification(
+                        db=db,
+                        user_id=assigned_emp.account_id,
+                        type="TASK_APPROVED",
+                        title="Task Approved",
+                        message=f"Task #{task.task_id} '{task.title}' has been approved.",
+                        link=f"/tasks/{task.task_id}",
+                    )
+                except Exception:
+                    pass
+
+            write_audit_log(
+                db=db,
+                action=AuditAction.APPROVE,
+                entity_name="TASK",
+                entity_ref_id=str(task.task_id),
+                account_id=current_user.account_id,
+                old_value={"status": "IN_REVIEW"},
+                new_value={"status": "DONE", "progress_pct": 100},
+                ip_address=ip_address,
+            )
+
+            message = f"Task #{task.task_id} successfully approved and marked as DONE."
+
+        else:  # REJECT
+            if not payload.feedback or len(payload.feedback.strip()) < 10:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail="Feedback is mandatory (minimum 10 characters) when rejecting a task.",
+                )
+
+            task.status = TaskStatus.REJECTED
+            task.rejection_feedback = payload.feedback.strip()
+            task.rejection_count = (task.rejection_count or 0) + 1
+
+            if task.milestone_id:
+                milestone = db.query(ProjectMilestone).filter(ProjectMilestone.id == task.milestone_id).first()
+                if milestone:
+                    if milestone.status == MilestoneStatus.COMPLETED:
+                        milestone.status = MilestoneStatus.PENDING
+                        milestone.completed_at = None
+                    milestone_status_result = milestone.status.value if hasattr(milestone.status, "value") else str(milestone.status)
+
+            if assigned_emp and assigned_emp.account_id:
+                try:
+                    NotificationService.create_notification(
+                        db=db,
+                        user_id=assigned_emp.account_id,
+                        type="TASK_REJECTED",
+                        title="Task Rejected - Revision Requested",
+                        message=f"Task #{task.task_id} '{task.title}' was rejected. Feedback: {payload.feedback.strip()}",
+                        link=f"/tasks/{task.task_id}",
+                    )
+                except Exception:
+                    pass
+
+            write_audit_log(
+                db=db,
+                action=AuditAction.UPDATE,
+                entity_name="TASK",
+                entity_ref_id=str(task.task_id),
+                account_id=current_user.account_id,
+                old_value={"status": "IN_REVIEW"},
+                new_value={
+                    "status": "REJECTED",
+                    "rejection_feedback": payload.feedback.strip(),
+                    "rejection_count": task.rejection_count,
+                },
+                ip_address=ip_address,
+            )
+
+            message = f"Task #{task.task_id} rejected with revision feedback."
+
+        db.commit()
+        db.refresh(task)
+
+        return TaskReviewResponse(
+            task_id=task.task_id,
+            status=task.status.value if hasattr(task.status, "value") else str(task.status),
+            progress_pct=task.progress_pct or 0,
+            completed_at=task.completed_at,
+            rejection_feedback=task.rejection_feedback,
+            rejection_count=task.rejection_count or 0,
+            milestone_id=task.milestone_id,
+            milestone_status=milestone_status_result,
+            message=message,
+        )
+
+
+# Add method to TaskSubmissionService as well for backward compatibility
+TaskSubmissionService.review_task = TaskReviewService.review_task
+
