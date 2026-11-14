@@ -17,6 +17,7 @@ from app.features.employees.schemas import (
     EmployeeSummaryResponse,
     EmployeeDetailResponse,
     DepartmentSummary,
+    EmployeeWorkloadResponse,
 )
 
 
@@ -257,3 +258,17 @@ class EmployeeService:
         )
 
         return EmployeeService.get_employee(db, emp_id)
+
+    @staticmethod
+    def get_employee_workload(db: Session, emp_id: int) -> EmployeeWorkloadResponse:
+        """
+        Retrieve aggregate workload metrics for an employee across all projects (US-39).
+        Raises EmployeeNotFoundError if employee does not exist.
+        """
+        employee = EmployeeRepository.get_by_id(db, emp_id)
+        if not employee:
+            raise EmployeeNotFoundError(emp_id)
+
+        metrics = EmployeeRepository.get_workload_metrics(db, emp_id)
+        return EmployeeWorkloadResponse(**metrics)
+

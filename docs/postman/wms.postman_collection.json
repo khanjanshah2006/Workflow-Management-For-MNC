@@ -1,796 +1,1788 @@
 {
-	"info": {
-		"_postman_id": "c1f72e90-84a2-4a4b-91d9-76bb44e3922c",
-		"name": "Workflow Management System for MNCs API",
-		"description": "Standardized Postman collection for WMS backend endpoints adhering to team skill specifications.",
-		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
-	},
-	"item": [
-		{
-			"name": "01 Auth",
-			"description": "Authentication and session management (features/auth)",
-			"item": [
-				{
-					"name": "POST Login as HR",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 200) {",
-									"    var jsonData = pm.response.json();",
-									"    pm.environment.set(\"access_token\", jsonData.access_token);",
-									"    console.log(\"HR access token set:\", jsonData.access_token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"email\": \"hr@company.com\",\n    \"password\": \"Password@123\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/login",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"login"
-							]
-						},
-						"description": "Login as HR Manager account. Saves access_token to environment automatically."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Login as PM",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 200) {",
-									"    var jsonData = pm.response.json();",
-									"    pm.environment.set(\"access_token\", jsonData.access_token);",
-									"    console.log(\"PM access token set:\", jsonData.access_token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"email\": \"pm@company.com\",\n    \"password\": \"Password@123\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/login",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"login"
-							]
-						},
-						"description": "Login as Project Manager account. Saves access_token to environment automatically."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Login as Admin",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 200) {",
-									"    var jsonData = pm.response.json();",
-									"    pm.environment.set(\"access_token\", jsonData.access_token);",
-									"    console.log(\"Admin access token set:\", jsonData.access_token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"email\": \"admin@company.com\",\n    \"password\": \"Admin@123\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/login",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"login"
-							]
-						},
-						"description": "Login as Admin account. Saves access_token to environment automatically."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Login as Employee",
-					"event": [
-						{
-							"listen": "test",
-							"script": {
-								"exec": [
-									"if (pm.response.code === 200) {",
-									"    var jsonData = pm.response.json();",
-									"    pm.environment.set(\"access_token\", jsonData.access_token);",
-									"    console.log(\"Employee access token set:\", jsonData.access_token);",
-									"}"
-								],
-								"type": "text/javascript"
-							}
-						}
-					],
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"email\": \"employee@company.com\",\n    \"password\": \"Password@123\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/login",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"login"
-							]
-						},
-						"description": "Login as standard Employee account. Saves access_token to environment automatically."
-					},
-					"response": []
-				},
-				{
-					"name": "GET Current User Profile",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/me",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"me"
-							]
-						},
-						"description": "Retrieves the authenticated user profile information."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Refresh Access Token",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/refresh",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"refresh"
-							]
-						},
-						"description": "Issues a fresh access token using the HttpOnly refresh token cookie."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Logout",
-					"request": {
-						"method": "POST",
-						"header": [],
-						"url": {
-							"raw": "{{base_url}}/api/v1/auth/logout",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"auth",
-								"logout"
-							]
-						},
-						"description": "Clears the active session and refresh token cookie."
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "02 Employees & Org",
-			"description": "Employee directory and organizational management (features/employees, features/org, features/departments)",
-			"item": [
-				{
-					"name": "GET List Departments",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/departments",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"departments"
-							]
-						},
-						"description": "Lists all company departments (US-05)."
-					},
-					"response": []
-				},
-				{
-					"name": "GET Browse Employee Directory",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/employees?skip=0&limit=20",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"employees"
-							],
-							"query": [
-								{
-									"key": "skip",
-									"value": "0"
-								},
-								{
-									"key": "limit",
-									"value": "20"
-								},
-								{
-									"key": "search",
-									"value": "",
-									"disabled": true
-								},
-								{
-									"key": "dept_id",
-									"value": "1",
-									"disabled": true
-								},
-								{
-									"key": "status",
-									"value": "ACTIVE",
-									"disabled": true
-								}
-							]
-						},
-						"description": "Browse paginated employee directory with search and filter capabilities (US-04)."
-					},
-					"response": []
-				},
-				{
-					"name": "GET Employee Details by ID",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/employees/1",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"employees",
-								"1"
-							]
-						},
-						"description": "Fetches detailed employee profile by employee ID."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Register New Employee",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"first_name\": \"Rohan\",\n    \"last_name\": \"Mehta\",\n    \"email\": \"rohan.mehta@company.com\",\n    \"phone\": \"+91 9876543210\",\n    \"dept_id\": 1,\n    \"designation\": \"Senior Backend Engineer\",\n    \"date_of_joining\": \"2026-10-15\",\n    \"password\": \"Password@123\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/employees",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"employees"
-							]
-						},
-						"description": "Onboard an employee, generate EMP code, and provision login user account. Restricted to HR/Admin."
-					},
-					"response": []
-				},
-				{
-					"name": "PATCH Update Employee Status",
-					"request": {
-						"method": "PATCH",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"status\": \"ACTIVE\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/employees/1/status",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"employees",
-								"1",
-								"status"
-							]
-						},
-						"description": "Update employee status (ACTIVE/INACTIVE) and sync account login. Restricted to HR/Admin."
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "03 Projects",
-			"description": "Project creation, lifecycle, staffing allocations, and project teams (features/projects - US-06, US-07)",
-			"item": [
-				{
-					"name": "POST Create Project",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"project_code\": \"PRJ-AI-01\",\n    \"name\": \"Enterprise AI Copilot System\",\n    \"description\": \"Internal agentic workflow assistant for MNC departments\",\n    \"start_date\": \"2026-10-20\",\n    \"end_date\": \"2027-04-30\",\n    \"priority\": \"HIGH\",\n    \"client_id\": 1\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects"
-							]
-						},
-						"description": "Create a new project record. Restricted to Project Managers (PM) and Admins."
-					},
-					"response": []
-				},
-				{
-					"name": "GET List Projects",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects?skip=0&limit=20",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects"
-							],
-							"query": [
-								{
-									"key": "skip",
-									"value": "0"
-								},
-								{
-									"key": "limit",
-									"value": "20"
-								}
-							]
-						},
-						"description": "List projects scoped by caller role (PM sees managed; Employee sees assigned; Admin sees all)."
-					},
-					"response": []
-				},
-				{
-					"name": "GET Project Details by ID",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1"
-							]
-						},
-						"description": "Retrieve project details by primary key."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Allocate Employee to Project",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"emp_id\": 1,\n    \"role_in_project\": \"Lead Backend Architect\"\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/assign",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"assign"
-							]
-						},
-						"description": "Allocate an employee to project roster (US-07). Restricted to managing PM or Admin."
-					},
-					"response": []
-				},
-				{
-					"name": "GET List Project Roster",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/assignments",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"assignments"
-							]
-						},
-						"description": "Lists all assigned employees on a project."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Create Team in Project",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"name\": \"Core Infrastructure Team\",\n    \"description\": \"Handles cloud hosting and database migrations\",\n    \"lead_emp_id\": 1\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/teams",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"teams"
-							]
-						},
-						"description": "Create a functional sub-team under a project (US-07)."
-					},
-					"response": []
-				},
-				{
-					"name": "GET List Project Teams",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/teams",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"teams"
-							]
-						},
-						"description": "List all teams formed under a project."
-					},
-					"response": []
-				},
-				{
-					"name": "POST Add Member to Team",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							},
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n    \"emp_id\": 1\n}"
-						},
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"teams",
-								"1",
-								"members"
-							]
-						},
-						"description": "Add an allocated project employee to a team. Returns 400 if not on project roster."
-					},
-					"response": []
-				},
-				{
-					"name": "GET List Team Members",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"projects",
-								"1",
-								"teams",
-								"1",
-								"members"
-							]
-						},
-						"description": "List all members of a team."
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "04 Tasks",
-			"description": "Task tracking and sprint boards (features/tasks)",
-			"item": []
-		},
-		{
-			"name": "05 Leave",
-			"description": "Leave requests and approvals (features/leave)",
-			"item": []
-		},
-		{
-			"name": "06 Notifications",
-			"description": "Notification delivery and subscriptions (features/notifications)",
-			"item": []
-		},
-		{
-			"name": "07 Client Portal",
-			"description": "External client view and deliverables access (features/client_portal)",
-			"item": []
-		},
-		{
-			"name": "08 Reporting",
-			"description": "Executive metrics, summaries and analytics (features/reporting)",
-			"item": []
-		},
-		{
-			"name": "09 Support",
-			"description": "Internal and client support tickets (features/support)",
-			"item": []
-		},
-		{
-			"name": "10 Admin",
-			"description": "System configuration and audit log inspection (features/admin, features/audit)",
-			"item": [
-				{
-					"name": "GET Paginated Audit Logs",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/audit-logs",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"api",
-								"v1",
-								"audit-logs"
-							]
-						},
-						"description": "View system audit logs. Restricted to ADMIN."
-					},
-					"response": []
-				}
-			]
-		}
-	],
-	"variable": [
-		{
-			"key": "base_url",
-			"value": "http://localhost:8000"
-		}
-	]
+  "info": {
+    "_postman_id": "c1f72e90-84a2-4a4b-91d9-76bb44e3922c",
+    "name": "Workflow Management System for MNCs API",
+    "description": "Standardized Postman collection for WMS backend endpoints adhering to team skill specifications.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "01 Auth",
+      "description": "Authentication and session management (features/auth)",
+      "item": [
+        {
+          "name": "POST Login as HR",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    console.log(\"HR access token set:\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"hr@company.com\",\n    \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login as HR Manager account. Saves access_token to environment automatically."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login as PM",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    console.log(\"PM access token set:\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"pm@company.com\",\n    \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login as Project Manager account. Saves access_token to environment automatically."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login as Admin",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.mfa_required) {",
+                  "        pm.environment.set(\"mfa_token\", jsonData.mfa_token);",
+                  "        console.log(\"MFA challenge required. Ephemeral mfa_token set:\", jsonData.mfa_token);",
+                  "    } else {",
+                  "        pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "        console.log(\"Admin access token set:\", jsonData.access_token);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"admin@company.com\",\n    \"password\": \"Admin@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login as Admin account. Saves access_token to environment automatically."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login as Employee",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    console.log(\"Employee access token set:\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"employee@company.com\",\n    \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Login as standard Employee account. Saves access_token to environment automatically."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Current User Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "Retrieves the authenticated user profile information."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Refresh Access Token",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/refresh",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "Issues a fresh access token using the HttpOnly refresh token cookie."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Logout",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/logout",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "Clears the active session and refresh token cookie."
+          },
+          "response": []
+        },
+        {
+          "name": "GET MFA Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/mfa/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "status"
+              ]
+            },
+            "description": "Inspect whether MFA is enabled for the currently authenticated user (US-31)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Setup MFA",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"mfa_secret\", jsonData.secret);",
+                  "    console.log(\"MFA secret set:\", jsonData.secret);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/mfa/setup",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "setup"
+              ]
+            },
+            "description": "Generate a Base32 TOTP secret and provisioning URI for Google Authenticator / Authy (US-31)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Verify MFA Code",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/mfa/verify",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "verify"
+              ]
+            },
+            "description": "Submit 6-digit TOTP code to confirm authenticator setup and activate MFA (US-31)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Complete MFA Login Challenge",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    console.log(\"MFA Login complete. Access token set:\", jsonData.access_token);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"mfa_token\": \"{{mfa_token}}\",\n    \"code\": \"123456\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/mfa/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "mfa",
+                "login"
+              ]
+            },
+            "description": "Complete MFA challenge with ephemeral mfa_token and current TOTP code (US-31)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 Employees & Org",
+      "description": "Employee directory and organizational management (features/employees, features/org, features/departments)",
+      "item": [
+        {
+          "name": "GET List Departments",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments"
+              ]
+            },
+            "description": "Lists all company departments (US-05)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Browse Employee Directory",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees?skip=0&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "search",
+                  "value": "",
+                  "disabled": true
+                },
+                {
+                  "key": "dept_id",
+                  "value": "1",
+                  "disabled": true
+                },
+                {
+                  "key": "status",
+                  "value": "ACTIVE",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Browse paginated employee directory with search and filter capabilities (US-04)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Employee Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees",
+                "1"
+              ]
+            },
+            "description": "Fetches detailed employee profile by employee ID."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Register New Employee",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"first_name\": \"Rohan\",\n    \"last_name\": \"Mehta\",\n    \"email\": \"rohan.mehta@company.com\",\n    \"phone\": \"+91 9876543210\",\n    \"dept_id\": 1,\n    \"designation\": \"Senior Backend Engineer\",\n    \"date_of_joining\": \"2026-10-15\",\n    \"password\": \"Password@123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees"
+              ]
+            },
+            "description": "Onboard an employee, generate EMP code, and provision login user account. Restricted to HR/Admin."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH Update Employee Status",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"status\": \"ACTIVE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees/1/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees",
+                "1",
+                "status"
+              ]
+            },
+            "description": "Update employee status (ACTIVE/INACTIVE) and sync account login. Restricted to HR/Admin."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Team Members Roster (US-37)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR Manager and SysAdmin can query any team's roster.\n- PM can query any team roster.\n- Team Lead can query their own assigned team.\n- 403 Forbidden if querying other teams or if non-lead employee / client.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2013 Active Team Members",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"employee_id\": 2,\n    \"emp_code\": \"EMP-DEV-02\",\n    \"full_name\": \"John Reese\",\n    \"email\": \"member@company.com\",\n    \"designation\": \"Senior Backend Engineer\"\n  }\n]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "200 OK \u2013 Empty Team",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access forbidden: you are not authorized to view team 2\"\n}",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "404 Not Found \u2013 Team Non-existent",
+              "status": "Not Found",
+              "code": 404,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Team with ID 99999 not found\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        },
+        {
+          "name": "GET Team Tasks Stub (US-37)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "tasks"
+              ]
+            },
+            "description": "US-37: Stub endpoint returning [] until S3 tasks land.\n\nAccess rules:\n- Same RBAC rules as members endpoint.\n- Returns empty array [] cleanly."
+          },
+          "response": [
+            {
+              "name": "200 OK \u2013 Tasks Stub",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[]",
+              "_postman_previewlanguage": "json"
+            },
+            {
+              "name": "403 Forbidden \u2013 Other Team",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access forbidden: you are not authorized to view team 2\"\n}",
+              "_postman_previewlanguage": "json"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 Projects",
+      "description": "Project creation, lifecycle, staffing allocations, and project teams (features/projects - US-06, US-07)",
+      "item": [
+        {
+          "name": "POST Create Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"project_code\": \"PRJ-AI-01\",\n    \"name\": \"Enterprise AI Copilot System\",\n    \"description\": \"Internal agentic workflow assistant for MNC departments\",\n    \"start_date\": \"2026-10-20\",\n    \"end_date\": \"2027-04-30\",\n    \"priority\": \"HIGH\",\n    \"client_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ]
+            },
+            "description": "Create a new project record. Restricted to Project Managers (PM) and Admins."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Projects",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects?skip=0&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects"
+              ],
+              "query": [
+                {
+                  "key": "skip",
+                  "value": "0"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List projects scoped by caller role (PM sees managed; Employee sees assigned; Admin sees all)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Project Details by ID",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1"
+              ]
+            },
+            "description": "Retrieve project details by primary key."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Allocate Employee to Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"emp_id\": 1,\n    \"role_in_project\": \"Lead Backend Architect\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "assign"
+              ]
+            },
+            "description": "Allocate an employee to project roster (US-07). Restricted to managing PM or Admin."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Project Roster",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/assignments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "assignments"
+              ]
+            },
+            "description": "Lists all assigned employees on a project."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Team in Project",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"name\": \"Core Infrastructure Team\",\n    \"description\": \"Handles cloud hosting and database migrations\",\n    \"lead_emp_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "teams"
+              ]
+            },
+            "description": "Create a functional sub-team under a project (US-07)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Project Teams",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "teams"
+              ]
+            },
+            "description": "List all teams formed under a project."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Add Member to Team",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"emp_id\": 1\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "teams",
+                "1",
+                "members"
+              ]
+            },
+            "description": "Add an allocated project employee to a team. Returns 400 if not on project roster."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Team Members",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/teams/1/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "teams",
+                "1",
+                "members"
+              ]
+            },
+            "description": "List all members of a team."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 Tasks",
+      "description": "Task tracking and sprint boards (features/tasks)",
+      "item": [
+        {
+          "name": "POST Submit Completed Task (Multipart with File) (US-11)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "remarks",
+                  "value": "Completed feature implementation, unit tests, and attached test evidence.",
+                  "type": "text"
+                },
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "deliverable_evidence.pdf",
+                  "description": "Deliverable evidence file (.pdf, .zip, .tar.gz, .png, .jpg, .docx <= 25MB)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submit"
+              ]
+            },
+            "description": "Employee marks task as ready for review, submits completion remarks, and attaches deliverable file. Transitions task status to IN_REVIEW and notifies Team Lead."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Completed Task (JSON Payload) (US-11)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"remarks\": \"Completed documentation and backend endpoints. Test coverage is 100%.\",\n  \"file_url\": \"https://storage.example.com/artifacts/build_v1.zip\",\n  \"file_name\": \"build_v1.zip\",\n  \"file_size_bytes\": 1048576\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submit",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submit"
+              ]
+            },
+            "description": "Employee submits completion remarks and optional external file URL in JSON payload."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Submissions (US-11)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions"
+              ]
+            },
+            "description": "Returns chronological list of all submissions recorded for this task."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Add Task Comment (US-33)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "GET Task Comments (US-33)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/comments",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "comments"
+              ]
+            },
+            "description": "Returns the chronological task thread with author name, role badge, and timestamps. Clients and users outside the task project scope are forbidden."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (In Progress) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"progress_pct\": 50,\n  \"blocker_reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Assigned employee or Team Lead updates completion percentage (0-99%) and sets status to IN_PROGRESS. Progress at 100% must be submitted via /submit."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (Flag as Blocked) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BLOCKED\",\n  \"progress_pct\": 45,\n  \"blocker_reason\": \"Awaiting database migration approval from DevOps\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Flags task as BLOCKED with mandatory blocker reason (min 5 characters). Automatically triggers real-time TASK_BLOCKED notification to the Team Lead."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 Leave",
+      "description": "Leave requests and approvals (features/leave)",
+      "item": []
+    },
+    {
+      "name": "06 Notifications",
+      "description": "Notification delivery and subscriptions (features/notifications)",
+      "item": []
+    },
+    {
+      "name": "07 Client Portal",
+      "description": "External client view and deliverables access (features/client_portal)",
+      "item": [
+        {
+          "name": "GET Client Contracted Projects (US-20)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "    pm.environment.set('client_project_id', data[0].project_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects"
+              ]
+            },
+            "description": "Lists all projects contracted to the authenticated CLIENT user with high-level milestone completion metrics. Strictly redacts internal employee/task data."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Client Project Milestones (US-21)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects/{{client_project_id}}/milestones",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects",
+                "{{client_project_id}}",
+                "milestones"
+              ]
+            },
+            "description": "Lists non-deleted delivery milestones for a contracted project belonging to the authenticated CLIENT user. Returns 404 if project does not exist or belongs to another client."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "08 Reporting",
+      "description": "Executive metrics, summaries and analytics (features/reporting)",
+      "item": []
+    },
+    {
+      "name": "09 Support",
+      "description": "Internal and client support tickets (features/support)",
+      "item": [
+        {
+          "name": "POST Submit Support Ticket (US-26)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"Laptop keyboard keys not responding\",\n  \"description\": \"Keys E, R, and T are unresponsive on internal company laptop.\",\n  \"category\": \"hardware\",\n  \"priority\": \"MEDIUM\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ]
+            },
+            "description": "Employee submits support ticket. Auto-generates sequential ticket_number and initial CREATED activity."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Support Tickets (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/my",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "my"
+              ]
+            },
+            "description": "Returns tickets submitted by current authenticated employee."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Ticket Details and Chronological Activities (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}"
+              ]
+            },
+            "description": "Returns ticket details with full chronological activity log."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Other Employee Ticket - 403 Forbidden (US-26)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{other_employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}"
+              ]
+            },
+            "description": "Ordinary employees cannot view tickets submitted by other employees (403 Forbidden)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "10 Admin",
+      "description": "System configuration and audit log inspection (features/admin, features/audit)",
+      "item": [
+        {
+          "name": "GET Search and Filter Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs?q=&action=&entity_name=&entity_ref_id=&ip_address=&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Keyword search in entities & JSON values",
+                  "disabled": true
+                },
+                {
+                  "key": "action",
+                  "value": "LOGIN",
+                  "description": "Action (CREATE, UPDATE, DELETE, LOGIN, APPROVE)",
+                  "disabled": true
+                },
+                {
+                  "key": "entity_name",
+                  "value": "USER_ACCOUNT",
+                  "description": "Entity name",
+                  "disabled": true
+                },
+                {
+                  "key": "account_id",
+                  "value": "",
+                  "description": "User account UUID filter",
+                  "disabled": true
+                },
+                {
+                  "key": "entity_ref_id",
+                  "value": "",
+                  "description": "Entity reference ID filter",
+                  "disabled": true
+                },
+                {
+                  "key": "ip_address",
+                  "value": "",
+                  "description": "Client IP address filter",
+                  "disabled": true
+                },
+                {
+                  "key": "start_date",
+                  "value": "2026-11-01T00:00:00Z",
+                  "description": "Start date (ISO)",
+                  "disabled": true
+                },
+                {
+                  "key": "end_date",
+                  "value": "2026-11-04T00:00:00Z",
+                  "description": "End date (ISO)",
+                  "disabled": true
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "View paginated audit trail events with multi-field search and keyword query (Admin only - US-30, US-47)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Export Audit Logs to CSV",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs/export?action=&entity_name=&q=",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs",
+                "export"
+              ],
+              "query": [
+                {
+                  "key": "action",
+                  "value": "LOGIN",
+                  "description": "Optional action filter",
+                  "disabled": true
+                },
+                {
+                  "key": "entity_name",
+                  "value": "USER_ACCOUNT",
+                  "description": "Optional entity filter",
+                  "disabled": true
+                },
+                {
+                  "key": "q",
+                  "value": "",
+                  "description": "Optional keyword search filter",
+                  "disabled": true
+                },
+                {
+                  "key": "account_id",
+                  "value": "",
+                  "description": "User UUID filter",
+                  "disabled": true
+                },
+                {
+                  "key": "start_date",
+                  "value": "",
+                  "description": "Start date (ISO)",
+                  "disabled": true
+                },
+                {
+                  "key": "end_date",
+                  "value": "",
+                  "description": "End date (ISO)",
+                  "disabled": true
+                }
+              ]
+            },
+            "description": "Stream filtered enterprise audit records as a CSV download (Admin only - US-47)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List System Parameters",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params"
+              ]
+            },
+            "description": "List all global system parameters. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update System Parameter",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"value\": \"120\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/system-params/session_timeout_minutes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "system-params",
+                "session_timeout_minutes"
+              ]
+            },
+            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Grant Time-Bound Elevated Access",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"user_id\": \"b8c56c22-0941-4cfa-81a2-c13e4b77f154\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"2026-12-31T23:59:59Z\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access"
+              ]
+            },
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Active Elevated Access Grants",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/active",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "active"
+              ]
+            },
+            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8000"
+    }
+  ]
 }
