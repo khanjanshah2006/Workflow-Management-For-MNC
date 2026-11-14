@@ -413,8 +413,8 @@ class TaskSubmissionService:
         """
         if not remarks or not remarks.strip():
             raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Remarks are required when submitting a task.",
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Remarks are required when submitting a task for review.",
             )
 
         # 1. Fetch task
