@@ -8,30 +8,33 @@ from app.db.session import get_db
 from app.features.tasks.comments import TaskCommentService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
+    PaginatedTasksResponse,
     TaskCommentCreate,
     TaskCommentResponse,
+    TaskCreate,
+    TaskDetailResponse,
+    TaskProgressResponse,
+    TaskProgressUpdateSchema,
     TaskResubmitResponse,
     TaskResubmitSchema,
     TaskReviewQueueItem,
     TaskSubmissionResponse,
-)
-from app.features.tasks.service import TaskService, TaskSubmissionService
-from app.models.team import Team
-from app.features.tasks.schemas import (
-    TaskCommentCreate,
-    TaskCommentResponse,
-    TaskProgressResponse,
-    TaskProgressUpdateSchema,
-    TaskSubmissionResponse,
+    TaskSummaryResponse,
 )
 from app.features.tasks.service import (
     TaskProgressService,
+    TaskService,
     TaskSubmissionService,
 )
+from app.models.enums import PriorityLevel, TaskStatus
+from app.models.team import Team
 from app.models.user_account import UserAccount
 
 router = APIRouter(prefix="/api/v1/tasks", tags=["Tasks"])
+project_tasks_router = APIRouter(prefix="/api/v1/projects", tags=["Tasks"])
 
+
+# ── RBAC Helpers for US-13 ──────────────────────────────────────────────
 
 def _check_review_queue_access(
     current_user: UserAccount = Depends(get_current_user),
@@ -47,15 +50,12 @@ def _check_review_queue_access(
         user_type_raw.value if hasattr(user_type_raw, "value") else str(user_type_raw or "")
     ).upper()
 
-    # 1. Direct role string match
     if user_type_str in ["TEAM_LEAD", "PM", "ADMIN", "SYSTEM_ADMIN", "PROJECT_MANAGER"]:
         return current_user
 
-    # 2. Check test mock flags or explicit role attribute
     if getattr(current_user, "is_team_lead", False) or getattr(current_user, "role", "").upper() == "TEAM_LEAD":
         return current_user
 
-    # 3. Check if EMPLOYEE is a designated lead of any team in the database
     if user_type_str == "EMPLOYEE":
         account_id = getattr(current_user, "account_id", None)
         emp_id = getattr(current_user, "emp_id", None)
@@ -68,7 +68,6 @@ def _check_review_queue_access(
             if lead_team is not None:
                 return current_user
 
-    # 4. Fallback to standard RBAC check (checks elevated access grants, raises 403 if invalid)
     require_role(current_user, allowed=["TEAM_LEAD", "PM", "ADMIN"], db=db)
     return current_user
 
@@ -77,9 +76,7 @@ def _check_resubmit_access(
     current_user: UserAccount = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> UserAccount:
-    """
-    Enforces RBAC for task resubmission: EMPLOYEE.
-    """
+    """Enforces RBAC for task resubmission: EMPLOYEE or TEAM_LEAD."""
     user_type_raw = getattr(current_user, "user_type", None)
     user_type_str = (
         user_type_raw.value if hasattr(user_type_raw, "value") else str(user_type_raw or "")
@@ -90,6 +87,61 @@ def _check_resubmit_access(
 
     require_role(current_user, allowed=["EMPLOYEE", "TEAM_LEAD"], db=db)
     return current_user
+
+
+# ── Static Collection Routes (must come before /{id}) ──────────────────
+
+@router.post(
+    "",
+    response_model=TaskDetailResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create a new task (US-09)",
+    description="Creates a task in TODO status with progress_pct=0 and rejection_count=0. Allowed for Team Lead, PM, and Admin.",
+)
+def create_task(
+    payload: TaskCreate,
+    request: Request,
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskDetailResponse:
+    ip_address = request.client.host if request.client else None
+    return TaskService.create_task(
+        db=db,
+        payload=payload,
+        actor=current_user,
+        ip_address=ip_address,
+    )
+
+
+@router.get(
+    "/my-tasks",
+    response_model=PaginatedTasksResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List tasks assigned to the current user (US-32)",
+    description="Returns paginated tasks strictly assigned to the authenticated user's employee record.",
+)
+def get_my_tasks(
+    status_filter: Optional[TaskStatus] = Query(None, alias="status"),
+    priority: Optional[PriorityLevel] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PaginatedTasksResponse:
+    items, total = TaskService.list_my_tasks(
+        db=db,
+        actor=current_user,
+        status_filter=status_filter,
+        priority_filter=priority,
+        page=page,
+        limit=limit,
+    )
+    return PaginatedTasksResponse(
+        items=[TaskSummaryResponse.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        limit=limit,
+    )
 
 
 @router.get(
@@ -116,6 +168,25 @@ def get_review_queue(
         page=page,
         limit=limit,
     )
+
+
+# ── Dynamic Item Routes (/{id}) ─────────────────────────────────────────
+
+@router.get(
+    "/{id}",
+    response_model=TaskDetailResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get full task details (US-32)",
+    description="Returns complete task record including project name, milestone title, creator, and assignee details.",
+)
+def get_task_detail(
+    id: int,
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> TaskDetailResponse:
+    return TaskService.get_task(db=db, task_id=id)
+
+
 @router.post(
     "/{id}/comments",
     response_model=TaskCommentResponse,
@@ -165,10 +236,6 @@ async def submit_task(
     current_user: UserAccount = Depends(require_role(["EMPLOYEE"])),
     db: Session = Depends(get_db),
 ) -> TaskSubmissionResponse:
-    """
-    Employee endpoint to submit a completed task.
-    Supports multipart/form-data (with file attachment and remarks) or application/json.
-    """
     content_type = request.headers.get("content-type", "").lower()
     remarks_str: str = ""
     file_obj: Optional[UploadFile] = None
@@ -200,7 +267,6 @@ async def submit_task(
                 detail="Invalid JSON payload provided.",
             )
     else:
-        # Fallback for mixed or unspecified content-types
         try:
             body = await request.json()
             remarks_str = body.get("remarks", "")
@@ -224,8 +290,9 @@ async def submit_task(
         current_user=current_user,
         file=file_obj,
         file_bytes=file_bytes,
+        original_filename=file_name_val,
+        pre_existing_file_url=file_url_val,
         file_name=file_name_val,
-        file_url=file_url_val,
         file_size_bytes=file_size_val,
         ip_address=ip_address,
     )
@@ -255,6 +322,8 @@ def resubmit_task(
         payload=payload,
         current_user=current_user,
     )
+
+
 @router.get(
     "/{id}/submissions",
     response_model=List[TaskSubmissionResponse],
@@ -267,10 +336,6 @@ def get_task_submissions(
     current_user: UserAccount = Depends(get_current_user),
     db: Session = Depends(get_db),
 ) -> List[TaskSubmissionResponse]:
-    """
-    Retrieve all submissions recorded for the specified task in chronological order.
-    Enforces ordinary employee isolation: employees may only see submissions for their own tasks.
-    """
     return TaskSubmissionService.get_task_submissions(
         db=db,
         task_id=id,
@@ -296,13 +361,6 @@ def update_task_progress(
     current_user: UserAccount = Depends(require_role(["EMPLOYEE", "TEAM_LEAD", "ADMIN"])),
     db: Session = Depends(get_db),
 ) -> TaskProgressResponse:
-    """
-    Update progress percentage (0-99) or mark task as BLOCKED (US-10).
-    - Status == 'BLOCKED' requires blocker_reason (min 5 chars) -> 422
-    - Progress == 100% is rejected -> 400 (must use /submit review flow)
-    - Non-assigned employees rejected -> 403
-    - Dispatches TASK_BLOCKED notification to Team Lead when blocked.
-    """
     ip_address = request.client.host if request.client else None
     task = TaskProgressService.update_progress(
         db=db,
@@ -313,3 +371,38 @@ def update_task_progress(
     )
     return task
 
+
+# ── Project Scoped Routes ───────────────────────────────────────────────
+
+@project_tasks_router.get(
+    "/{project_id}/tasks",
+    response_model=PaginatedTasksResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List tasks for a project (US-32)",
+    description="Lists all tasks for a project, filterable by team_id, milestone_id, and status.",
+)
+def get_project_tasks(
+    project_id: int,
+    team_id: Optional[int] = Query(None, ge=1),
+    milestone_id: Optional[int] = Query(None, ge=1),
+    status_filter: Optional[TaskStatus] = Query(None, alias="status"),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> PaginatedTasksResponse:
+    items, total = TaskService.list_project_tasks(
+        db=db,
+        project_id=project_id,
+        team_id=team_id,
+        milestone_id=milestone_id,
+        status_filter=status_filter,
+        page=page,
+        limit=limit,
+    )
+    return PaginatedTasksResponse(
+        items=[TaskSummaryResponse.model_validate(t) for t in items],
+        total=total,
+        page=page,
+        limit=limit,
+    )

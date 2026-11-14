@@ -42,7 +42,8 @@ def upgrade() -> None:
             "EXCEPTION WHEN duplicate_object THEN null; "
             "END $$;"
         )
-        status_type = sa.Enum('pending', 'completed', name='project_milestone_status_enum')
+        # create_existing=False / create_type=False so SQLAlchemy does NOT try CREATE TYPE again
+        status_type = sa.Enum('pending', 'completed', name='project_milestone_status_enum', create_type=False)
     else:
         status_type = sa.Enum('pending', 'completed', name='project_milestone_status_enum')
 
@@ -125,8 +126,9 @@ def upgrade() -> None:
                 ondelete='SET NULL',
             )
 
-        # Drop old milestone table
-        op.drop_index(op.f('ix_milestone_project_id'), table_name='milestone')
+        # Drop old milestone table (use IF EXISTS to handle varying index names across environments)
+        op.execute("DROP INDEX IF EXISTS ix_milestone_project_id")
+        op.execute("DROP INDEX IF EXISTS idx_milestone_project")
         op.drop_table('milestone')
 
 
