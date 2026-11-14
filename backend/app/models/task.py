@@ -62,3 +62,26 @@ class TaskSubmission(Base):
     task = relationship("Task", back_populates="submissions")
     submitter = relationship("Employee", foreign_keys=[submitted_by])
 
+    @property
+    def created_at(self):
+        return self.submitted_at
+
+    @property
+    def submission_remarks(self) -> str | None:
+        return self.remarks
+
+    @property
+    def deliverable_file_url(self) -> str | None:
+        return self.file_url
+
+    @property
+    def submission_timestamp(self):
+        return self.submitted_at
+
+    @property
+    def revised_remarks(self) -> str | None:
+        return self.remarks
+
+    @property
+    def new_file_url(self) -> str | None:
+        return self.file_url
