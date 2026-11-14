@@ -9,6 +9,7 @@ from app.features.tasks.comments import TaskCommentService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
     PaginatedTasksResponse,
+    ReviewDecision,
     TaskCommentCreate,
     TaskCommentResponse,
     TaskCreate,
@@ -17,12 +18,15 @@ from app.features.tasks.schemas import (
     TaskProgressUpdateSchema,
     TaskResubmitResponse,
     TaskResubmitSchema,
+    TaskReviewDecisionSchema,
     TaskReviewQueueItem,
+    TaskReviewResponse,
     TaskSubmissionResponse,
     TaskSummaryResponse,
 )
 from app.features.tasks.service import (
     TaskProgressService,
+    TaskReviewService,
     TaskService,
     TaskSubmissionService,
 )
@@ -370,6 +374,32 @@ def update_task_progress(
         ip_address=ip_address,
     )
     return task
+
+
+@router.put(
+    "/{id}/review",
+    response_model=TaskReviewResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Review submitted task (US-12)",
+    description="Team Lead or Project Manager evaluates a submitted task: approve (marking DONE) or reject (with mandatory feedback).",
+)
+def review_task(
+    id: int,
+    payload: TaskReviewDecisionSchema,
+    request: Request,
+    current_user: UserAccount = Depends(
+        require_role(["TEAM_LEAD", "PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"])
+    ),
+    db: Session = Depends(get_db),
+) -> TaskReviewResponse:
+    ip_address = request.client.host if request.client else None
+    return TaskReviewService.review_task(
+        db=db,
+        task_id=id,
+        payload=payload,
+        current_user=current_user,
+        ip_address=ip_address,
+    )
 
 
 # ── Project Scoped Routes ───────────────────────────────────────────────

@@ -616,7 +616,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Active Team Members",
+              "name": "200 OK – Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -629,7 +629,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK \u2013 Empty Team",
+              "name": "200 OK – Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -642,7 +642,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "name": "403 Forbidden – Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -655,7 +655,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found \u2013 Team Non-existent",
+              "name": "404 Not Found – Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -697,7 +697,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Tasks Stub",
+              "name": "200 OK – Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -710,7 +710,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team",
+              "name": "403 Forbidden – Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1331,7 +1331,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -1440,6 +1440,80 @@
             "description": "Flags task as BLOCKED with mandatory blocker reason (min 5 characters). Automatically triggers real-time TASK_BLOCKED notification to the Team Lead."
           },
           "response": []
+        },
+        {
+          "name": "PUT Review Task - Approve (US-12)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"APPROVE\",\n  \"feedback\": \"Code approved, unit tests pass with 98% coverage.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "review"
+              ]
+            },
+            "description": "Team Lead or PM approves submitted task. Marks status as DONE, sets progress to 100%, updates milestone, and notifies employee."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Review Task - Reject with Feedback (US-12)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"REJECT\",\n  \"feedback\": \"Missing error handling for expired tokens in auth router.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/review",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "review"
+              ]
+            },
+            "description": "Team Lead or PM rejects submitted task requesting revisions. Sets status to REJECTED, records feedback, increments rejection_count, and notifies employee."
+          },
+          "response": []
         }
       ]
     },
@@ -1540,6 +1614,157 @@
               ]
             },
             "description": "Lists non-deleted delivery milestones for a contracted project belonging to the authenticated CLIENT user. Returns 404 if project does not exist or belongs to another client."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Publish Project Deliverable (US-22)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data && data.deliverable_id) {",
+                  "    pm.environment.set('deliverable_id', data.deliverable_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Architecture & SOW Deliverable\",\n  \"description\": \"Final technical specification ready for client signoff.\",\n  \"file_url\": \"https://storage.example.com/deliverables/sow-v1.pdf\",\n  \"milestone_id\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/{{project_id}}/deliverables",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "{{project_id}}",
+                "deliverables"
+              ]
+            },
+            "description": "Allows assigned PM or ADMIN to publish a client-facing deliverable for review (US-22)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Project Deliverables (US-22)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (Array.isArray(data) && data.length > 0) {",
+                  "    pm.environment.set('deliverable_id', data[0].deliverable_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/projects/{{client_project_id}}/deliverables",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "projects",
+                "{{client_project_id}}",
+                "deliverables"
+              ]
+            },
+            "description": "Lists published deliverables with versions, signoff status, and feedback history. Allowed for owning CLIENT or assigned PM."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Deliverable Feedback / Signoff (US-22)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"decision\": \"ACCEPTED\",\n  \"comments\": \"Meets all functional requirements outlined in SOW.\",\n  \"rating\": 5\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/client/deliverables/{{deliverable_id}}/feedback",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "client",
+                "deliverables",
+                "{{deliverable_id}}",
+                "feedback"
+              ]
+            },
+            "description": "Allows the owning CLIENT to accept a deliverable or request changes (mandatory comments), notifies PM, and logs to audit trail."
           },
           "response": []
         },
