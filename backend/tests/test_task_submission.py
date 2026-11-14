@@ -196,6 +196,7 @@ def test_setup(db_session):
     task_in_progress = Task(
         task_id=1,
         project_id=proj.project_id,
+        team_id=team.team_id,
         assigned_to=emp1.emp_id,
         created_by=lead_emp.emp_id,
         title="Implement Task Submission API",
@@ -206,6 +207,7 @@ def test_setup(db_session):
     task_todo = Task(
         task_id=2,
         project_id=proj.project_id,
+        team_id=team.team_id,
         assigned_to=emp1.emp_id,
         created_by=lead_emp.emp_id,
         title="Todo Task",
@@ -214,6 +216,7 @@ def test_setup(db_session):
     task_in_review = Task(
         task_id=3,
         project_id=proj.project_id,
+        team_id=team.team_id,
         assigned_to=emp1.emp_id,
         created_by=lead_emp.emp_id,
         title="Already In Review Task",
@@ -222,6 +225,7 @@ def test_setup(db_session):
     task_done = Task(
         task_id=4,
         project_id=proj.project_id,
+        team_id=team.team_id,
         assigned_to=emp1.emp_id,
         created_by=lead_emp.emp_id,
         title="Done Task",
@@ -230,6 +234,7 @@ def test_setup(db_session):
     task_blocked = Task(
         task_id=5,
         project_id=proj.project_id,
+        team_id=team.team_id,
         assigned_to=emp1.emp_id,
         created_by=lead_emp.emp_id,
         title="Blocked Task",

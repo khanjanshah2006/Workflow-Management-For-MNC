@@ -91,7 +91,7 @@ def setup_comments():
     db.add_all([*employees.values(), project])
     db.flush()
     team = Team(team_id=1, project_id=1, lead_emp_id=employees["lead"].emp_id, name="Core", status=TeamStatus.ACTIVE)
-    task = Task(task_id=1, project_id=1, assigned_to=employees[UserType.EMPLOYEE].emp_id, created_by=employees["lead"].emp_id, title="Build feature", status=TaskStatus.TODO)
+    task = Task(task_id=1, project_id=1, team_id=team.team_id, assigned_to=employees[UserType.EMPLOYEE].emp_id, created_by=employees["lead"].emp_id, title="Build feature", status=TaskStatus.TODO)
     db.add_all([team, task])
     db.flush()
     db.add_all([TeamMember(team_id=1, emp_id=employees[UserType.EMPLOYEE].emp_id), TeamMember(team_id=1, emp_id=employees["lead"].emp_id), TeamMember(team_id=1, emp_id=employees["member"].emp_id)])

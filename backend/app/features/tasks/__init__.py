@@ -1,5 +1,8 @@
 from app.features.tasks.repository import TaskRepository
-from app.features.tasks.router import router as tasks_router
+from app.features.tasks.router import (
+    project_tasks_router,
+    router as tasks_router,
+)
 from app.features.tasks.schemas import (
     TaskAssignRequest,
     TaskProgressResponse,
@@ -19,16 +22,19 @@ from app.features.tasks.service import (
     TaskAssignmentForbiddenError,
     TaskNotFoundError,
     TaskProgressService,
+    TaskReviewService,
     TaskService,
     TaskSubmissionService,
 )
 
 __all__ = [
     "tasks_router",
+    "project_tasks_router",
     "TaskRepository",
     "TaskService",
     "TaskSubmissionService",
     "TaskProgressService",
+    "TaskReviewService",
     "TaskAssignRequest",
     "TaskReassignRequest",
     "TaskResponse",

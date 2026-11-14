@@ -3,6 +3,7 @@ import enum
 
 class UserType(str, enum.Enum):
     EMPLOYEE = "EMPLOYEE"
+    TEAM_LEAD = "TEAM_LEAD"
     PM = "PM"
     HR = "HR"
     CLIENT = "CLIENT"
@@ -47,6 +48,7 @@ class TaskStatus(str, enum.Enum):
     IN_REVIEW = "IN_REVIEW"
     DONE = "DONE"
     BLOCKED = "BLOCKED"
+    REJECTED = "REJECTED"
 
 
 class DeliverableStatus(str, enum.Enum):
