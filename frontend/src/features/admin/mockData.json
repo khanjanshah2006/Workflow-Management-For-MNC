@@ -1,0 +1,121 @@
+{
+  "systemParams": [
+    {
+      "key": "session_timeout_minutes",
+      "value": "60",
+      "value_type": "integer",
+      "description": "User session idle timeout in minutes before automatic sign-out",
+      "updated_at": "2026-11-09T10:00:00Z",
+      "updated_by": "00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "key": "max_upload_size_mb",
+      "value": "25",
+      "value_type": "integer",
+      "description": "Maximum allowed file attachment upload size in megabytes",
+      "updated_at": "2026-11-09T10:00:00Z",
+      "updated_by": "00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "key": "allow_client_signup",
+      "value": "false",
+      "value_type": "boolean",
+      "description": "Whether public client self-registration is enabled on login portal",
+      "updated_at": "2026-11-09T10:00:00Z",
+      "updated_by": "00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "key": "password_min_length",
+      "value": "8",
+      "value_type": "integer",
+      "description": "Minimum required characters for corporate user passwords",
+      "updated_at": "2026-11-09T10:00:00Z",
+      "updated_by": "00000000-0000-0000-0000-000000000001"
+    },
+    {
+      "key": "mfa_enforced_roles",
+      "value": "[\"ADMIN\",\"SYSTEM_ADMIN\",\"PM\"]",
+      "value_type": "json",
+      "description": "Roles strictly requiring multi-factor authentication on every login",
+      "updated_at": "2026-11-09T10:00:00Z",
+      "updated_by": "00000000-0000-0000-0000-000000000001"
+    }
+  ],
+  "activeGrants": [
+    {
+      "id": 1,
+      "user_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "user_email": "sarah.jenkins@worksphere.internal",
+      "granted_role": "PM",
+      "granted_by": "00000000-0000-0000-0000-000000000001",
+      "granted_at": "2026-11-09T08:30:00Z",
+      "expires_at": "2026-11-12T18:00:00Z",
+      "revoked_at": null,
+      "reason": "Acting Project Manager covering Sprint 9 deployment while primary PM is on leave"
+    },
+    {
+      "id": 2,
+      "user_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "user_email": "marcus.vance@worksphere.internal",
+      "granted_role": "ADMIN",
+      "granted_by": "00000000-0000-0000-0000-000000000001",
+      "granted_at": "2026-11-09T12:00:00Z",
+      "expires_at": "2026-11-09T23:59:59Z",
+      "revoked_at": null,
+      "reason": "Emergency infrastructure maintenance and migration verification window"
+    }
+  ],
+  "anomalyAlerts": [
+    {
+      "id": "ALT-2026-9041",
+      "alert_type": "SUSPICIOUS_FAILED_LOGINS",
+      "severity": "CRITICAL",
+      "title": "Repeated Failed-Login Spike Detected",
+      "description": "32 consecutive failed authentication attempts detected from IP 198.51.100.74 targeting privileged administrator accounts within a 3-minute window.",
+      "source_ip": "198.51.100.74",
+      "target_account": "admin.security@worksphere.internal",
+      "attempts_count": 32,
+      "timestamp": "2026-11-09T17:42:15Z",
+      "status": "ACTIVE"
+    },
+    {
+      "id": "ALT-2026-9042",
+      "alert_type": "OFF_HOURS_ACCESS",
+      "severity": "HIGH",
+      "title": "Unusual Off-Hours Elevated Privilege Access",
+      "description": "Elevated administrator session initiated outside approved operating schedules (02:18 AM UTC).",
+      "source_ip": "203.0.113.88",
+      "target_account": "devops.lead@worksphere.internal",
+      "attempts_count": 1,
+      "timestamp": "2026-11-09T02:18:40Z",
+      "status": "ACTIVE"
+    }
+  ],
+  "users": [
+    {
+      "account_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+      "email": "sarah.jenkins@worksphere.internal",
+      "user_type": "EMPLOYEE",
+      "is_active": true
+    },
+    {
+      "account_id": "b2c3d4e5-f6a7-8901-bcde-f12345678901",
+      "email": "marcus.vance@worksphere.internal",
+      "user_type": "EMPLOYEE",
+      "is_active": true
+    },
+    {
+      "account_id": "c3d4e5f6-a7b8-9012-cdef-123456789012",
+      "email": "elena.rostova@worksphere.internal",
+      "user_type": "IT_SUPPORT",
+      "is_active": true
+    },
+    {
+      "account_id": "d4e5f6a7-b8c9-0123-def1-234567890123",
+      "email": "david.kim@worksphere.internal",
+      "user_type": "EMPLOYEE",
+      "is_active": true
+    }
+  ]
+}
+
