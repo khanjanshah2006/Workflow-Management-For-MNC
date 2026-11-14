@@ -1,8 +1,8 @@
 """
-Repository layer for Client Portal (US-20, US-21, US-22).
+Repository layer for Client Portal (US-20, US-21, US-22, US-41, US-42).
 
 All client-facing queries enforce strict client-scoped isolation.  No query
-returns employee PII, task tables, or internal comments.
+returns employee PII, task tables, or internal comments without proper authorization.
 """
 
 from typing import Dict, List, Optional, Tuple
@@ -13,14 +13,15 @@ from sqlalchemy.orm import Session
 from app.models.client import Client
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.employee import Employee
-from app.models.enums import DeliverableStatus, FeedbackDecision, MilestoneStatus
+from app.models.enums import CommonStatus, DeliverableStatus, FeedbackDecision, MilestoneStatus
 from app.models.milestone import ProjectMilestone
-from app.models.project import Project
+from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
+from app.models.team import Team, TeamMember
 
 
 class ClientPortalRepository:
-    """Data-access methods scoped to the authenticated client."""
+    """Data-access methods scoped to the authenticated client and project management."""
 
     @staticmethod
     def get_client_by_account_id(db: Session, account_id) -> Optional[Client]:
@@ -100,18 +101,28 @@ class ClientPortalRepository:
             .all()
         )
 
-    # ------------------------------------------------------------------
-    # Deliverables & Feedback queries (US-22)
-    # ------------------------------------------------------------------
-
     @staticmethod
     def get_project_by_id(db: Session, project_id: int) -> Optional[Project]:
-        """Fetch a project by primary key."""
+        """Fetch a project by primary key regardless of client ownership."""
         return (
             db.query(Project)
             .filter(Project.project_id == project_id)
             .first()
         )
+
+    @staticmethod
+    def update_team_visibility(
+        db: Session, project: Project, is_visible: bool
+    ) -> Project:
+        """Persist updated is_team_visible_to_client flag on a project."""
+        project.is_team_visible_to_client = is_visible
+        db.flush()
+        db.refresh(project)
+        return project
+
+    # ------------------------------------------------------------------
+    # Deliverables & Feedback queries (US-22)
+    # ------------------------------------------------------------------
 
     @staticmethod
     def get_pm_by_account_id(db: Session, account_id) -> Optional[ProjectManager]:
@@ -260,3 +271,44 @@ class ClientPortalRepository:
         db.refresh(feedback)
         return feedback
 
+    @staticmethod
+    def get_project_team_members(
+        db: Session, project_id: int
+    ) -> List[Tuple[str, str]]:
+        """
+        Return deduplicated list of ``(full_name, role_label)`` for employees
+        assigned to the project via Team/TeamMember or ProjectAssignment.
+        """
+        members_by_emp_id: Dict[int, Tuple[str, str]] = {}
+
+        team_rows = (
+            db.query(Employee.emp_id, Employee.full_name, Employee.designation)
+            .join(TeamMember, TeamMember.emp_id == Employee.emp_id)
+            .join(Team, Team.team_id == TeamMember.team_id)
+            .filter(
+                Team.project_id == project_id,
+                Employee.status == CommonStatus.ACTIVE,
+            )
+            .all()
+        )
+        for emp_id, full_name, designation in team_rows:
+            members_by_emp_id[emp_id] = (full_name, designation)
+
+        assign_rows = (
+            db.query(
+                Employee.emp_id,
+                Employee.full_name,
+                ProjectAssignment.role_in_project,
+            )
+            .join(ProjectAssignment, ProjectAssignment.emp_id == Employee.emp_id)
+            .filter(
+                ProjectAssignment.project_id == project_id,
+                ProjectAssignment.released_on.is_(None),
+                Employee.status == CommonStatus.ACTIVE,
+            )
+            .all()
+        )
+        for emp_id, full_name, role_in_project in assign_rows:
+            members_by_emp_id[emp_id] = (full_name, role_in_project)
+
+        return list(members_by_emp_id.values())
