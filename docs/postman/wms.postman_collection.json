@@ -1193,6 +1193,80 @@
             "description": "Returns the chronological task thread with author name, role badge, and timestamps. Clients and users outside the task project scope are forbidden."
           },
           "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (In Progress) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"IN_PROGRESS\",\n  \"progress_pct\": 50,\n  \"blocker_reason\": null\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Assigned employee or Team Lead updates completion percentage (0-99%) and sets status to IN_PROGRESS. Progress at 100% must be submitted via /submit."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Task Progress (Flag as Blocked) (US-10)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"BLOCKED\",\n  \"progress_pct\": 45,\n  \"blocker_reason\": \"Awaiting database migration approval from DevOps\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/progress",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "progress"
+              ]
+            },
+            "description": "Flags task as BLOCKED with mandatory blocker reason (min 5 characters). Automatically triggers real-time TASK_BLOCKED notification to the Team Lead."
+          },
+          "response": []
         }
       ]
     },
