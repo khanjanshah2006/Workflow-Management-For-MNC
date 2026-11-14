@@ -277,3 +277,41 @@ class PaginatedTasksResponse(BaseModel):
     limit: int
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ============================================================================
+# US-12: Task Review Engine Schemas
+# ============================================================================
+
+class ReviewDecision(str, Enum):
+    APPROVE = "APPROVE"
+    REJECT = "REJECT"
+
+
+class TaskReviewDecisionSchema(BaseModel):
+    decision: ReviewDecision = Field(..., description="Evaluation decision: APPROVE or REJECT")
+    feedback: Optional[str] = Field(None, description="Mandatory review feedback when rejecting (minimum 10 characters)")
+
+    @model_validator(mode="after")
+    def validate_rejection_feedback(self) -> "TaskReviewDecisionSchema":
+        if self.decision == ReviewDecision.REJECT:
+            if not self.feedback or len(self.feedback.strip()) < 10:
+                raise ValueError("Feedback is mandatory (minimum 10 characters) when rejecting a task.")
+        return self
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskReviewResponse(BaseModel):
+    task_id: int = Field(..., description="Task identifier")
+    status: str = Field(..., description="Current status of the task after evaluation")
+    progress_pct: int = Field(..., description="Task progress percentage (100 if approved)")
+    completed_at: Optional[datetime] = Field(None, description="Completion timestamp if approved")
+    rejection_feedback: Optional[str] = Field(None, description="Feedback explaining rejection reasons")
+    rejection_count: int = Field(..., description="Number of times task has been rejected")
+    milestone_id: Optional[int] = Field(None, description="Associated milestone identifier")
+    milestone_status: Optional[str] = Field(None, description="Status of the associated milestone after recalculation")
+    message: str = Field(..., description="Summary confirmation message")
+
+    model_config = ConfigDict(from_attributes=True)
+
