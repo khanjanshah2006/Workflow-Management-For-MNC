@@ -1,0 +1,41 @@
+{
+  "task_id": 103,
+  "project_id": 2,
+  "team_id": 3,
+  "milestone_id": 7,
+  "assigned_to": 12,
+  "created_by": 8,
+  "title": "Integrate Supabase Webhook for Real-time Notifications",
+  "description": "Configure PostgreSQL replication triggers in Supabase and establish the FastAPI event consumer endpoint to push notifications into the in-app bell feed.",
+  "priority": "HIGH",
+  "status": "BLOCKED",
+  "progress_pct": 40,
+  "start_date": "2026-11-08",
+  "due_date": "2026-11-15",
+  "completed_at": null,
+  "rejection_count": 1,
+  "rejection_feedback": "Initial implementation failed on payload schema validation when event type was missed. Please handle all event schemas.",
+  "blocker_reason": "Waiting for enterprise Supabase service role credentials and network egress allowance from IT SecOps.",
+  "created_at": "2026-11-08T11:00:00Z",
+  "updated_at": "2026-11-13T16:45:00Z",
+  "project": {
+    "project_id": 2,
+    "name": "Cloud Workflow Modernization"
+  },
+  "milestone": {
+    "id": 7,
+    "title": "Core Event Streaming Infrastructure"
+  },
+  "assignee": {
+    "emp_id": 12,
+    "full_name": "Alex Mercer",
+    "email": "alex.mercer@worksphere.internal",
+    "designation": "Senior Full-Stack Engineer"
+  },
+  "creator": {
+    "emp_id": 8,
+    "full_name": "Sarah Connor",
+    "email": "sarah.connor@worksphere.internal",
+    "designation": "Lead System Architect"
+  }
+}
