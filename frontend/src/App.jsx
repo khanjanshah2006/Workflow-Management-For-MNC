@@ -16,6 +16,7 @@ import TeamRosterPage from "./features/team/TeamRosterPage";
 import SecurityOpsPage from "./features/admin/SecurityOpsPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
+import MyTasksPage from "./features/tasks/MyTasksPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -91,15 +92,7 @@ function App() {
             <Route path="/team" element={<TeamRosterPage />} />
             <Route path="/team/roster" element={<TeamRosterPage />} />
             <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
-            <Route
-              path="/tasks"
-              element={
-                <PagePlaceholder
-                  title="Tasks"
-                  description="Your task workspace will appear here."
-                />
-              }
-            />
+            <Route path="/tasks" element={<MyTasksPage />} />
             <Route path="/support" element={<ITSupportDashboard />} />
             <Route path="/support/tickets" element={<ITSupportDashboard />} />
             <Route path="/it-support" element={<ITSupportDashboard />} />
