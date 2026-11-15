@@ -1028,6 +1028,44 @@
   background: #3746bb;
 }
 
+.btn-drawer-submit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #16a34a;
+  color: #ffffff;
+  border: 1px solid #15803d;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-drawer-submit:hover {
+  background: #15803d;
+}
+
+.btn-drawer-resubmit {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ea580c;
+  color: #ffffff;
+  border: 1px solid #c2410c;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-drawer-resubmit:hover {
+  background: #c2410c;
+}
+
 /* Drawer Body */
 .drawer-body {
   padding: 24px;
@@ -1632,6 +1670,289 @@
 @keyframes shimmer {
   0% { background-position: -200% 0; }
   100% { background-position: 200% 0; }
+}
+
+/* ==========================================================================
+   Rejection Feedback Banner (US-13)
+   ========================================================================== */
+.rejection-feedback-banner {
+  background: #fff7ed;
+  border: 1.5px solid #fed7aa;
+  border-radius: 10px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 4px;
+}
+
+.rejection-banner-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.rejection-banner-title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.rejection-banner-icon {
+  font-size: 20px;
+  color: #ea580c;
+  line-height: 1;
+}
+
+.rejection-banner-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 700;
+  color: #9a3412;
+}
+
+.rejection-count-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c2410c;
+  background: #ffedd5;
+  border: 1px solid #fdba74;
+  padding: 2px 8px;
+  border-radius: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+}
+
+.rejection-feedback-body {
+  font-size: 13px;
+  color: #7c2d12;
+  background: #ffffff;
+  border: 1px solid #fed7aa;
+  border-radius: 8px;
+  padding: 12px 14px;
+  line-height: 1.5;
+}
+
+.rejection-feedback-body strong {
+  display: block;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #9a3412;
+  margin-bottom: 4px;
+}
+
+.rejection-feedback-footer {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.btn-banner-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #ea580c;
+  color: #ffffff;
+  border: 1px solid #c2410c;
+  border-radius: 7px;
+  padding: 7px 14px;
+  font-size: 12.5px;
+  font-weight: 650;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-banner-action:hover {
+  background: #c2410c;
+}
+
+/* ==========================================================================
+   Submit & Resubmit Deliverable Modals (US-11 & US-13)
+   ========================================================================== */
+.submit-modal,
+.resubmit-modal {
+  width: 540px;
+  max-width: 100%;
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  animation: scaleUp 180ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.modal-task-subtitle {
+  margin: 4px 0 0;
+  font-size: 12px;
+  font-weight: 500;
+  color: #64748b;
+}
+
+/* File Dropzone */
+.file-dropzone {
+  border: 2px dashed #cbd5e1;
+  border-radius: 10px;
+  background: #f8fafc;
+  padding: 24px 16px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 150ms ease;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.file-dropzone:hover {
+  border-color: #4456d9;
+  background: #f5f7ff;
+}
+
+.file-dropzone.dragging {
+  border-color: #4456d9;
+  background: #eef2ff;
+  transform: scale(1.01);
+}
+
+.file-dropzone:focus-visible {
+  border-color: #4456d9;
+  box-shadow: 0 0 0 3px rgba(68, 86, 217, 0.15);
+}
+
+.file-dropzone-icon {
+  font-size: 32px;
+  margin-bottom: 6px;
+}
+
+.file-dropzone-text {
+  margin: 0;
+  font-size: 13px;
+  color: #334155;
+}
+
+.file-dropzone-hint {
+  margin: 4px 0 0;
+  font-size: 11px;
+  color: #94a3b8;
+}
+
+/* File Preview Card */
+.file-preview-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+}
+
+.file-preview-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  overflow: hidden;
+}
+
+.file-preview-icon {
+  font-size: 22px;
+}
+
+.file-preview-name {
+  font-size: 13px;
+  font-weight: 650;
+  color: #1e293b;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 320px;
+}
+
+.file-preview-size {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.btn-file-remove {
+  background: transparent;
+  border: none;
+  font-size: 16px;
+  color: #64748b;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  transition: all 120ms ease;
+}
+
+.btn-file-remove:hover {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+/* Resubmit URL Notice */
+.resubmit-url-notice {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 8px;
+  font-size: 11.5px;
+  color: #1e40af;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  line-height: 1.45;
+}
+
+.resubmit-url-notice-icon {
+  font-size: 14px;
+  line-height: 1.2;
+}
+
+.btn-modal-cancel {
+  padding: 9px 18px;
+  background: #ffffff;
+  border: 1px solid #d0d7e2;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #475569;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.btn-modal-cancel:hover:not(:disabled) {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.btn-modal-submit {
+  padding: 9px 20px;
+  background: #16a34a;
+  border: 1px solid #15803d;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 650;
+  color: #ffffff;
+  cursor: pointer;
+  transition: all 120ms ease;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.btn-modal-submit:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.btn-modal-submit:disabled,
+.btn-modal-cancel:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* ==========================================================================

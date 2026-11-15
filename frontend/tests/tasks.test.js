@@ -15,7 +15,15 @@ import {
   fetchAllMyTasks,
   updateTaskProgress,
   groupTasksForKanban,
+  submitTask,
+  resubmitTask,
+  getTaskSubmissions,
+  validateDeliverableFile,
+  isValidUrl,
+  ALLOWED_FILE_EXTENSIONS,
+  MAX_FILE_SIZE_BYTES,
 } from "../src/api/tasksApi.js";
+import { apiClient } from "../src/api/client.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -748,5 +756,556 @@ describe("8. Kanban Grouping Contract & REJECTED Isolation", () => {
     const nullGrouped = groupTasksForKanban(null);
     assert.deepEqual(nullGrouped.TODO, []);
     assert.deepEqual(nullGrouped.REJECTED, []);
+  });
+});
+
+
+describe("9. Task Submission & Deliverable Validation (submitTask & US-11)", () => {
+  const originalFetch = globalThis.fetch;
+  const originalLocalStorage = globalThis.localStorage;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    globalThis.localStorage = originalLocalStorage;
+  });
+
+  test("exports expected ALLOWED_FILE_EXTENSIONS and MAX_FILE_SIZE_BYTES constants", () => {
+    assert.deepEqual(ALLOWED_FILE_EXTENSIONS, [
+      ".pdf",
+      ".zip",
+      ".tar.gz",
+      ".png",
+      ".jpg",
+      ".jpeg",
+      ".docx",
+    ]);
+    assert.equal(MAX_FILE_SIZE_BYTES, 25 * 1024 * 1024);
+  });
+
+  test("rejects taskId when missing, null or empty", async () => {
+    await assert.rejects(
+      () => submitTask(null, { remarks: "Done" }),
+      /Task ID is required/
+    );
+    await assert.rejects(
+      () => submitTask("", { remarks: "Done" }),
+      /Task ID is required/
+    );
+  });
+
+  test("rejects empty or whitespace-only remarks", async () => {
+    await assert.rejects(
+      () => submitTask(102, { remarks: "" }),
+      /Remarks are required/
+    );
+    await assert.rejects(
+      () => submitTask(102, { remarks: "     " }),
+      /Remarks are required/
+    );
+    await assert.rejects(
+      () => submitTask(102, {}),
+      /Remarks are required/
+    );
+  });
+
+  test("validates deliverable file extensions strictly", () => {
+    // Allowed extensions
+    const allowed = [
+      "document.pdf",
+      "archive.zip",
+      "bundle.tar.gz",
+      "BUNDLE.TAR.GZ",
+      "screenshot.png",
+      "photo.jpg",
+      "image.jpeg",
+      "report.docx",
+    ];
+    for (const name of allowed) {
+      const res = validateDeliverableFile({ name, size: 1024 });
+      assert.equal(res.valid, true, `Expected ${name} to be valid`);
+      assert.equal(res.error, undefined);
+    }
+
+    // Disallowed extensions
+    const disallowed = [
+      "malware.exe",
+      "script.sh",
+      "index.js",
+      "styles.css",
+      "video.mp4",
+      "audio.mp3",
+      "data.csv",
+    ];
+    for (const name of disallowed) {
+      const res = validateDeliverableFile({ name, size: 1024 });
+      assert.equal(res.valid, false, `Expected ${name} to be rejected`);
+      assert.match(res.error, /File type not allowed/);
+    }
+  });
+
+  test("validates file size at and above the 25MB boundary", () => {
+    const exactly25MB = 25 * 1024 * 1024;
+    const over25MB = 25 * 1024 * 1024 + 1;
+    const under25MB = 25 * 1024 * 1024 - 1;
+
+    // At or under 25MB passes
+    assert.equal(
+      validateDeliverableFile({ name: "deliverable.zip", size: exactly25MB }).valid,
+      true
+    );
+    assert.equal(
+      validateDeliverableFile({ name: "deliverable.zip", size: under25MB }).valid,
+      true
+    );
+
+    // Above 25MB fails
+    const overCheck = validateDeliverableFile({ name: "deliverable.zip", size: over25MB });
+    assert.equal(overCheck.valid, false);
+    assert.match(overCheck.error, /File size exceeds the 25MB limit/);
+  });
+
+  test("dispatches correct multipart fields, auth bearer header, and credentials without manual Content-Type", async () => {
+    let capturedUrl = "";
+    let capturedMethod = "";
+    let capturedHeaders = null;
+    let capturedCredentials = null;
+    let capturedBody = null;
+
+    // Simulate stored user authentication token
+    globalThis.localStorage = {
+      getItem: (key) => (key === "wms_access_token" ? "jwt-bearer-test-token-789" : null),
+      setItem: () => {},
+      removeItem: () => {},
+    };
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedCredentials = options?.credentials;
+      capturedBody = options?.body;
+
+      return new Response(
+        JSON.stringify({
+          submission_id: 501,
+          task_id: 102,
+          submitted_by: 12,
+          remarks: "Initial test deliverable",
+          file_name: "evidence.pdf",
+          file_url: "/uploads/task_submissions/evidence.pdf",
+          file_size_bytes: 4096,
+          submitted_at: "2026-11-15T20:00:00Z",
+        }),
+        {
+          status: 201,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    };
+
+    // Real standard File instance
+    const fakeFile = new File(["sample deliverable content"], "evidence.pdf", {
+      type: "application/pdf",
+    });
+
+    const res = await submitTask(102, {
+      remarks: "   Initial test deliverable   ",
+      file: fakeFile,
+    });
+
+    assert.equal(capturedMethod, "POST");
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/102\/submit$/);
+    assert.equal(capturedCredentials, "include", "Credentials must be 'include'");
+
+    // Authorization header must carry bearer token from auth storage
+    assert.equal(
+      capturedHeaders["Authorization"],
+      "Bearer jwt-bearer-test-token-789",
+      "Bearer token must be injected into request headers"
+    );
+
+    // Content-Type must NOT be manually set so the browser/fetch provides its multipart boundary
+    assert.equal(
+      capturedHeaders["Content-Type"],
+      undefined,
+      "Content-Type header must be omitted for multipart/form-data"
+    );
+
+    // Body must be a genuine FormData instance, never a JSON string
+    assert.equal(capturedBody instanceof FormData, true);
+    assert.equal(capturedBody.get("remarks"), "Initial test deliverable");
+    assert.equal(capturedBody.get("file").name, "evidence.pdf");
+
+    assert.equal(res.submission_id, 501);
+    assert.equal(res.task_id, 102);
+  });
+
+  test("handles API errors (400, 403, 500) gracefully", async () => {
+    globalThis.fetch = async () => {
+      return new Response(
+        JSON.stringify({
+          detail: "Cannot submit task with status 'TODO'. Task status must be 'IN_PROGRESS'.",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    };
+
+    await assert.rejects(
+      () => submitTask(101, { remarks: "Test remarks" }),
+      /Task status must be 'IN_PROGRESS'/
+    );
+  });
+});
+
+describe("10. Task Resubmission & URL-based Deliverable Contract (resubmitTask & US-13)", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("rejects missing taskId or empty revised remarks", async () => {
+    await assert.rejects(
+      () => resubmitTask(null, { revised_remarks: "Fixes" }),
+      /Task ID is required/
+    );
+    await assert.rejects(
+      () => resubmitTask(103, { revised_remarks: "" }),
+      /Revised remarks are required/
+    );
+    await assert.rejects(
+      () => resubmitTask(103, { revised_remarks: "   " }),
+      /Revised remarks are required/
+    );
+  });
+
+  test("dispatches correct JSON payload with revised_remarks and new_file_url", async () => {
+    let capturedUrl = "";
+    let capturedMethod = "";
+    let capturedHeaders = null;
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedBody = JSON.parse(options?.body || "{}");
+
+      return new Response(
+        JSON.stringify({
+          task_id: 103,
+          title: "Fixed Task",
+          status: "IN_REVIEW",
+          team_id: 3,
+          assigned_to: 12,
+          submission_id: 502,
+          revised_remarks: capturedBody.revised_remarks,
+          new_file_url: capturedBody.new_file_url,
+          message: "Task resubmitted successfully",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    };
+
+    const res = await resubmitTask(103, {
+      revised_remarks: "   Addressed security ingress allowlist feedback   ",
+      new_file_url: "  https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/99  ",
+    });
+
+    assert.equal(capturedMethod, "PUT");
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/103\/resubmit$/);
+    assert.equal(capturedHeaders["Content-Type"], "application/json");
+
+    // Strictly conforms to backend JSON contract:
+    assert.deepEqual(capturedBody, {
+      revised_remarks: "Addressed security ingress allowlist feedback",
+      new_file_url: "https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/99",
+    });
+
+    assert.equal(res.status, "IN_REVIEW");
+    assert.equal(res.submission_id, 502);
+  });
+
+  test("sends null for new_file_url when deliverable URL is omitted", async () => {
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedBody = JSON.parse(options?.body || "{}");
+      return new Response(
+        JSON.stringify({
+          task_id: 103,
+          status: "IN_REVIEW",
+          message: "Task resubmitted successfully",
+        }),
+        {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    };
+
+    await resubmitTask(103, {
+      revised_remarks: "Fixed typo in configuration",
+    });
+
+    assert.equal(capturedBody.new_file_url, null);
+  });
+
+  test("handles backend error when task is not in REJECTED status", async () => {
+    globalThis.fetch = async () => {
+      return new Response(
+        JSON.stringify({
+          detail: "Task must currently have status == 'REJECTED' to resubmit. Current status: 'IN_PROGRESS'.",
+        }),
+        {
+          status: 400,
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+    };
+
+    await assert.rejects(
+      () => resubmitTask(102, { revised_remarks: "Attempted early resubmit" }),
+      /Task must currently have status == 'REJECTED'/
+    );
+  });
+
+  test("regression: resubmitTask conforms to backend TaskResubmitResponse shape and excludes nested domain objects", async () => {
+    // Exact schema returned by backend /api/v1/tasks/{id}/resubmit (TaskResubmitResponse)
+    const mockBackendResponse = {
+      task_id: 104,
+      title: "Implement OAuth2 PKCE Flow",
+      status: "IN_REVIEW",
+      team_id: 2,
+      assigned_to: 12,
+      submission_id: 503,
+      revised_remarks: "Added code_challenge and code_verifier validation per TL review notes",
+      new_file_url: "https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/105",
+      message: "Task resubmitted successfully",
+    };
+
+    globalThis.fetch = async () => {
+      return new Response(JSON.stringify(mockBackendResponse), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await resubmitTask(104, {
+      revised_remarks: "Added code_challenge and code_verifier validation per TL review notes",
+      new_file_url: "https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/105",
+    });
+
+    // 1. Confirm returned status is IN_REVIEW
+    assert.equal(res.status, "IN_REVIEW");
+    assert.equal(res.task_id, 104);
+    assert.equal(res.submission_id, 503);
+    assert.equal(res.message, "Task resubmitted successfully");
+    assert.equal(res.revised_remarks, "Added code_challenge and code_verifier validation per TL review notes");
+    assert.equal(res.new_file_url, "https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/105");
+
+    // 2. CONTRACT INTEGRITY: TaskResubmitResponse MUST NOT include nested domain objects
+    // Callers must not assume full project, milestone, assignee, or creator objects exist in the response
+    assert.equal(res.project, undefined, "TaskResubmitResponse must not contain project object");
+    assert.equal(res.milestone, undefined, "TaskResubmitResponse must not contain milestone object");
+    assert.equal(res.assignee, undefined, "TaskResubmitResponse must not contain assignee object");
+    assert.equal(res.creator, undefined, "TaskResubmitResponse must not contain creator object");
+  });
+
+  test("isValidUrl validates optional deliverable URLs strictly (empty allowed, http/https required)", () => {
+    // Optional field: empty, whitespace or null are valid
+    assert.equal(isValidUrl(""), true);
+    assert.equal(isValidUrl("   "), true);
+    assert.equal(isValidUrl(null), true);
+    assert.equal(isValidUrl(undefined), true);
+
+    // Valid http and https absolute URLs
+    assert.equal(isValidUrl("https://github.com/khanjanshah2006/Workflow-Management-For-MNC/pull/99"), true);
+    assert.equal(isValidUrl("http://localhost:8000/docs"), true);
+    assert.equal(isValidUrl("https://drive.google.com/file/d/12345/view"), true);
+
+    // Invalid non-http schemes and malformed strings
+    assert.equal(isValidUrl("not-a-valid-url"), false);
+    assert.equal(isValidUrl("ftp://files.example.com/archive.zip"), false);
+    assert.equal(isValidUrl("javascript:alert(1)"), false);
+    assert.equal(isValidUrl("data:text/plain;base64,SGVsbG8="), false);
+    assert.equal(isValidUrl("//missing-protocol.com"), false);
+  });
+
+  test("resubmitTask rejects malformed deliverable URL before dispatching", async () => {
+    await assert.rejects(
+      () =>
+        resubmitTask(104, {
+          revised_remarks: "Fixed bug",
+          new_file_url: "not-a-valid-url",
+        }),
+      /Invalid deliverable URL/
+    );
+  });
+
+  test("getTaskSubmissions dispatches GET /api/v1/tasks/{id}/submissions correctly", async () => {
+    let capturedUrl = "";
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options?.method;
+      return new Response(
+        JSON.stringify([
+          {
+            submission_id: 1,
+            task_id: 104,
+            remarks: "First submission",
+            submitted_at: "2026-11-15T12:00:00Z",
+          },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    };
+
+    await assert.rejects(() => getTaskSubmissions(null), /Task ID is required/);
+
+    const submissions = await getTaskSubmissions(104);
+    assert.equal(capturedMethod, "GET");
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/104\/submissions$/);
+    assert.equal(Array.isArray(submissions), true);
+    assert.equal(submissions.length, 1);
+    assert.equal(submissions[0].submission_id, 1);
+  });
+});
+
+describe("11. Shared API Client Headers & Serialization (JSON vs FormData)", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("JSON POST requests serialize body and retain Content-Type: application/json", async () => {
+    let capturedHeaders = null;
+    let capturedBody = null;
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedBody = options?.body;
+      return new Response(JSON.stringify({ success: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const payload = { title: "API Client Test", count: 42, active: true };
+    await apiClient.post("/api/v1/test-json", payload);
+
+    assert.equal(capturedMethod, "POST");
+    assert.equal(
+      capturedHeaders["Content-Type"],
+      "application/json",
+      "Ordinary JSON POST must retain Content-Type: application/json"
+    );
+    assert.equal(typeof capturedBody, "string");
+    assert.deepEqual(JSON.parse(capturedBody), payload);
+  });
+
+  test("JSON PUT requests serialize body and retain Content-Type: application/json", async () => {
+    let capturedHeaders = null;
+    let capturedBody = null;
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedBody = options?.body;
+      return new Response(JSON.stringify({ updated: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const payload = { status: "IN_PROGRESS", progress_pct: 75 };
+    await apiClient.put("/api/v1/test-json/1", payload);
+
+    assert.equal(capturedMethod, "PUT");
+    assert.equal(
+      capturedHeaders["Content-Type"],
+      "application/json",
+      "Ordinary JSON PUT must retain Content-Type: application/json"
+    );
+    assert.equal(typeof capturedBody, "string");
+    assert.deepEqual(JSON.parse(capturedBody), payload);
+  });
+
+  test("FormData POST requests omit manual Content-Type and pass genuine FormData", async () => {
+    let capturedHeaders = null;
+    let capturedBody = null;
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedBody = options?.body;
+      return new Response(JSON.stringify({ uploaded: true }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const formData = new FormData();
+    formData.append("title", "Multipart Document");
+    formData.append(
+      "file",
+      new File(["content"], "doc.pdf", { type: "application/pdf" })
+    );
+
+    await apiClient.post("/api/v1/test-upload", formData);
+
+    assert.equal(capturedMethod, "POST");
+    assert.equal(
+      capturedHeaders["Content-Type"],
+      undefined,
+      "FormData requests must omit manual Content-Type header so fetch manages multipart boundary"
+    );
+    assert.equal(capturedBody instanceof FormData, true);
+    assert.equal(capturedBody.get("title"), "Multipart Document");
+    assert.equal(capturedBody.get("file").name, "doc.pdf");
+  });
+
+  test("FormData PUT and postForm requests omit manual Content-Type and pass genuine FormData", async () => {
+    let capturedHeaders = null;
+    let capturedBody = null;
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedMethod = options?.method;
+      capturedHeaders = options?.headers;
+      capturedBody = options?.body;
+      return new Response(JSON.stringify({ status: "ok" }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const formData = new FormData();
+    formData.append("revised", "true");
+
+    // Test apiClient.put with FormData
+    await apiClient.put("/api/v1/test-put-form", formData);
+    assert.equal(capturedMethod, "PUT");
+    assert.equal(capturedHeaders["Content-Type"], undefined);
+    assert.equal(capturedBody instanceof FormData, true);
+
+    // Test apiClient.postForm with FormData
+    await apiClient.postForm("/api/v1/test-post-form", formData);
+    assert.equal(capturedMethod, "POST");
+    assert.equal(capturedHeaders["Content-Type"], undefined);
+    assert.equal(capturedBody instanceof FormData, true);
   });
 });
