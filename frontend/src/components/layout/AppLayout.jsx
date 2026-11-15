@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import NotificationBell from "../common/NotificationBell";
+import { useAuth } from "../../context/AuthContext";
 
 const navigation = [
   { path: "/dashboard", label: "Dashboard", icon: "▦" },
@@ -9,12 +10,20 @@ const navigation = [
   { path: "/tasks", label: "Tasks", icon: "✓" },
   { path: "/support", label: "IT Support", icon: "🛠" },
   { path: "/profile", label: "My Profile", icon: "○" },
+  { path: "/admin/users", label: "User Admin", icon: "👤" },
 ];
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, role, logout } = useAuth();
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
 
   const currentPage =
     navigation.find((item) => item.path === location.pathname)?.label ??
@@ -24,6 +33,8 @@ export default function AppLayout() {
       ? "Projects"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
+      : location.pathname.startsWith("/admin")
+      ? "User Admin"
       : "Dashboard");
 
   return (
@@ -103,9 +114,47 @@ export default function AppLayout() {
 
           <div className="topbar-right">
             <span className="environment-label">Development</span>
+            {user && (
+              <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+                <span style={{ fontSize: "12px", fontWeight: "600", color: "#334155" }}>
+                  {user.full_name || user.email}
+                </span>
+                <span
+                  style={{
+                    fontSize: "11px",
+                    background: "#e0e7ff",
+                    color: "#3730a3",
+                    padding: "2px 6px",
+                    borderRadius: "4px",
+                    fontWeight: "600",
+                  }}
+                >
+                  {role || "User"}
+                </span>
+                <button
+                  onClick={handleLogout}
+                  style={{
+                    background: "#fee2e2",
+                    color: "#991b1b",
+                    border: "1px solid #fecaca",
+                    borderRadius: "6px",
+                    padding: "4px 8px",
+                    fontSize: "12px",
+                    fontWeight: "600",
+                    cursor: "pointer",
+                  }}
+                >
+                  Logout
+                </button>
+              </div>
+            )}
             <NotificationBell />
-            <div className="user-avatar" title="Demo profile">
-              U
+            <div className="user-avatar" title={user?.full_name || "Demo profile"}>
+              {user?.full_name
+                ? user.full_name.charAt(0).toUpperCase()
+                : user?.email
+                ? user.email.charAt(0).toUpperCase()
+                : "U"}
             </div>
           </div>
         </header>
