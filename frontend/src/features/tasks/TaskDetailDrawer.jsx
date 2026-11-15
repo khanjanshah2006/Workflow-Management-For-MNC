@@ -1,6 +1,9 @@
-import { useEffect } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useState, useEffect } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getTaskDetail, getProgressFillClass } from "../../api/tasksApi";
+import RejectionFeedbackBanner from "./components/RejectionFeedbackBanner";
+import SubmitTaskModal from "./components/SubmitTaskModal";
+import ResubmitTaskModal from "./components/ResubmitTaskModal";
 
 /**
  * Formats an ISO date/timestamp into a readable string.
@@ -96,12 +99,26 @@ function StatusBadge({ status }) {
  * @param {number|null} props.taskId Active task ID to display (or null to hide)
  * @param {() => void} props.onClose Callback to close drawer
  * @param {(task: Object) => void} props.onUpdateProgress Callback to launch progress modal
+ * @param {(updatedTask: Object) => void} [props.onTaskUpdated] Callback when task status/details change
  */
 export default function TaskDetailDrawer({
   taskId,
   onClose,
   onUpdateProgress,
+  onTaskUpdated,
 }) {
+  const queryClient = useQueryClient();
+  const [isSubmitModalOpen, setIsSubmitModalOpen] = useState(false);
+  const [isResubmitModalOpen, setIsResubmitModalOpen] = useState(false);
+  const [actionToast, setActionToast] = useState(null);
+
+  // Auto-dismiss transient action toast
+  useEffect(() => {
+    if (!actionToast) return;
+    const timer = setTimeout(() => setActionToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [actionToast]);
+
   // Close drawer on Escape key
   useEffect(() => {
     const handleKeyDown = (e) => {
@@ -235,19 +252,61 @@ export default function TaskDetailDrawer({
               <div style={{ fontSize: 12, color: "#64748b" }}>
                 <span>Team #{task.team_id}</span>
               </div>
-              {canUpdateProgress && (
-                <button
-                  type="button"
-                  className="btn-drawer-primary"
-                  onClick={() => onUpdateProgress(task)}
-                >
-                  <span aria-hidden="true">⚡</span> Update Progress
-                </button>
-              )}
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                {canUpdateProgress && (
+                  <button
+                    type="button"
+                    className="btn-drawer-primary"
+                    onClick={() => onUpdateProgress(task)}
+                  >
+                    <span aria-hidden="true">⚡</span> Update Progress
+                  </button>
+                )}
+
+                {/* Submit Task for Review (US-11: visible strictly for IN_PROGRESS) */}
+                {task.status === "IN_PROGRESS" && (
+                  <button
+                    type="button"
+                    className="btn-drawer-submit"
+                    onClick={() => setIsSubmitModalOpen(true)}
+                    aria-label="Submit task deliverable for review"
+                  >
+                    <span aria-hidden="true">📤</span> Submit for Review
+                  </button>
+                )}
+
+                {/* Revise and Resubmit Task (US-13: visible strictly for REJECTED) */}
+                {task.status === "REJECTED" && (
+                  <button
+                    type="button"
+                    className="btn-drawer-resubmit"
+                    onClick={() => setIsResubmitModalOpen(true)}
+                    aria-label="Revise and resubmit rejected task"
+                  >
+                    <span aria-hidden="true">🔄</span> Revise &amp; Resubmit
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Drawer Body */}
             <div className="drawer-body">
+              {/* Action Feedback Toast */}
+              {actionToast && (
+                <div
+                  className={`tasks-toast ${
+                    actionToast.type === "error" ? "toast-error" : "toast-success"
+                  }`}
+                  style={{ position: "static", marginBottom: 12, width: "100%" }}
+                  role="status"
+                >
+                  <span aria-hidden="true">
+                    {actionToast.type === "error" ? "⚠️" : "✓"}
+                  </span>
+                  <span>{actionToast.message}</span>
+                </div>
+              )}
+
               {/* Blocker Alert Banner */}
               {(task.status === "BLOCKED" || task.blocker_reason) && (
                 <div className="drawer-alert drawer-alert-blocked" role="alert">
@@ -263,24 +322,31 @@ export default function TaskDetailDrawer({
                 </div>
               )}
 
-              {/* Review Rejection Banner */}
-              {(task.rejection_count > 0 || task.rejection_feedback) && (
-                <div className="drawer-alert drawer-alert-rejected" role="alert">
-                  <span className="drawer-alert-icon" aria-hidden="true">
-                    ↩
-                  </span>
-                  <div className="drawer-alert-content">
-                    <div className="drawer-alert-title">
-                      Review Feedback · Returned ({task.rejection_count}{" "}
-                      {task.rejection_count === 1 ? "time" : "times"})
-                    </div>
-                    <div>
-                      {task.rejection_feedback ||
-                        "Changes requested by reviewer before sign-off."}
+              {/* Rejection Feedback Banner (US-13: visible strictly on REJECTED) */}
+              <RejectionFeedbackBanner
+                task={task}
+                onOpenResubmit={() => setIsResubmitModalOpen(true)}
+              />
+
+              {/* Historical Review Feedback for non-REJECTED tasks that had prior rejections */}
+              {task.status !== "REJECTED" &&
+                (task.rejection_count > 0 || task.rejection_feedback) && (
+                  <div className="drawer-alert drawer-alert-rejected" role="alert">
+                    <span className="drawer-alert-icon" aria-hidden="true">
+                      ↩
+                    </span>
+                    <div className="drawer-alert-content">
+                      <div className="drawer-alert-title">
+                        Prior Review Feedback · Returned ({task.rejection_count}{" "}
+                        {task.rejection_count === 1 ? "time" : "times"})
+                      </div>
+                      <div>
+                        {task.rejection_feedback ||
+                          "Changes requested by reviewer before sign-off."}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )}
+                )}
 
               {/* Progress Section */}
               <div className="drawer-section">
@@ -437,6 +503,60 @@ export default function TaskDetailDrawer({
                 </p>
               </div>
             </div>
+
+            {/* Modals for Task Submission & Resubmission (US-11 & US-13) */}
+            {isSubmitModalOpen && (
+              <SubmitTaskModal
+                task={task}
+                onClose={() => setIsSubmitModalOpen(false)}
+                onSuccess={(result) => {
+                  queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] });
+                  queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+                  refetch();
+                  setActionToast({
+                    type: "success",
+                    message:
+                      result?.message ||
+                      "Task deliverable submitted for review! Status updated to IN_REVIEW.",
+                  });
+                  if (onTaskUpdated) {
+                    onTaskUpdated({
+                      ...task,
+                      status: "IN_REVIEW",
+                    });
+                  }
+                }}
+              />
+            )}
+
+            {isResubmitModalOpen && (
+              <ResubmitTaskModal
+                task={task}
+                onClose={() => setIsResubmitModalOpen(false)}
+                onSuccess={(result) => {
+                  // Confirm returned status is IN_REVIEW from TaskResubmitResponse
+                  const updatedStatus =
+                    result?.status === "IN_REVIEW" ? result.status : "IN_REVIEW";
+                  queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] });
+                  queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
+                  refetch();
+                  setActionToast({
+                    type: "success",
+                    message:
+                      result?.message ||
+                      "Revised task resubmitted for review! Status updated to IN_REVIEW.",
+                  });
+                  if (onTaskUpdated) {
+                    // TaskResubmitResponse does not include project, milestone, assignee, or creator objects.
+                    // Preserve original task details and update status cleanly.
+                    onTaskUpdated({
+                      ...task,
+                      status: updatedStatus,
+                    });
+                  }
+                }}
+              />
+            )}
           </>
         )}
       </div>

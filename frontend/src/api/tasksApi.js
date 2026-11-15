@@ -362,6 +362,174 @@ export async function updateTaskProgress(
   return apiClient.put(`/api/v1/tasks/${taskId}/progress`, body);
 }
 
+/**
+ * Permitted file extensions for task deliverable attachments (US-11).
+ */
+export const ALLOWED_FILE_EXTENSIONS = [
+  ".pdf",
+  ".zip",
+  ".tar.gz",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".docx",
+];
+
+/**
+ * Maximum deliverable attachment file size in bytes (25MB).
+ */
+export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 26,214,400 bytes
+
+/**
+ * Validates a file's format and size against WorkSphere deliverable standards.
+ * Allowed types: .pdf, .zip, .tar.gz, .png, .jpg, .jpeg, .docx
+ * Max size: 25 MB
+ *
+ * @param {File|{ name: string, size: number }|null} file
+ * @returns {{ valid: boolean, error?: string }}
+ */
+export function validateDeliverableFile(file) {
+  if (!file) return { valid: true };
+
+  const fileName = (file.name || "").toLowerCase();
+  const isAllowedExt =
+    fileName.endsWith(".tar.gz") ||
+    ALLOWED_FILE_EXTENSIONS.some((ext) => fileName.endsWith(ext));
+
+  if (!isAllowedExt) {
+    return {
+      valid: false,
+      error:
+        "File type not allowed. Permitted formats: PDF, ZIP, TAR.GZ, PNG, JPG, JPEG, DOCX.",
+    };
+  }
+
+  if (file.size > MAX_FILE_SIZE_BYTES) {
+    const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
+    return {
+      valid: false,
+      error: `File size exceeds the 25MB limit (current size: ${sizeMb} MB).`,
+    };
+  }
+
+  return { valid: true };
+}
+
+/**
+ * Submit task deliverable for review (US-11).
+ *
+ * Dispatches multipart/form-data with remarks and optional file attachment.
+ * Transitions task status from IN_PROGRESS to IN_REVIEW and alerts Team Lead.
+ *
+ * @param {number|string} taskId
+ * @param {Object} payload
+ * @param {string} payload.remarks Mandatory remarks describing deliverables
+ * @param {File} [payload.file] Optional attached file (max 25MB)
+ * @returns {Promise<Object>} TaskSubmissionResponse
+ */
+export async function submitTask(taskId, { remarks, file } = {}) {
+  if (!taskId) {
+    throw new Error("Task ID is required for submission.");
+  }
+
+  const trimmedRemarks = (remarks || "").trim();
+  if (!trimmedRemarks) {
+    throw new Error("Remarks are required when submitting a task for review.");
+  }
+
+  if (file) {
+    const check = validateDeliverableFile(file);
+    if (!check.valid) {
+      throw new Error(check.error);
+    }
+  }
+
+  const formData = new FormData();
+  formData.append("remarks", trimmedRemarks);
+  if (file) {
+    formData.append("file", file);
+  }
+
+  return apiClient.post(`/api/v1/tasks/${taskId}/submit`, formData);
+}
+
+/**
+ * Validates whether an optional deliverable URL is well-formed.
+ * Empty, null, or whitespace-only inputs are considered valid (optional field).
+ * When provided, URL must be an absolute http:// or https:// URL.
+ *
+ * @param {string|null|undefined} urlStr
+ * @returns {boolean}
+ */
+export function isValidUrl(urlStr) {
+  if (!urlStr || typeof urlStr !== "string" || !urlStr.trim()) {
+    return true; // Optional field: empty is valid
+  }
+  try {
+    const parsed = new URL(urlStr.trim());
+    return parsed.protocol === "http:" || parsed.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Resubmit revised task after rejection (US-13).
+ *
+ * CRITICAL BACKEND CONTRACT:
+ * The PUT /api/v1/tasks/{id}/resubmit endpoint exclusively accepts JSON:
+ * { revised_remarks: string, new_file_url?: string }
+ * It does NOT accept multipart file uploads. File evidence must be supplied via URL.
+ *
+ * @param {number|string} taskId
+ * @param {Object} payload
+ * @param {string} payload.revised_remarks Mandatory description of fixes applied
+ * @param {string} [payload.new_file_url] Optional URL to updated deliverable or repository
+ * @returns {Promise<Object>} TaskResubmitResponse
+ */
+export async function resubmitTask(
+  taskId,
+  { revised_remarks, new_file_url } = {}
+) {
+  if (!taskId) {
+    throw new Error("Task ID is required for resubmission.");
+  }
+
+  const trimmedRemarks = (revised_remarks || "").trim();
+  if (!trimmedRemarks) {
+    throw new Error(
+      "Revised remarks are required when resubmitting a task."
+    );
+  }
+
+  const trimmedUrl = new_file_url ? String(new_file_url).trim() : null;
+  if (trimmedUrl && !isValidUrl(trimmedUrl)) {
+    throw new Error(
+      "Invalid deliverable URL. URL must start with http:// or https://"
+    );
+  }
+
+  const body = {
+    revised_remarks: trimmedRemarks,
+    new_file_url: trimmedUrl,
+  };
+
+  return apiClient.put(`/api/v1/tasks/${taskId}/resubmit`, body);
+}
+
+/**
+ * Fetch chronological list of submissions for a task (US-11).
+ *
+ * @param {number|string} taskId
+ * @returns {Promise<Array<Object>>} List of TaskSubmissionResponse
+ */
+export async function getTaskSubmissions(taskId) {
+  if (!taskId) {
+    throw new Error("Task ID is required to fetch submissions.");
+  }
+  return apiClient.get(`/api/v1/tasks/${taskId}/submissions`);
+}
+
 export const tasksApi = {
   getProgressFillClass,
   matchesTaskSearch,
@@ -373,6 +541,13 @@ export const tasksApi = {
   fetchAllMyTasks,
   getTaskDetail,
   updateTaskProgress,
+  submitTask,
+  resubmitTask,
+  getTaskSubmissions,
+  validateDeliverableFile,
+  isValidUrl,
+  ALLOWED_FILE_EXTENSIONS,
+  MAX_FILE_SIZE_BYTES,
 };
 
 export default tasksApi;
