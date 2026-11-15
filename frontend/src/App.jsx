@@ -16,6 +16,7 @@ import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
 import TeamRosterPage from "./features/team/TeamRosterPage";
 import SecurityOpsPage from "./features/admin/SecurityOpsPage";
+import UserManagementPage from "./features/admin/UserManagementPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import "./App.css";
@@ -122,7 +123,15 @@ function App() {
                 path="/admin"
                 element={
                   <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
-                    <Navigate to="/admin/security" replace />
+                    <Navigate to="/admin/users" replace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <UserManagementPage />
                   </ProtectedRoute>
                 }
               />
