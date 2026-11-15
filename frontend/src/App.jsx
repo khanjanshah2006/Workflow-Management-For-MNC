@@ -3,12 +3,14 @@ import {
   Routes,
   Route,
   Navigate,
-  NavLink,
 } from "react-router-dom";
 import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
+import { AuthProvider } from "./context/AuthContext";
+import ProtectedRoute from "./components/common/ProtectedRoute";
+import LoginPage from "./features/auth/LoginPage";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
@@ -41,23 +43,6 @@ function PagePlaceholder({ title, description }) {
   );
 }
 
-function LoginPlaceholder() {
-  return (
-    <div className="login-placeholder">
-      <div className="brand-mark login-brand-mark">W</div>
-      <p className="page-eyebrow">WORKSPHERE</p>
-      <h1>Login page placeholder</h1>
-      <p>
-        The shared application foundation is ready. Login UI will be
-        implemented in the authentication issue.
-      </p>
-      <NavLink className="back-link" to="/dashboard">
-        View dashboard foundation →
-      </NavLink>
-    </div>
-  );
-}
-
 function NotFound() {
   return (
     <PagePlaceholder
@@ -71,46 +56,97 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/login" element={<LoginPlaceholder />} />
-          <Route element={<AppLayout />}>
+        <AuthProvider>
+          <Routes>
+            {/* Public Login Route */}
+            <Route path="/login" element={<LoginPage />} />
+
+            {/* Guarded Application Shell: redirects to /login if unauthenticated */}
             <Route
-              path="/"
-              element={<Navigate to="/dashboard" replace />}
-            />
-            <Route
-              path="/dashboard"
               element={
-                <PagePlaceholder
-                  title="Dashboard"
-                  description="Welcome to your WorkSphere workspace."
-                />
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
               }
-            />
-            <Route path="/projects" element={<ProjectListPage />} />
-            <Route path="/projects/:projectId" element={<ProjectDetailPage />} />
-            <Route path="/team" element={<TeamRosterPage />} />
-            <Route path="/team/roster" element={<TeamRosterPage />} />
-            <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
-            <Route
-              path="/tasks"
-              element={
-                <PagePlaceholder
-                  title="Tasks"
-                  description="Your task workspace will appear here."
-                />
-              }
-            />
-            <Route path="/support" element={<ITSupportDashboard />} />
-            <Route path="/support/tickets" element={<ITSupportDashboard />} />
-            <Route path="/it-support" element={<ITSupportDashboard />} />
-            <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/admin" element={<Navigate to="/admin/users" replace />} />
-            <Route path="/admin/users" element={<UserManagementPage />} />
-            <Route path="/admin/security" element={<SecurityOpsPage />} />
-            <Route path="*" element={<NotFound />} />
-          </Route>
-        </Routes>
+            >
+              <Route
+                path="/"
+                element={<Navigate to="/dashboard" replace />}
+              />
+              <Route
+                path="/dashboard"
+                element={
+                  <PagePlaceholder
+                    title="Dashboard"
+                    description="Welcome to your WorkSphere workspace."
+                  />
+                }
+              />
+
+              {/* Projects: Guarded & role permitted */}
+              <Route
+                path="/projects"
+                element={
+                  <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProjectListPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/projects/:projectId"
+                element={
+                  <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProjectDetailPage />
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route path="/team" element={<TeamRosterPage />} />
+              <Route path="/team/roster" element={<TeamRosterPage />} />
+              <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
+              <Route
+                path="/tasks"
+                element={
+                  <PagePlaceholder
+                    title="Tasks"
+                    description="Your task workspace will appear here."
+                  />
+                }
+              />
+              <Route path="/support" element={<ITSupportDashboard />} />
+              <Route path="/support/tickets" element={<ITSupportDashboard />} />
+              <Route path="/it-support" element={<ITSupportDashboard />} />
+              <Route path="/profile" element={<ProfilePage />} />
+
+              {/* Admin: Guarded & role permitted */}
+              <Route
+                path="/admin"
+                element={
+                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <Navigate to="/admin/users" replace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/users"
+                element={
+                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <UserManagementPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/security"
+                element={
+                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <SecurityOpsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>
   );
