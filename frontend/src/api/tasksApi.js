@@ -532,7 +532,7 @@ export async function getTaskSubmissions(taskId) {
 
 
 /**
- * Maximum character limit for task comments (US-33).
+* Maximum character limit for task comments (US-33).
  */
 export const MAX_COMMENT_LENGTH = 2000;
 
@@ -594,6 +594,250 @@ export async function createTaskComment(taskId, content) {
   });
 }
 
+/**
+ * Validates task start date and due date relation.
+ * Enforces due_date >= start_date when both are present.
+ *
+ * @param {string|null|undefined} startDate (YYYY-MM-DD)
+ * @param {string|null|undefined} dueDate (YYYY-MM-DD)
+ * @returns {{ valid: boolean, error?: string }}
+ */
+export function validateTaskDates(startDate, dueDate) {
+  if (!startDate || !dueDate) {
+    return { valid: true };
+  }
+  const start = new Date(startDate);
+  const due = new Date(dueDate);
+  if (isNaN(start.getTime()) || isNaN(due.getTime())) {
+    return { valid: false, error: "Invalid date format. Expected YYYY-MM-DD." };
+  }
+  if (due < start) {
+    return { valid: false, error: "Due date cannot be earlier than start date." };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates rejection feedback requirement (US-12).
+ * Rejection requires mandatory feedback of at least 10 non-whitespace characters.
+ *
+ * @param {string|null|undefined} feedback
+ * @returns {{ valid: boolean, error?: string }}
+ */
+export function validateRejectionFeedback(feedback) {
+  const trimmed = (feedback || "").trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      error: "Feedback is required when rejecting a task deliverable.",
+    };
+  }
+  if (trimmed.length < 10) {
+    return {
+      valid: false,
+      error: `Feedback must be at least 10 characters (currently ${trimmed.length}).`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Validates reassignment reason requirement (US-14).
+ * Reassignment requires mandatory business justification of at least 10 non-whitespace characters.
+ *
+ * @param {string|null|undefined} reason
+ * @returns {{ valid: boolean, error?: string }}
+ */
+export function validateReassignReason(reason) {
+  const trimmed = (reason || "").trim();
+  if (!trimmed) {
+    return {
+      valid: false,
+      error: "A reason is required when reassigning a task.",
+    };
+  }
+  if (trimmed.length < 10) {
+    return {
+      valid: false,
+      error: `Reason must be at least 10 characters (currently ${trimmed.length}).`,
+    };
+  }
+  return { valid: true };
+}
+
+/**
+ * Create a new task (US-09).
+ *
+ * Dispatches POST /api/v1/tasks.
+ *
+ * @param {Object} payload
+ * @returns {Promise<Object>} TaskDetailResponse
+ */
+export async function createTask(payload) {
+  if (!payload || typeof payload !== "object") {
+    throw new Error("Task payload is required.");
+  }
+
+  const title = (payload.title || "").trim();
+  if (!title) {
+    throw new Error("Task title is required.");
+  }
+
+  const projectId = Number(payload.project_id);
+  if (!projectId || projectId <= 0) {
+    throw new Error("A valid project ID is required.");
+  }
+
+  const teamId = Number(payload.team_id);
+  if (!teamId || teamId <= 0) {
+    throw new Error("A valid team ID is required.");
+  }
+
+  if (payload.start_date && payload.due_date) {
+    const dateCheck = validateTaskDates(payload.start_date, payload.due_date);
+    if (!dateCheck.valid) {
+      throw new Error(dateCheck.error);
+    }
+  }
+
+  const body = {
+    project_id: projectId,
+    team_id: teamId,
+    title,
+    priority: (payload.priority || "MEDIUM").toUpperCase(),
+  };
+
+  if (payload.milestone_id) {
+    body.milestone_id = Number(payload.milestone_id);
+  }
+  if (payload.assigned_to) {
+    body.assigned_to = Number(payload.assigned_to);
+  }
+  if (payload.description && payload.description.trim()) {
+    body.description = payload.description.trim();
+  }
+  if (payload.start_date) {
+    body.start_date = payload.start_date;
+  }
+  if (payload.due_date) {
+    body.due_date = payload.due_date;
+  }
+
+  return apiClient.post("/api/v1/tasks", body);
+}
+
+/**
+ * Assign an unassigned task to a team member (US-09).
+ *
+ * @param {number|string} taskId
+ * @param {number|string} assigneeId
+ * @returns {Promise<Object>} TaskResponse
+ */
+export async function assignTask(taskId, assigneeId) {
+  if (!taskId) throw new Error("Task ID is required.");
+  const empId = Number(assigneeId);
+  if (!empId || empId <= 0) throw new Error("A valid assignee ID is required.");
+
+  return apiClient.put(`/api/v1/tasks/${taskId}/assign`, { assignee_id: empId });
+}
+
+/**
+ * Reassign an active task to another team member (US-14).
+ *
+ * @param {number|string} taskId
+ * @param {Object} payload
+ * @param {number|string} payload.new_assignee_id
+ * @param {string} payload.reason Mandatory reason (min 10 characters)
+ * @returns {Promise<Object>} TaskResponse
+ */
+export async function reassignTask(taskId, { new_assignee_id, reason } = {}) {
+  if (!taskId) throw new Error("Task ID is required for reassignment.");
+  const empId = Number(new_assignee_id);
+  if (!empId || empId <= 0) throw new Error("A valid new assignee ID is required.");
+
+  const checkReason = validateReassignReason(reason);
+  if (!checkReason.valid) {
+    throw new Error(checkReason.error);
+  }
+
+  return apiClient.put(`/api/v1/tasks/${taskId}/reassign`, {
+    new_assignee_id: empId,
+    reason: reason.trim(),
+  });
+}
+
+/**
+ * Fetch task review triage queue for Team Leads (US-13).
+ *
+ * @param {Object} [params]
+ * @param {string} [params.priority]
+ * @param {number} [params.page=1]
+ * @param {number} [params.limit=20]
+ * @returns {Promise<Array<Object>>} List of TaskReviewQueueItem
+ */
+export async function getReviewQueue({ priority, page = 1, limit = 20 } = {}) {
+  const query = new URLSearchParams();
+  if (priority && priority !== "ALL") query.append("priority", priority.toUpperCase());
+  if (page) query.append("page", String(page));
+  if (limit) query.append("limit", String(limit));
+
+  const qs = query.toString();
+  return apiClient.get(`/api/v1/tasks/review-queue${qs ? '?' + qs : ''}`);
+}
+
+/**
+ * Review submitted task deliverable (US-12).
+ *
+ * @param {number|string} taskId
+ * @param {Object} payload
+ * @param {'APPROVE'|'REJECT'} payload.decision
+ * @param {string} [payload.feedback] Mandatory if REJECT (min 10 characters)
+ * @returns {Promise<Object>} TaskReviewResponse
+ */
+export async function reviewTask(taskId, { decision, feedback } = {}) {
+  if (!taskId) throw new Error("Task ID is required for review.");
+  const d = (decision || "").toUpperCase();
+  if (d !== "APPROVE" && d !== "REJECT") {
+    throw new Error("Decision must be either 'APPROVE' or 'REJECT'.");
+  }
+
+  if (d === "REJECT") {
+    const checkFeedback = validateRejectionFeedback(feedback);
+    if (!checkFeedback.valid) {
+      throw new Error(checkFeedback.error);
+    }
+  }
+
+  return apiClient.put(`/api/v1/tasks/${taskId}/review`, {
+    decision: d,
+    feedback: feedback ? feedback.trim() : null,
+  });
+}
+
+/**
+ * List tasks for a project (US-32).
+ *
+ * @param {number|string} projectId
+ * @param {Object} [params]
+ * @param {number} [params.team_id]
+ * @param {number} [params.milestone_id]
+ * @param {string} [params.status]
+ * @param {number} [params.page=1]
+ * @param {number} [params.limit=50]
+ * @returns {Promise<Object>} PaginatedTasksResponse
+ */
+export async function getProjectTasks(projectId, { team_id, milestone_id, status, page = 1, limit = 50 } = {}) {
+  if (!projectId) throw new Error("Project ID is required.");
+  const query = new URLSearchParams();
+  if (team_id) query.append("team_id", String(team_id));
+  if (milestone_id) query.append("milestone_id", String(milestone_id));
+  if (status && status !== "ALL") query.append("status", status.toUpperCase());
+  if (page) query.append("page", String(page));
+  if (limit) query.append("limit", String(limit));
+
+  const qs = query.toString();
+  return apiClient.get(`/api/v1/projects/${projectId}/tasks${qs ? '?' + qs : ''}`);
+}
 export const tasksApi = {
   getProgressFillClass,
   matchesTaskSearch,
@@ -614,6 +858,15 @@ export const tasksApi = {
   MAX_COMMENT_LENGTH,
   validateDeliverableFile,
   isValidUrl,
+  validateTaskDates,
+  validateRejectionFeedback,
+  validateReassignReason,
+  createTask,
+  assignTask,
+  reassignTask,
+  getReviewQueue,
+  reviewTask,
+  getProjectTasks,
   ALLOWED_FILE_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
 };
