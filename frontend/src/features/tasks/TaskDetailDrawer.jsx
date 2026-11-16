@@ -4,6 +4,7 @@ import { getTaskDetail, getProgressFillClass } from "../../api/tasksApi";
 import RejectionFeedbackBanner from "./components/RejectionFeedbackBanner";
 import SubmitTaskModal from "./components/SubmitTaskModal";
 import ResubmitTaskModal from "./components/ResubmitTaskModal";
+import TaskCommentThread from "./components/TaskCommentThread";
 
 /**
  * Formats an ISO date/timestamp into a readable string.
@@ -488,19 +489,9 @@ export default function TaskDetailDrawer({
                 </div>
               </div>
 
-              {/* Task Comments Boundary (Clean integration point for Issue #80 TaskCommentThread) */}
-              <div className="drawer-comments-boundary" aria-label="Task Discussion">
-                <div className="comments-boundary-header">
-                  <h3 className="comments-boundary-title">
-                    <span aria-hidden="true">💬</span> Task Discussion
-                  </h3>
-                  <span className="comments-boundary-badge">Issue #80 Integration</span>
-                </div>
-                <p className="comments-boundary-notice">
-                  The threaded discussion feed and file attachment preview are managed by{" "}
-                  <strong>TaskCommentThread</strong> (Issue #80). When Issue #80 is merged,
-                  the comment thread will mount directly into this conversation container.
-                </p>
+              {/* Task Comments Discussion Thread (US-33) */}
+              <div className="drawer-comments-section" aria-label="Task Discussion">
+                <TaskCommentThread taskId={taskId} />
               </div>
             </div>
 

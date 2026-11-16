@@ -8,7 +8,6 @@ import {
   validateCommentContent,
   getTaskComments,
   createTaskComment,
-  MAX_COMMENT_LENGTH,
   getProgressFillClass,
   matchesTaskSearch,
   filterTasks,
