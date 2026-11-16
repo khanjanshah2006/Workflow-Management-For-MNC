@@ -1,4 +1,6 @@
 import { useState, useMemo, useEffect } from "react";
+import { Link } from "react-router-dom";
+import { useAuth } from "../../context/AuthContext";
 import { useQuery } from "@tanstack/react-query";
 import {
   fetchAllMyTasks,
@@ -126,6 +128,8 @@ function ProgressBar({ pct, status }) {
  * - Complete loading, empty, and retryable error states
  */
 export default function MyTasksPage() {
+  const { role } = useAuth();
+  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
   // Filter & Search states
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -249,6 +253,29 @@ export default function MyTasksPage() {
             Track, update, and manage your assigned tasks across active projects and milestones.
           </p>
         </div>
+              {isTeamLeadOrManager && (
+          <div className="tasks-header-action" style={{ alignSelf: "center" }}>
+            <Link
+              to="/team-lead/tasks"
+              className="btn btn-outline-primary"
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "6px",
+                textDecoration: "none",
+                fontSize: "13px",
+                fontWeight: "700",
+                padding: "8px 14px",
+                borderRadius: "6px",
+                border: "1px solid #4f46e5",
+                color: "#4f46e5",
+                background: "#f5f3ff",
+              }}
+            >
+              <span>📋</span> Switch to Team Lead Workspace →
+            </Link>
+          </div>
+        )}
       </header>
 
       {/* Summary Metrics Bar (Calculated across the entire assigned dataset) */}
