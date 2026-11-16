@@ -5,6 +5,10 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  validateCommentContent,
+  getTaskComments,
+  createTaskComment,
+  MAX_COMMENT_LENGTH,
   getProgressFillClass,
   matchesTaskSearch,
   filterTasks,
@@ -1307,5 +1311,103 @@ describe("11. Shared API Client Headers & Serialization (JSON vs FormData)", () 
     assert.equal(capturedMethod, "POST");
     assert.equal(capturedHeaders["Content-Type"], undefined);
     assert.equal(capturedBody instanceof FormData, true);
+  });
+});
+
+describe("12. Task Discussion Thread & Comment API Contract (US-33)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("validateCommentContent strictly enforces non-empty content and 2000 character boundary", () => {
+    // Empty & whitespace tests
+    assert.equal(validateCommentContent(null).valid, false);
+    assert.equal(validateCommentContent(undefined).valid, false);
+    assert.equal(validateCommentContent("").valid, false);
+    assert.equal(validateCommentContent("    \n\t  ").valid, false);
+
+    // Valid comment trimming
+    const validResult = validateCommentContent("  Fixing the race condition in the auth token refresh handler.  ");
+    assert.equal(validResult.valid, true);
+    assert.equal(validResult.trimmed, "Fixing the race condition in the auth token refresh handler.");
+
+    // Boundary check at exactly 2,000 characters
+    const exact2000 = "a".repeat(2000);
+    assert.equal(validateCommentContent(exact2000).valid, true);
+
+    // Over boundary: 2,001 characters
+    const over2000 = "a".repeat(2001);
+    const overResult = validateCommentContent(over2000);
+    assert.equal(overResult.valid, false);
+    assert.match(overResult.error, /exceeds maximum length of 2000/);
+  });
+
+  test("getTaskComments dispatches GET /api/v1/tasks/{id}/comments correctly", async () => {
+    let capturedUrl = "";
+
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify([
+        {
+          comment_id: 1,
+          task_id: 55,
+          author_name: "Alice Johnson",
+          author_role: "Senior Backend Engineer",
+          content: "Initial database migration deployed.",
+          created_at: "2026-11-16T10:00:00Z",
+        },
+      ]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const comments = await getTaskComments(55);
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/55\/comments$/);
+    assert.equal(comments.length, 1);
+    assert.equal(comments[0].comment_id, 1);
+    assert.equal(comments[0].author_name, "Alice Johnson");
+  });
+
+  test("createTaskComment validates and dispatches POST /api/v1/tasks/{id}/comments", async () => {
+    // Rejects empty or whitespace-only
+    await assert.rejects(
+      async () => createTaskComment(55, "   "),
+      /Comment cannot be blank/
+    );
+
+    // Rejects missing taskId
+    await assert.rejects(
+      async () => createTaskComment(null, "Valid content"),
+      /Task ID is required/
+    );
+
+    let capturedUrl = "";
+    let capturedMethod = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options.method;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        comment_id: 12,
+        task_id: 55,
+        author_name: "Ridhang Jain",
+        author_role: "Team Lead",
+        content: capturedBody.content,
+        created_at: "2026-11-16T12:00:00Z",
+      }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await createTaskComment(55, "  Please review unit tests for coverage on edge cases.  ");
+    assert.equal(capturedMethod, "POST");
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/55\/comments$/);
+    assert.equal(capturedBody.content, "Please review unit tests for coverage on edge cases.");
+    assert.equal(res.comment_id, 12);
   });
 });
