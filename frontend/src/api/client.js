@@ -60,10 +60,18 @@ export function setStoredToken(token) {
 async function request(endpoint, options = {}) {
   const url = endpoint.startsWith("http") ? endpoint : `${BASE_URL}${endpoint}`;
 
+  const isFormData =
+    typeof FormData !== "undefined" && options.body instanceof FormData;
+
   const headers = {
-    "Content-Type": "application/json",
+    ...(isFormData ? {} : { "Content-Type": "application/json" }),
     ...options.headers,
   };
+
+  // When body is FormData, ensure Content-Type is never manually set so fetch provides multipart boundary
+  if (isFormData) {
+    delete headers["Content-Type"];
+  }
 
   const token = getStoredToken();
   if (token && !headers["Authorization"]) {
@@ -141,17 +149,27 @@ async function request(endpoint, options = {}) {
 
 export const apiClient = {
   get: (endpoint, options = {}) => request(endpoint, { ...options, method: "GET" }),
-  post: (endpoint, body, options = {}) =>
+  post: (endpoint, body, options = {}) => {
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    return request(endpoint, {
+      ...options,
+      method: "POST",
+      body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
+    });
+  },
+  put: (endpoint, body, options = {}) => {
+    const isFormData = typeof FormData !== "undefined" && body instanceof FormData;
+    return request(endpoint, {
+      ...options,
+      method: "PUT",
+      body: body !== undefined ? (isFormData ? body : JSON.stringify(body)) : undefined,
+    });
+  },
+  postForm: (endpoint, formData, options = {}) =>
     request(endpoint, {
       ...options,
       method: "POST",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    }),
-  put: (endpoint, body, options = {}) =>
-    request(endpoint, {
-      ...options,
-      method: "PUT",
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      body: formData,
     }),
   delete: (endpoint, options = {}) => request(endpoint, { ...options, method: "DELETE" }),
   request,

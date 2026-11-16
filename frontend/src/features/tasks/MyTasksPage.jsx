@@ -668,6 +668,13 @@ export default function MyTasksPage() {
           setSelectedTaskId(null);
           setProgressTask(task);
         }}
+        onTaskUpdated={(updatedTask) => {
+          setToast({
+            text: `Task updated: "${updatedTask.title}" status is now ${updatedTask.status}.`,
+            type: "success",
+          });
+          refetch();
+        }}
       />
 
       {/* Progress Update Modal (US-10) */}
