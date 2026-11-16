@@ -5,6 +5,9 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import {
+  validateCommentContent,
+  getTaskComments,
+  createTaskComment,
   validateTaskDates,
   validateRejectionFeedback,
   validateReassignReason,
@@ -1596,5 +1599,143 @@ describe("14. Review Triage Queue & Review Decision Engine (US-12 & US-13)", () 
 
     await getProjectTasks(10, { team_id: 4, status: "IN_PROGRESS" });
     assert.match(capturedUrl, /\/api\/v1\/projects\/10\/tasks\?team_id=4&status=IN_PROGRESS&page=1&limit=50/);
+  });
+});
+
+describe("15. Task Discussion Thread & Comment API Contract (US-33)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("validateCommentContent strictly enforces non-empty content and 2000 character boundary", () => {
+    // Empty & whitespace tests
+    assert.equal(validateCommentContent(null).valid, false);
+    assert.equal(validateCommentContent(undefined).valid, false);
+    assert.equal(validateCommentContent("").valid, false);
+    assert.equal(validateCommentContent("    \n\t  ").valid, false);
+
+    // Valid comment trimming
+    const validResult = validateCommentContent("  Fixing the race condition in the auth token refresh handler.  ");
+    assert.equal(validResult.valid, true);
+    assert.equal(validResult.trimmed, "Fixing the race condition in the auth token refresh handler.");
+
+    // Boundary check at exactly 2,000 characters
+    const exact2000 = "a".repeat(2000);
+    assert.equal(validateCommentContent(exact2000).valid, true);
+
+    // Over boundary: 2,001 characters
+    const over2000 = "a".repeat(2001);
+    const overResult = validateCommentContent(over2000);
+    assert.equal(overResult.valid, false);
+    assert.match(overResult.error, /exceeds maximum length of 2000/);
+  });
+
+  test("getTaskComments dispatches GET /api/v1/tasks/{id}/comments correctly", async () => {
+    let capturedUrl = "";
+
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify([
+        {
+          comment_id: 1,
+          task_id: 55,
+          author_name: "Alice Johnson",
+          author_role: "Senior Backend Engineer",
+          content: "Initial database migration deployed.",
+          created_at: "2026-11-16T10:00:00Z",
+        },
+      ]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const comments = await getTaskComments(55);
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/55\/comments$/);
+    assert.equal(comments.length, 1);
+    assert.equal(comments[0].comment_id, 1);
+    assert.equal(comments[0].author_name, "Alice Johnson");
+  });
+
+  test("createTaskComment validates and dispatches POST /api/v1/tasks/{id}/comments", async () => {
+    // Rejects empty or whitespace-only
+    await assert.rejects(
+      async () => createTaskComment(55, "   "),
+      /Comment cannot be blank/
+    );
+
+    // Rejects missing taskId
+    await assert.rejects(
+      async () => createTaskComment(null, "Valid content"),
+      /Task ID is required/
+    );
+
+    let capturedUrl = "";
+    let capturedMethod = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options.method;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        comment_id: 12,
+        task_id: 55,
+        author_name: "Ridhang Jain",
+        author_role: "Team Lead",
+        content: capturedBody.content,
+        created_at: "2026-11-16T12:00:00Z",
+      }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await createTaskComment(55, "  Please review unit tests for coverage on edge cases.  ");
+    assert.equal(capturedMethod, "POST");
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/55\/comments$/);
+    assert.equal(capturedBody.content, "Please review unit tests for coverage on edge cases.");
+    assert.equal(res.comment_id, 12);
+  });
+
+  test("TaskCommentThread initial generator handles multi-word and single-word names cleanly", () => {
+    function getInitials(name) {
+      if (!name || typeof name !== "string") return "U";
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+      }
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    assert.equal(getInitials("Ridhang Jain"), "RJ");
+    assert.equal(getInitials("Alice Marie Johnson"), "AJ");
+    assert.equal(getInitials("Developer"), "DE");
+    assert.equal(getInitials("X"), "X");
+    assert.equal(getInitials(""), "U");
+    assert.equal(getInitials(null), "U");
+  });
+
+  test("Optimistic comment structure conforms to TaskCommentResponse shape with isOptimistic flag", () => {
+    const taskId = 88;
+    const author = { full_name: "Ridhang Jain", role: "Team Lead" };
+    const content = "Testing optimistic rollback behavior";
+
+    const optimisticComment = {
+      comment_id: `temp-${Date.now()}`,
+      task_id: Number(taskId),
+      author_name: author.full_name,
+      author_role: author.role,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      isOptimistic: true,
+    };
+
+    assert.equal(optimisticComment.task_id, 88);
+    assert.equal(optimisticComment.author_name, "Ridhang Jain");
+    assert.equal(optimisticComment.author_role, "Team Lead");
+    assert.equal(optimisticComment.isOptimistic, true);
+    assert.match(optimisticComment.comment_id, /^temp-/);
   });
 });

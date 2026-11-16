@@ -532,6 +532,69 @@ export async function getTaskSubmissions(taskId) {
 
 
 /**
+* Maximum character limit for task comments (US-33).
+ */
+export const MAX_COMMENT_LENGTH = 2000;
+
+/**
+ * Validates task comment content (US-33).
+ * Must be non-empty after trimming and no more than 2,000 characters.
+ *
+ * @param {string|null|undefined} content
+ * @returns {{ valid: boolean, error?: string, trimmed: string }}
+ */
+export function validateCommentContent(content) {
+  if (content === null || content === undefined) {
+    return { valid: false, error: "Comment content cannot be empty.", trimmed: "" };
+  }
+  const trimmed = String(content).trim();
+  if (!trimmed) {
+    return { valid: false, error: "Comment cannot be blank or whitespace-only.", trimmed: "" };
+  }
+  if (trimmed.length > MAX_COMMENT_LENGTH) {
+    return {
+      valid: false,
+      error: `Comment exceeds maximum length of ${MAX_COMMENT_LENGTH} characters (current: ${trimmed.length}).`,
+      trimmed,
+    };
+  }
+  return { valid: true, trimmed };
+}
+
+/**
+ * Fetch chronological list of comments for a task (US-33).
+ *
+ * @param {number|string} taskId
+ * @returns {Promise<Array<Object>>} List of TaskCommentResponse
+ */
+export async function getTaskComments(taskId) {
+  if (!taskId) {
+    throw new Error("Task ID is required to fetch comments.");
+  }
+  return apiClient.get(`/api/v1/tasks/${taskId}/comments`);
+}
+
+/**
+ * Add a new comment to a task (US-33).
+ *
+ * @param {number|string} taskId
+ * @param {string} content
+ * @returns {Promise<Object>} Created TaskCommentResponse
+ */
+export async function createTaskComment(taskId, content) {
+  if (!taskId) {
+    throw new Error("Task ID is required to post a comment.");
+  }
+  const check = validateCommentContent(content);
+  if (!check.valid) {
+    throw new Error(check.error);
+  }
+  return apiClient.post(`/api/v1/tasks/${taskId}/comments`, {
+    content: check.trimmed,
+  });
+}
+
+/**
  * Validates task start date and due date relation.
  * Enforces due_date >= start_date when both are present.
  *
@@ -775,7 +838,6 @@ export async function getProjectTasks(projectId, { team_id, milestone_id, status
   const qs = query.toString();
   return apiClient.get(`/api/v1/projects/${projectId}/tasks${qs ? '?' + qs : ''}`);
 }
-
 export const tasksApi = {
   getProgressFillClass,
   matchesTaskSearch,
@@ -790,6 +852,10 @@ export const tasksApi = {
   submitTask,
   resubmitTask,
   getTaskSubmissions,
+  getTaskComments,
+  createTaskComment,
+  validateCommentContent,
+  MAX_COMMENT_LENGTH,
   validateDeliverableFile,
   isValidUrl,
   validateTaskDates,
