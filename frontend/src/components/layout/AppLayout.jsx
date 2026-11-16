@@ -25,9 +25,18 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
+  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
+  const activeNavigation = isTeamLeadOrManager
+    ? [
+        ...navigation.slice(0, 4),
+        { path: "/team-lead/tasks", label: "Team Tasks", icon: "📋" },
+        ...navigation.slice(4),
+      ]
+    : navigation;
+
   const currentPage =
     navigation.find((item) => item.path === location.pathname)?.label ??
-    (location.pathname.startsWith("/team")
+    (location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team") ? "Team Tasks" : location.pathname.startsWith("/team")
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
@@ -68,7 +77,7 @@ export default function AppLayout() {
         <div className="workspace-label">WORKSPACE</div>
 
         <nav className="navigation" aria-label="Main navigation">
-          {navigation.map((item) => (
+          {activeNavigation.map((item) => (
             <NavLink
               key={item.path}
               to={item.path}

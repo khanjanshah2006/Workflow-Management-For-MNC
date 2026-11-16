@@ -8,6 +8,15 @@ import {
   validateCommentContent,
   getTaskComments,
   createTaskComment,
+  validateTaskDates,
+  validateRejectionFeedback,
+  validateReassignReason,
+  createTask,
+  assignTask,
+  reassignTask,
+  getReviewQueue,
+  reviewTask,
+  getProjectTasks,
   getProgressFillClass,
   matchesTaskSearch,
   filterTasks,
@@ -1313,7 +1322,287 @@ describe("11. Shared API Client Headers & Serialization (JSON vs FormData)", () 
   });
 });
 
-describe("12. Task Discussion Thread & Comment API Contract (US-33)", () => {
+describe("12. Team Lead Task Creation & Date Validation (US-09)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("validateTaskDates enforces due_date >= start_date strictly", () => {
+    // Both missing or one missing -> valid
+    assert.equal(validateTaskDates(null, null).valid, true);
+    assert.equal(validateTaskDates("2026-11-15", null).valid, true);
+    assert.equal(validateTaskDates(null, "2026-11-20").valid, true);
+
+    // due_date equals start_date -> valid
+    assert.equal(validateTaskDates("2026-11-15", "2026-11-15").valid, true);
+
+    // due_date after start_date -> valid
+    assert.equal(validateTaskDates("2026-11-15", "2026-11-20").valid, true);
+
+    // due_date earlier than start_date -> invalid
+    const invalidCheck = validateTaskDates("2026-11-20", "2026-11-15");
+    assert.equal(invalidCheck.valid, false);
+    assert.match(invalidCheck.error, /cannot be earlier/i);
+
+    // Malformed dates
+    const malformed = validateTaskDates("not-a-date", "2026-11-20");
+    assert.equal(malformed.valid, false);
+  });
+
+  test("createTask validates required fields before dispatching", async () => {
+    await assert.rejects(
+      async () => createTask(null),
+      /Task payload is required/
+    );
+
+    await assert.rejects(
+      async () => createTask({ project_id: 1, team_id: 2, title: "   " }),
+      /Task title is required/
+    );
+
+    await assert.rejects(
+      async () => createTask({ title: "Build feature", team_id: 2 }),
+      /valid project ID is required/
+    );
+
+    await assert.rejects(
+      async () => createTask({ title: "Build feature", project_id: 1 }),
+      /valid team ID is required/
+    );
+
+    await assert.rejects(
+      async () => createTask({
+        title: "Build feature",
+        project_id: 1,
+        team_id: 2,
+        start_date: "2026-11-20",
+        due_date: "2026-11-10",
+      }),
+      /Due date cannot be earlier than start date/
+    );
+  });
+
+  test("createTask dispatches POST /api/v1/tasks with normalized payload", async () => {
+    let capturedUrl = "";
+    let capturedBody = null;
+    let capturedMethod = "";
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedMethod = options.method;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        task_id: 88,
+        title: capturedBody.title,
+        status: "TODO",
+        progress_pct: 0,
+      }), {
+        status: 201,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await createTask({
+      project_id: 1,
+      team_id: 3,
+      milestone_id: 5,
+      assigned_to: 12,
+      title: "  Implement Team Lead Task Board  ",
+      description: "Mission control for team tasks",
+      priority: "high",
+      start_date: "2026-11-16",
+      due_date: "2026-11-25",
+    });
+
+    assert.equal(capturedMethod, "POST");
+    assert.match(capturedUrl, /\/api\/v1\/tasks$/);
+    assert.equal(capturedBody.title, "Implement Team Lead Task Board");
+    assert.equal(capturedBody.project_id, 1);
+    assert.equal(capturedBody.team_id, 3);
+    assert.equal(capturedBody.milestone_id, 5);
+    assert.equal(capturedBody.assigned_to, 12);
+    assert.equal(capturedBody.priority, "HIGH");
+    assert.equal(capturedBody.start_date, "2026-11-16");
+    assert.equal(capturedBody.due_date, "2026-11-25");
+    assert.equal(res.task_id, 88);
+  });
+});
+
+describe("13. Task Assignment & Reassignment (US-09 & US-14)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("validateReassignReason requires minimum 10 non-whitespace characters", () => {
+    assert.equal(validateReassignReason("").valid, false);
+    assert.equal(validateReassignReason("   ").valid, false);
+    assert.equal(validateReassignReason("Short").valid, false);
+
+    const validReason = validateReassignReason("Employee on sick leave until next Monday");
+    assert.equal(validReason.valid, true);
+  });
+
+  test("assignTask dispatches PUT /api/v1/tasks/{id}/assign", async () => {
+    let capturedUrl = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ task_id: 10, assigned_to: capturedBody.assignee_id }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await assignTask(10, 15);
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/10\/assign/);
+    assert.equal(capturedBody.assignee_id, 15);
+    assert.equal(res.assigned_to, 15);
+  });
+
+  test("reassignTask validates reason and dispatches PUT /api/v1/tasks/{id}/reassign", async () => {
+    await assert.rejects(
+      async () => reassignTask(10, { new_assignee_id: 15, reason: "Too short" }),
+      /Reason must be at least 10 characters/
+    );
+
+    let capturedUrl = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({ task_id: 10, assigned_to: capturedBody.new_assignee_id }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await reassignTask(10, {
+      new_assignee_id: 18,
+      reason: "Reallocating workload due to emergency critical bug",
+    });
+
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/10\/reassign/);
+    assert.equal(capturedBody.new_assignee_id, 18);
+    assert.equal(capturedBody.reason, "Reallocating workload due to emergency critical bug");
+    assert.equal(res.assigned_to, 18);
+  });
+});
+
+describe("14. Review Triage Queue & Review Decision Engine (US-12 & US-13)", () => {
+  const originalFetch = globalThis.fetch;
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+  });
+
+  test("validateRejectionFeedback requires at least 10 non-whitespace characters", () => {
+    assert.equal(validateRejectionFeedback("").valid, false);
+    assert.equal(validateRejectionFeedback("   ").valid, false);
+    assert.equal(validateRejectionFeedback("Fix this").valid, false);
+
+    const validFeedback = validateRejectionFeedback("Missing unit tests for edge conditions.");
+    assert.equal(validFeedback.valid, true);
+  });
+
+  test("getReviewQueue formats query parameters correctly", async () => {
+    let capturedUrl = "";
+
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify([
+        { task_id: 1, title: "Review item", status: "IN_REVIEW" },
+      ]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const items = await getReviewQueue({ priority: "high", page: 2, limit: 10 });
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/review-queue\?priority=HIGH&page=2&limit=10/);
+    assert.equal(items.length, 1);
+  });
+
+  test("reviewTask dispatches APPROVE decision cleanly", async () => {
+    let capturedUrl = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        task_id: 42,
+        status: "DONE",
+        progress_pct: 100,
+        message: "Task approved successfully",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await reviewTask(42, { decision: "APPROVE" });
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/42\/review/);
+    assert.equal(capturedBody.decision, "APPROVE");
+    assert.equal(capturedBody.feedback, null);
+    assert.equal(res.status, "DONE");
+    assert.equal(res.progress_pct, 100);
+  });
+
+  test("reviewTask enforces mandatory rejection feedback before dispatching", async () => {
+    await assert.rejects(
+      async () => reviewTask(42, { decision: "REJECT", feedback: "Too short" }),
+      /Feedback must be at least 10 characters/
+    );
+
+    let capturedUrl = "";
+    let capturedBody = null;
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedBody = JSON.parse(options.body);
+      return new Response(JSON.stringify({
+        task_id: 42,
+        status: "REJECTED",
+        rejection_feedback: capturedBody.feedback,
+        message: "Task rejected",
+      }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    const res = await reviewTask(42, {
+      decision: "REJECT",
+      feedback: "Deliverable archive is missing documentation and test reports.",
+    });
+
+    assert.match(capturedUrl, /\/api\/v1\/tasks\/42\/review/);
+    assert.equal(capturedBody.decision, "REJECT");
+    assert.equal(capturedBody.feedback, "Deliverable archive is missing documentation and test reports.");
+    assert.equal(res.status, "REJECTED");
+  });
+
+  test("getProjectTasks dispatches GET /api/v1/projects/{id}/tasks", async () => {
+    let capturedUrl = "";
+
+    globalThis.fetch = async (url) => {
+      capturedUrl = url;
+      return new Response(JSON.stringify({ items: [], total: 0, page: 1, limit: 50 }), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+
+    await getProjectTasks(10, { team_id: 4, status: "IN_PROGRESS" });
+    assert.match(capturedUrl, /\/api\/v1\/projects\/10\/tasks\?team_id=4&status=IN_PROGRESS&page=1&limit=50/);
+  });
+});
+
+describe("15. Task Discussion Thread & Comment API Contract (US-33)", () => {
   const originalFetch = globalThis.fetch;
   afterEach(() => {
     globalThis.fetch = originalFetch;
