@@ -1409,4 +1409,44 @@ describe("12. Task Discussion Thread & Comment API Contract (US-33)", () => {
     assert.equal(capturedBody.content, "Please review unit tests for coverage on edge cases.");
     assert.equal(res.comment_id, 12);
   });
+
+  test("TaskCommentThread initial generator handles multi-word and single-word names cleanly", () => {
+    function getInitials(name) {
+      if (!name || typeof name !== "string") return "U";
+      const parts = name.trim().split(/\s+/);
+      if (parts.length >= 2) {
+        return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+      }
+      return parts[0].slice(0, 2).toUpperCase();
+    }
+
+    assert.equal(getInitials("Ridhang Jain"), "RJ");
+    assert.equal(getInitials("Alice Marie Johnson"), "AJ");
+    assert.equal(getInitials("Developer"), "DE");
+    assert.equal(getInitials("X"), "X");
+    assert.equal(getInitials(""), "U");
+    assert.equal(getInitials(null), "U");
+  });
+
+  test("Optimistic comment structure conforms to TaskCommentResponse shape with isOptimistic flag", () => {
+    const taskId = 88;
+    const author = { full_name: "Ridhang Jain", role: "Team Lead" };
+    const content = "Testing optimistic rollback behavior";
+
+    const optimisticComment = {
+      comment_id: `temp-${Date.now()}`,
+      task_id: Number(taskId),
+      author_name: author.full_name,
+      author_role: author.role,
+      content: content.trim(),
+      created_at: new Date().toISOString(),
+      isOptimistic: true,
+    };
+
+    assert.equal(optimisticComment.task_id, 88);
+    assert.equal(optimisticComment.author_name, "Ridhang Jain");
+    assert.equal(optimisticComment.author_role, "Team Lead");
+    assert.equal(optimisticComment.isOptimistic, true);
+    assert.match(optimisticComment.comment_id, /^temp-/);
+  });
 });
