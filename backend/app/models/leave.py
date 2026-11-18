@@ -1,4 +1,6 @@
-from sqlalchemy import Column, Integer, String, Boolean, Text, Date, DateTime, ForeignKey, Enum, CheckConstraint, func
+from sqlalchemy import Column, Integer, String, Boolean, Text, Date, DateTime, ForeignKey, Enum, CheckConstraint, Index, func
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.sql import expression
 from app.db.base import Base
 from app.models.enums import LeaveStatus
 
@@ -11,6 +13,11 @@ class LeaveType(Base):
     yearly_quota = Column(Integer, nullable=False)
     is_paid = Column(Boolean, default=True, nullable=False)
     description = Column(Text, nullable=True)
+    is_active = Column(Boolean, default=True, server_default=expression.true(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint("yearly_quota >= 0", name="chk_leave_type_quota"),
+    )
 
 
 class LeaveRequest(Base):
@@ -18,8 +25,8 @@ class LeaveRequest(Base):
 
     leave_id = Column(Integer, primary_key=True, autoincrement=True)
     emp_id = Column(Integer, ForeignKey("employee.emp_id", ondelete="CASCADE"), nullable=False, index=True)
-    leave_type_id = Column(Integer, ForeignKey("leave_type.leave_type_id", ondelete="RESTRICT"), nullable=False)
-    reviewed_by_hr_id = Column(Integer, ForeignKey("hr_manager.hr_id", ondelete="SET NULL"), nullable=True)
+    leave_type_id = Column(Integer, ForeignKey("leave_type.leave_type_id", ondelete="RESTRICT"), nullable=False, index=True)
+    reviewed_by_account_id = Column(UUID(as_uuid=True), ForeignKey("user_account.account_id", ondelete="SET NULL"), nullable=True)
     start_date = Column(Date, nullable=False)
     end_date = Column(Date, nullable=False)
     total_days = Column(Integer, nullable=False)
@@ -31,4 +38,6 @@ class LeaveRequest(Base):
 
     __table_args__ = (
         CheckConstraint("end_date >= start_date", name="chk_leave_dates"),
+        CheckConstraint("total_days > 0", name="chk_leave_total_days"),
+        Index("ix_leave_request_emp_dates", "emp_id", "start_date", "end_date"),
     )
