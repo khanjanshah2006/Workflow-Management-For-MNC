@@ -1,4 +1,4 @@
-from app.db.base import Base
+﻿from app.db.base import Base
 from app.models.enums import (
     UserType,
     CommonStatus,
@@ -31,6 +31,7 @@ from app.models.audit_log import AuditLog
 from app.models.support import SupportTicket, TicketActivity
 from app.models.system_parameter import SystemParameter
 from app.models.elevated_access_grant import ElevatedAccessGrant
+from app.models.system_backup_log import SystemBackupLog
 
 __all__ = [
     "Base",
@@ -73,4 +74,5 @@ __all__ = [
     "TicketActivity",
     "SystemParameter",
     "ElevatedAccessGrant",
+    "SystemBackupLog",
 ]

@@ -6,7 +6,7 @@ from app.db.session import get_db
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.models.user_account import UserAccount
-from app.models.enums import CommonStatus
+from app.models.enums import CommonStatus, UserType
 from app.features.employees.schemas import (
     EmployeeCreate,
     EmployeeStatusUpdate,
@@ -103,9 +103,13 @@ def create_employee(
     payload: EmployeeCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN"])),
+    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN", "SYSTEM_ADMIN"])),
 ) -> EmployeeDetailResponse:
     client_ip = request.client.host if request.client else None
+    requested_role = payload.user_type or UserType.EMPLOYEE
+    actor_role = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
+    if requested_role in (UserType.ADMIN, UserType.SYSTEM_ADMIN) and actor_role != UserType.SYSTEM_ADMIN.value:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only SYSTEM_ADMIN may assign ADMIN or SYSTEM_ADMIN roles")
     try:
         return EmployeeService.create_employee(
             db=db,

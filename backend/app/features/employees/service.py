@@ -121,6 +121,18 @@ class EmployeeService:
         db.commit()
         db.refresh(new_employee)
 
+        # Record the account role so security anomaly detection can identify
+        # privileged account creation. Password material is never included.
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(user_account.account_id),
+            account_id=actor_account_id,
+            new_value={"user_type": user_account.user_type.value if hasattr(user_account.user_type, "value") else str(user_account.user_type)},
+            ip_address=ip_address,
+        )
+
         # 4. Audit Log
         write_audit_log(
             db=db,
