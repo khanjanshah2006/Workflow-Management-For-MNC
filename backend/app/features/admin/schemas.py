@@ -1,4 +1,4 @@
-﻿from datetime import datetime
+from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
@@ -56,6 +56,9 @@ class BackupStatusResponse(BaseModel):
     last_verified_at: datetime
     active_connections: int
     details: str
+    last_successful_backup: Optional[datetime] = None
+    last_failed_backup: Optional[datetime] = None
+    recent_failures_count: int = 0
 
 
 # ==========================================
@@ -123,17 +126,25 @@ class BackupTriggerResponse(BaseModel):
 
 
 class AnomalyAlert(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
     alert_type: str
     severity: str
     ip_address: Optional[str] = None
+    source_ip: Optional[str] = None
     account_id: Optional[UUID] = None
     target_account_id: Optional[UUID] = None
     attempted_email: Optional[str] = None
+    target_account: Optional[str] = None
     old_role: Optional[str] = None
     new_role: Optional[str] = None
-    count: int
+    count: int = 1
+    attempts_count: Optional[int] = None
     first_timestamp: datetime
     last_timestamp: datetime
+    timestamp: Optional[datetime] = None
+    status: str = "ACTIVE"
     details: str
 
 
