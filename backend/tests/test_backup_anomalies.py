@@ -160,5 +160,53 @@ class TestBackupAndAnomalyAlerts(unittest.TestCase):
         self.assertIsNone(row.file_path)
 
 
+    def test_backup_failure_triggers_anomaly_alert(self):
+        failed_log = SystemBackupLog(
+            triggered_by_account_id=self.admin.account_id,
+            backup_type="ON_DEMAND",
+            file_path="Error: connection refused",
+            status="FAILED",
+            created_at=datetime.now(timezone.utc),
+        )
+        self.db.add(failed_log)
+        self.db.commit()
+
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        alerts = response.json()["alerts"]
+        backup_alerts = [a for a in alerts if a["alert_type"] == "BACKUP_FAILURE"]
+        self.assertEqual(len(backup_alerts), 1)
+        self.assertEqual(backup_alerts[0]["severity"], "HIGH")
+        self.assertIn("fail", backup_alerts[0]["title"].lower())
+
+    def test_backup_status_reflects_logs(self):
+        success_log = SystemBackupLog(
+            triggered_by_account_id=self.admin.account_id,
+            backup_type="ON_DEMAND",
+            file_path="backup_success.dump",
+            file_size_bytes=1048576,
+            status="COMPLETED",
+            created_at=datetime.now(timezone.utc),
+        )
+        self.db.add(success_log)
+        self.db.commit()
+
+        general_headers = create_access_token(data={
+            "sub": str(self.general_admin.account_id), "email": self.general_admin.email,
+            "user_type": self.general_admin.user_type.value,
+        })
+        response = self.client.get(
+            "/api/v1/admin/system/backup-status",
+            headers={"Authorization": f"Bearer {general_headers}"},
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["status"], "HEALTHY")
+        self.assertIsNotNone(data["last_successful_backup"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,4 +1,4 @@
-﻿import json
+import json
 import logging
 import math
 import os
@@ -36,6 +36,7 @@ from app.features.admin.schemas import (
 )
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
+from app.models.system_backup_log import SystemBackupLog
 
 
 
@@ -225,12 +226,45 @@ class AdminService:
         checked_out = pool.checkedout() if hasattr(pool, "checkedout") else 0
         pool_size = pool.size() if hasattr(pool, "size") else 5
 
+        # Query recent backups (US-50)
+        last_success = (
+            db.query(SystemBackupLog)
+            .filter(SystemBackupLog.status == "COMPLETED")
+            .order_by(SystemBackupLog.created_at.desc())
+            .first()
+        )
+        last_failure = (
+            db.query(SystemBackupLog)
+            .filter(SystemBackupLog.status == "FAILED")
+            .order_by(SystemBackupLog.created_at.desc())
+            .first()
+        )
+        recent_failures_count = (
+            db.query(SystemBackupLog)
+            .filter(
+                SystemBackupLog.status == "FAILED",
+                SystemBackupLog.created_at >= datetime.now(timezone.utc) - timedelta(hours=24),
+            )
+            .count()
+        )
+
+        overall_status = "HEALTHY"
+        status_details = f"Point-In-Time Recovery (PITR) active. Pool status: {checked_out}/{pool_size} active connections."
+        if last_failure and (not last_success or last_failure.created_at > last_success.created_at):
+            overall_status = "WARNING"
+            status_details += f" Warning: Last backup #{last_failure.backup_id} failed."
+        elif last_success:
+            status_details += f" Last verified backup #{last_success.backup_id} completed."
+
         return BackupStatusResponse(
-            status="HEALTHY",
+            status=overall_status,
             database="Supabase PostgreSQL (Enterprise)",
             last_verified_at=datetime.now(timezone.utc),
             active_connections=checked_out,
-            details=f"Point-In-Time Recovery (PITR) active. Pool status: {checked_out}/{pool_size} active connections.",
+            details=status_details,
+            last_successful_backup=last_success.created_at if last_success else None,
+            last_failed_backup=last_failure.created_at if last_failure else None,
+            recent_failures_count=recent_failures_count,
         )
 
     # ==========================================
@@ -502,26 +536,56 @@ class AdminService:
         for ip, events in ip_groups.items():
             if len(events) > threshold:
                 times = [event[0].created_at for event in events]
+                count = len(events)
+                first_t = min(times)
+                last_t = max(times)
+                desc = f"More than {threshold} failed login attempts ({count} attempts) from IP {ip} in {failed_window} minutes."
                 alerts.append(AnomalyAlert(
-                    alert_type="FAILED_LOGIN_BURST", severity="HIGH",
-                    ip_address=ip, count=len(events),
-                    first_timestamp=min(times), last_timestamp=max(times),
-                    details=f"More than {threshold} failed login attempts from this IP in {failed_window} minutes.",
+                    id=f"ALT-IP-{abs(hash(ip)) % 10000:04d}",
+                    title=f"Failed-Login Spike Detected ({ip})",
+                    description=desc,
+                    alert_type="FAILED_LOGIN_BURST",
+                    severity="HIGH",
+                    ip_address=ip,
+                    source_ip=ip,
+                    count=count,
+                    attempts_count=count,
+                    first_timestamp=first_t,
+                    last_timestamp=last_t,
+                    timestamp=last_t,
+                    status="ACTIVE",
+                    details=desc,
                 ))
         for account_key, events in account_groups.items():
             if len(events) > threshold:
                 times = [event[0].created_at for event in events]
                 sample = events[0][1]
+                count = len(events)
+                first_t = min(times)
+                last_t = max(times)
+                target_email = sample.get("attempted_email")
                 try:
                     account_id = UUID(account_key)
                 except (ValueError, TypeError):
                     account_id = None
+                desc = f"More than {threshold} failed login attempts for account {target_email or account_key} in {failed_window} minutes."
                 alerts.append(AnomalyAlert(
-                    alert_type="FAILED_LOGIN_BURST", severity="HIGH",
+                    id=f"ALT-ACC-{abs(hash(account_key)) % 10000:04d}",
+                    title=f"Targeted Brute-Force Alert ({target_email or account_key})",
+                    description=desc,
+                    alert_type="FAILED_LOGIN_BURST",
+                    severity="HIGH",
                     account_id=account_id,
-                    attempted_email=sample.get("attempted_email"),
-                    count=len(events), first_timestamp=min(times), last_timestamp=max(times),
-                    details=f"More than {threshold} failed login attempts for this account in {failed_window} minutes.",
+                    target_account_id=account_id,
+                    attempted_email=target_email,
+                    target_account=target_email or str(account_id),
+                    count=count,
+                    attempts_count=count,
+                    first_timestamp=first_t,
+                    last_timestamp=last_t,
+                    timestamp=last_t,
+                    status="ACTIVE",
+                    details=desc,
                 ))
 
         # Role elevations are reviewed over 24 hours; no volume threshold is assumed.
@@ -543,13 +607,52 @@ class AdminService:
                 target_id = UUID(str(row.entity_ref_id))
             except (ValueError, TypeError):
                 target_id = None
+            desc = f"Account role elevated from {old_role or 'UNASSIGNED'} to {new_role}."
             alerts.append(AnomalyAlert(
+                id=f"ALT-ELEV-{abs(hash(str(row.entity_ref_id))) % 10000:04d}",
+                title=f"Privilege Escalation Alert ({new_role})",
+                description=desc,
                 alert_type="PRIVILEGE_ESCALATION",
                 severity="CRITICAL" if new_role == "SYSTEM_ADMIN" else "HIGH",
-                account_id=row.account_id, target_account_id=target_id,
-                old_role=old_role, new_role=new_role, count=1,
-                first_timestamp=row.created_at, last_timestamp=row.created_at,
-                details=f"Account role elevated from {old_role or 'UNASSIGNED'} to {new_role}.",
+                account_id=row.account_id,
+                target_account_id=target_id,
+                target_account=str(target_id) if target_id else None,
+                old_role=old_role,
+                new_role=new_role,
+                count=1,
+                attempts_count=1,
+                first_timestamp=row.created_at,
+                last_timestamp=row.created_at,
+                timestamp=row.created_at,
+                status="ACTIVE",
+                details=desc,
+            ))
+
+        # Check for recent failed backups in the last 24 hours (US-50)
+        recent_failed_backups = (
+            db.query(SystemBackupLog)
+            .filter(
+                SystemBackupLog.status == "FAILED",
+                SystemBackupLog.created_at >= now - timedelta(hours=24),
+            )
+            .order_by(SystemBackupLog.created_at.desc())
+            .all()
+        )
+        for fb in recent_failed_backups:
+            desc = f"Database backup #{fb.backup_id} ({fb.backup_type}) failed. Error: {fb.file_path or 'Execution error'}."
+            alerts.append(AnomalyAlert(
+                id=f"ALT-BCK-{fb.backup_id}",
+                title=f"Database Backup #{fb.backup_id} Failure",
+                description=desc,
+                alert_type="BACKUP_FAILURE",
+                severity="HIGH",
+                count=1,
+                attempts_count=1,
+                first_timestamp=fb.created_at,
+                last_timestamp=fb.created_at,
+                timestamp=fb.created_at,
+                status="ACTIVE",
+                details=desc,
             ))
 
         return AnomalyAlertsResponse(
