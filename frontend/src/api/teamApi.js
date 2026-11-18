@@ -56,15 +56,17 @@ export const teamApi = {
    */
   normalizeMember: (raw, employeeDetail = null) => {
     const detail = employeeDetail || {};
+    // GET /api/v1/teams/{id}/members returns `employee_id`; older shapes used `emp_id`.
+    const empId = raw.emp_id || raw.employee_id || raw.id;
     return {
-      id: raw.team_member_id || raw.id || raw.emp_id,
-      emp_id: raw.emp_id || raw.id,
+      id: raw.team_member_id || raw.id || empId,
+      emp_id: empId,
       name:
         detail.full_name ||
         raw.full_name ||
         raw.name ||
         raw.employee_name ||
-        `Employee #${raw.emp_id || raw.id}`,
+        `Employee #${empId}`,
       role:
         detail.designation ||
         raw.role ||
@@ -75,7 +77,7 @@ export const teamApi = {
         detail.email ||
         raw.email ||
         raw.employee_email ||
-        (raw.emp_id ? `emp${raw.emp_id}@enterprise.com` : "N/A"),
+        (empId ? `emp${empId}@enterprise.com` : "N/A"),
       status: (detail.status || raw.status || "ACTIVE").toUpperCase(),
       joined_on: raw.joined_on || detail.date_of_joining || null,
     };

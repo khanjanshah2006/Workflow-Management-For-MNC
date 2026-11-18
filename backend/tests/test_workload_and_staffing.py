@@ -35,6 +35,7 @@ from app.models.project_manager import ProjectManager
 from app.models.project import Project, ProjectAssignment
 from app.models.milestone import ProjectMilestone
 from app.models.task import Task
+from app.models.team import Team
 from app.models.audit_log import AuditLog
 from app.features.employees.schemas import EmployeeWorkloadResponse
 from app.features.projects.schemas import EligibleEmployeeResponse
@@ -71,6 +72,7 @@ def db_session():
             Project.__table__,
             ProjectAssignment.__table__,
             ProjectMilestone.__table__,
+            Team.__table__,
             Task.__table__,
             AuditLog.__table__,
         ],
@@ -336,11 +338,19 @@ def seed_data(db_session):
     db_session.add_all([asgn1, asgn2, asgn3, asgn4])
     db_session.flush()
 
+    # Task.team_id is required, so each project gets a team.
+    db_session.add_all([
+        Team(team_id=1, project_id=1, name="Project 1 Team"),
+        Team(team_id=2, project_id=2, name="Project 2 Team"),
+    ])
+    db_session.flush()
+
     # 8. Tasks
     # Emp 1 has 0 open tasks, 1 completed task
     task1 = Task(
         task_id=1,
         project_id=1,
+        team_id=1,
         assigned_to=1,
         title="PM1 Secret Task Title",
         description="Proprietary task description on Project 1",
@@ -351,6 +361,7 @@ def seed_data(db_session):
     task2 = Task(
         task_id=2,
         project_id=2,
+        team_id=2,
         assigned_to=2,
         title="PM2 Test Task 1",
         description="Proprietary QA details on Project 2",
@@ -359,6 +370,7 @@ def seed_data(db_session):
     task3 = Task(
         task_id=3,
         project_id=2,
+        team_id=2,
         assigned_to=2,
         title="PM2 Test Task 2",
         description="More details",
@@ -367,6 +379,7 @@ def seed_data(db_session):
     task4 = Task(
         task_id=4,
         project_id=2,
+        team_id=2,
         assigned_to=2,
         title="PM2 Test Task 3",
         description="Blocked task",
@@ -375,6 +388,7 @@ def seed_data(db_session):
     task5 = Task(
         task_id=5,
         project_id=2,
+        team_id=2,
         assigned_to=2,
         title="PM2 Finished Task",
         description="Finished task",
