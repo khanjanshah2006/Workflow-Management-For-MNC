@@ -1,4 +1,4 @@
-from typing import List, Optional
+﻿from typing import List, Optional
 from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    BackupTriggerResponse,
+    AnomalyAlertsResponse,
     ElevatedAccessGrantCreate,
     ElevatedAccessGrantResponse,
     SystemParameterResponse,
@@ -34,6 +36,7 @@ router = APIRouter(prefix="/api/v1/admin", tags=["Admin User Management"])
 
 # Strict RBAC guard: Admin access only
 admin_guard = require_role(["ADMIN"])
+system_admin_guard = require_role(["SYSTEM_ADMIN"])
 
 
 @router.get(
@@ -291,3 +294,38 @@ def list_active_elevated_grants(
     return AdminService.list_active_elevated_grants(db=db)
 
 
+
+
+
+# ==========================================
+# On-Demand Backup & Security Anomalies (US-49, US-50)
+# ==========================================
+
+@router.post(
+    "/backup/trigger",
+    response_model=BackupTriggerResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Trigger an on-demand database backup (US-50)",
+    description="SYSTEM_ADMIN only. Creates a timestamped database backup and records it in the backup and audit logs.",
+)
+def trigger_backup(
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(system_admin_guard),
+) -> BackupTriggerResponse:
+    client_ip = request.client.host if request.client else None
+    return AdminService.trigger_backup(db, current_user, client_ip)
+
+
+@router.get(
+    "/anomaly-alerts",
+    response_model=AnomalyAlertsResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Retrieve recent security anomaly alerts (US-49)",
+    description="SYSTEM_ADMIN only. Detects failed-login bursts and unexpected privilege promotions.",
+)
+def get_anomaly_alerts(
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(system_admin_guard),
+) -> AnomalyAlertsResponse:
+    return AdminService.get_anomaly_alerts(db)

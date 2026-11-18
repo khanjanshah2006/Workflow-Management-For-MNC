@@ -1,4 +1,4 @@
-from uuid import UUID
+﻿from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 from jose import JWTError
@@ -35,6 +35,19 @@ class AuthService:
         """Authenticate user credentials and issue signed JWT access & refresh tokens or trigger MFA challenge."""
         account = AuthRepository.get_by_email(db, email=email)
         if not account or not verify_password(password, account.password_hash):
+            # Record failed login attempt for security audit and anomaly detection
+            write_audit_log(
+                db=db,
+                action=AuditAction.LOGIN,
+                entity_name="USER_ACCOUNT",
+                entity_ref_id=str(account.account_id) if account else "UNKNOWN",
+                account_id=account.account_id if account else None,
+                new_value={
+                    "status": "FAILED",
+                    "attempted_email": email,
+                },
+                ip_address=ip_address,
+            )
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -148,7 +161,7 @@ class AuthService:
             )
 
         totp = pyotp.TOTP(user.mfa_secret)
-        print(f"\n[MFA VERIFY] User: {user.email} | Received: '{code.strip()}' | Server Expected: '{totp.now()}'")
+
         if not totp.verify(code.strip(), valid_window=2):
             write_audit_log(
                 db=db,
@@ -223,7 +236,7 @@ class AuthService:
             )
 
         totp = pyotp.TOTP(account.mfa_secret)
-        print(f"\n[MFA LOGIN] User: {account.email} | Received: '{code.strip()}' | Server Expected: '{totp.now()}'")
+
         if not totp.verify(code.strip(), valid_window=2):
             write_audit_log(
                 db=db,
@@ -231,7 +244,7 @@ class AuthService:
                 entity_name="USER_ACCOUNT",
                 entity_ref_id=str(account.account_id),
                 account_id=account.account_id,
-                new_value={"status": "mfa_challenge_failed", "email": account.email},
+                new_value={"status": "FAILED", "attempted_email": account.email, "auth_method": "MFA"},
                 ip_address=ip_address,
             )
             raise HTTPException(

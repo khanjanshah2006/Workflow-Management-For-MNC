@@ -65,4 +65,3 @@ class SupportTicketRepository:
         )
         db.add(notification)
         return notification
-

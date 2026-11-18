@@ -1,4 +1,5 @@
 from uuid import UUID
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -28,6 +29,7 @@ def get_current_user(
 
     try:
         payload = decode_token(token)
+
         account_id_str: str | None = payload.get("sub")
         token_type: str | None = payload.get("type")
 
@@ -35,10 +37,12 @@ def get_current_user(
             raise credentials_exception
 
         account_id = UUID(account_id_str)
+
     except (JWTError, ValueError):
         raise credentials_exception
 
     user = AuthRepository.get_by_id(db, account_id=account_id)
+
     if user is None:
         raise credentials_exception
 
@@ -61,4 +65,3 @@ def require_roles(*args, **kwargs):
 
 
 require_role = require_roles
-

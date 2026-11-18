@@ -1,10 +1,12 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import List, Optional, Tuple
 from uuid import UUID
 from sqlalchemy.orm import Session
 
 from app.features.admin.schemas import UserAccountFilter
+from app.models.audit_log import AuditLog
 from app.models.enums import UserType
+from app.models.system_backup_log import SystemBackupLog
 from app.models.user_account import UserAccount
 from app.models.system_parameter import SystemParameter
 from app.models.elevated_access_grant import ElevatedAccessGrant
@@ -164,3 +166,45 @@ class AdminRepository:
         db.refresh(grant)
         return grant
 
+
+    # ==========================================
+    # System Backup Log & Audit Queries (US-49, US-50)
+    # ==========================================
+
+    @staticmethod
+    def create_backup_log(db: Session, actor_account_id):
+        row = SystemBackupLog(
+            triggered_by_account_id=actor_account_id,
+            backup_type="ON_DEMAND",
+            file_path=None,
+            status="IN_PROGRESS",
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return row
+
+    @staticmethod
+    def finish_backup_log(
+        db: Session,
+        row: SystemBackupLog,
+        status: str,
+        file_path: Optional[str] = None,
+        file_size_bytes: Optional[int] = None,
+    ):
+        row.status = status
+        row.file_path = file_path
+        row.file_size_bytes = file_size_bytes
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        return row
+
+    @staticmethod
+    def audit_rows_since(db: Session, since: datetime):
+        return (
+            db.query(AuditLog)
+            .filter(AuditLog.created_at >= since)
+            .order_by(AuditLog.created_at.asc())
+            .all()
+        )
