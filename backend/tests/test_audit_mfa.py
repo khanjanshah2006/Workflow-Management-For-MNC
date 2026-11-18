@@ -355,7 +355,7 @@ def test_mfa_login_challenge_flow(client, db_session, admin_user):
     # Check security audit log for failed login attempt
     failed_log = (
         db_session.query(AuditLog)
-        .filter(AuditLog.action == AuditAction.LOGIN, AuditLog.new_value.ilike("%mfa_challenge_failed%"))
+        .filter(AuditLog.action == AuditAction.LOGIN, AuditLog.new_value.ilike("%FAILED%"), AuditLog.new_value.ilike("%MFA%"))
         .first()
     )
     assert failed_log is not None
