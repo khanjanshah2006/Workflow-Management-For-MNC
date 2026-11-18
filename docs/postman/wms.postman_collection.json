@@ -751,7 +751,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Active Team Members",
+              "name": "200 OK – Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -764,7 +764,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK \u2013 Empty Team",
+              "name": "200 OK – Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -777,7 +777,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "name": "403 Forbidden – Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -790,7 +790,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found \u2013 Team Non-existent",
+              "name": "404 Not Found – Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -832,7 +832,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Tasks Stub",
+              "name": "200 OK – Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -845,7 +845,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team",
+              "name": "403 Forbidden – Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1466,7 +1466,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2273,6 +2273,307 @@
               ]
             },
             "description": "Verifies 404 behavior when querying a non-existent department ID (US-24)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Executive Report - PDF (201) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.expect(json).to.have.property(\"report_id\");",
+                  "pm.expect(json.format).to.eql(\"PDF\");",
+                  "pm.expect(json).to.have.property(\"download_url\");",
+                  "if (json.report_id) {",
+                  "    pm.environment.set(\"report_id\", json.report_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_title\": \"Q4-2026 Executive Performance Review\",\n  \"period_start\": \"2026-10-01\",\n  \"period_end\": \"2026-12-31\",\n  \"format\": \"PDF\",\n  \"include_department_breakdown\": true\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports",
+                "generate"
+              ]
+            },
+            "description": "Generate period-bounded executive report in PDF format (US-25)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Executive Report - CSV (201) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.expect(json).to.have.property(\"report_id\");",
+                  "pm.expect(json.format).to.eql(\"CSV\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_title\": \"Q4-2026 Project Metrics Export\",\n  \"period_start\": \"2026-10-01\",\n  \"period_end\": \"2026-12-31\",\n  \"format\": \"CSV\",\n  \"include_department_breakdown\": false\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports",
+                "generate"
+              ]
+            },
+            "description": "Generate period-bounded executive report in CSV format (US-25)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Executive Reports History (200) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var json = pm.response.json();",
+                  "pm.expect(json).to.have.property(\"items\");",
+                  "pm.expect(json).to.have.property(\"total\");"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "List chronological history of generated executive reports (US-25)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Download Executive Report (200, application/pdf) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Content-Type is application/pdf\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Type\")).to.include(\"application/pdf\");",
+                  "});",
+                  "pm.test(\"Content-Disposition attachment header is present\", function () {",
+                  "    pm.expect(pm.response.headers.get(\"Content-Disposition\")).to.include(\"attachment; filename=\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports/{{report_id}}/download",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports",
+                "{{report_id}}",
+                "download"
+              ]
+            },
+            "description": "Stream and download generated executive report file (US-25)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Report - period_end before period_start (400) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_title\": \"Invalid Date Range Report\",\n  \"period_start\": \"2026-12-31\",\n  \"period_end\": \"2026-10-01\",\n  \"format\": \"PDF\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports",
+                "generate"
+              ]
+            },
+            "description": "Rejects generation when period_end is before period_start with 400 (US-25)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Generate Report - As Employee (403) (US-25)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"report_title\": \"Forbidden Employee Report\",\n  \"period_start\": \"2026-10-01\",\n  \"period_end\": \"2026-12-31\",\n  \"format\": \"PDF\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/reports/generate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "reports",
+                "generate"
+              ]
+            },
+            "description": "Rejects non-executive non-admin roles with 403 Forbidden (US-25)."
           },
           "response": []
         }
