@@ -20,6 +20,8 @@ from app.features.client_portal import (
     project_deliverables_router,
     project_visibility_router,
 )
+from app.features.leave import leave_router
+from app.features.executive import executive_router
 from app.core.deps import get_current_user
 from app.features.auth.schemas import UserInfoResponse
 from app.models.user_account import UserAccount
@@ -69,6 +71,8 @@ app.include_router(project_tasks_router)
 app.include_router(client_portal_router)
 app.include_router(project_visibility_router)
 app.include_router(project_deliverables_router)
+app.include_router(leave_router)
+app.include_router(executive_router)
 
 
 @app.get("/", tags=["Root"])
