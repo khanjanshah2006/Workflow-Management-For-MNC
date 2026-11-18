@@ -36,6 +36,7 @@ from app.models.project_manager import ProjectManager
 from app.models.project import Project, ProjectAssignment
 from app.models.milestone import ProjectMilestone, Milestone
 from app.models.task import Task
+from app.models.team import Team
 from app.models.deliverable import Deliverable
 from app.models.audit_log import AuditLog
 from app.features.projects.schemas import (
@@ -75,6 +76,7 @@ def db_session():
             Project.__table__,
             ProjectAssignment.__table__,
             ProjectMilestone.__table__,
+            Team.__table__,
             Task.__table__,
             Deliverable.__table__,
             AuditLog.__table__,
@@ -576,9 +578,15 @@ def test_task_and_deliverable_foreign_key_compatibility(db_session, seed_data):
     db_session.commit()
     db_session.refresh(milestone)
 
+    # Task.team_id is required.
+    team = Team(project_id=1, name="Delivery Team")
+    db_session.add(team)
+    db_session.flush()
+
     # Create task linked to milestone
     task = Task(
         project_id=1,
+        team_id=team.team_id,
         milestone_id=milestone.id,
         title="Implement Task",
         priority=PriorityLevel.MEDIUM,
