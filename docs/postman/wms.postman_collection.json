@@ -751,7 +751,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Active Team Members",
+              "name": "200 OK \u2013 Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -764,7 +764,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK – Empty Team",
+              "name": "200 OK \u2013 Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -777,7 +777,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team / Non-Lead",
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -790,7 +790,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found – Team Non-existent",
+              "name": "404 Not Found \u2013 Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -832,7 +832,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Tasks Stub",
+              "name": "200 OK \u2013 Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -845,7 +845,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team",
+              "name": "403 Forbidden \u2013 Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1466,7 +1466,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2053,7 +2053,230 @@
     {
       "name": "08 Reporting",
       "description": "Executive metrics, summaries and analytics (features/reporting)",
-      "item": []
+      "item": [
+        {
+          "name": "GET Overview as Executive (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response has required executive dashboard fields\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property(\"total_projects\");",
+                  "    pm.expect(json).to.have.property(\"projects_by_status\");",
+                  "    pm.expect(json).to.have.property(\"active_projects\");",
+                  "    pm.expect(json).to.have.property(\"delayed_projects\");",
+                  "    pm.expect(json).to.have.property(\"completed_projects\");",
+                  "    pm.expect(json).to.have.property(\"overall_milestone_velocity_pct\");",
+                  "    pm.expect(json).to.have.property(\"task_kpis\");",
+                  "    pm.expect(json).to.have.property(\"total_employees\");",
+                  "    pm.expect(json).to.have.property(\"department_summaries\");",
+                  "});",
+                  "pm.test(\"No PII exposed in overview response\", function () {",
+                  "    var bodyStr = pm.response.text();",
+                  "    pm.expect(bodyStr).to.not.include(\"@\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "dashboard"
+              ]
+            },
+            "description": "Retrieve high-level organizational metrics roll-up as MNC_EXECUTIVE or ADMIN (US-24)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Department Drilldown (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Response has department drilldown structure\", function () {",
+                  "    var json = pm.response.json();",
+                  "    pm.expect(json).to.have.property(\"dept_id\");",
+                  "    pm.expect(json).to.have.property(\"dept_name\");",
+                  "    pm.expect(json).to.have.property(\"projects\");",
+                  "    pm.expect(json).to.have.property(\"teams\");",
+                  "    pm.expect(json).to.have.property(\"resource_allocation\");",
+                  "});",
+                  "pm.test(\"No PII in drilldown response\", function () {",
+                  "    var bodyStr = pm.response.text();",
+                  "    pm.expect(bodyStr).to.not.include(\"@\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/dashboard/departments/1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "dashboard",
+                "departments",
+                "1"
+              ]
+            },
+            "description": "Retrieve granular project, team, and staffing breakdown for a specific department (US-24)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Executive Dashboard as Employee (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403 Forbidden\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "dashboard"
+              ]
+            },
+            "description": "Verifies RBAC enforcement: standard employees cannot access the executive dashboard (US-24)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Executive Dashboard Unauthenticated (401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 401 Unauthorized\", function () {",
+                  "    pm.response.to.have.status(401);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "dashboard"
+              ]
+            },
+            "description": "Verifies authentication enforcement: missing token returns 401 (US-24)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Department Drilldown Unknown Department (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 404 Not Found\", function () {",
+                  "    pm.response.to.have.status(404);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/executive/dashboard/departments/99999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "executive",
+                "dashboard",
+                "departments",
+                "99999"
+              ]
+            },
+            "description": "Verifies 404 behavior when querying a non-existent department ID (US-24)."
+          },
+          "response": []
+        }
+      ]
     },
     {
       "name": "09 Support",
