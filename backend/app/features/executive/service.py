@@ -61,21 +61,19 @@ class ExecutiveService:
         delayed_ids = ExecutiveRepository.get_delayed_project_ids(db, today=current_date)
         delayed_projects = len(delayed_ids)
 
-        # 3. Overall milestone velocity
-        comp_ms, tot_ms = ExecutiveRepository.get_global_milestone_velocity(db)
-        overall_velocity = calculate_milestone_velocity(comp_ms, tot_ms)
-
-        # 4. Task KPIs
+        # 3. Task KPIs
         task_kpis_dict = ExecutiveRepository.get_task_kpis(db, now=current_time)
         task_kpis = TaskKpis(**task_kpis_dict)
 
-        # 5. Total active employee headcount
-        total_employees = ExecutiveRepository.get_total_active_employees(db)
-
-        # 6. Department summaries (attribution via PM's dept_id, with Unassigned bucket)
-        dept_summaries_data = ExecutiveRepository.get_department_summaries_data(
+        # 4. Department summaries, global milestone velocity totals, and employee count (Queries 4-7)
+        (
+            dept_summaries_data,
+            (comp_ms, tot_ms),
+            total_employees,
+        ) = ExecutiveRepository.get_department_summaries_and_totals(
             db, delayed_project_ids=delayed_ids
         )
+        overall_velocity = calculate_milestone_velocity(comp_ms, tot_ms)
         dept_summaries = [DepartmentSummaryItem(**d) for d in dept_summaries_data]
 
         return ExecutiveOverviewResponse(
@@ -112,15 +110,17 @@ class ExecutiveService:
                 detail=f"Department with ID {dept_id} not found.",
             )
 
-        # 2. Projects attributed to this department
+        # 2. Teams under this department's projects (and team counts per project)
+        teams_data, team_counts_by_proj = ExecutiveRepository.get_department_teams_data(
+            db, dept_id=dept_id
+        )
+        teams = [DepartmentTeamItem(**t) for t in teams_data]
+
+        # 3. Projects attributed to this department
         projects_data = ExecutiveRepository.get_department_projects_data(
-            db, dept_id=dept_id, today=current_date
+            db, dept_id=dept_id, today=current_date, team_count_map=team_counts_by_proj
         )
         projects = [DepartmentProjectItem(**p) for p in projects_data]
-
-        # 3. Teams under this department's projects
-        teams_data = ExecutiveRepository.get_department_teams_data(db, dept_id=dept_id)
-        teams = [DepartmentTeamItem(**t) for t in teams_data]
 
         # 4. Resource allocation (allocated, unallocated, by designation)
         allocation_data = ExecutiveRepository.get_department_resource_allocation(

@@ -73,26 +73,9 @@ class ExecutiveRepository:
         return {row[0] for row in delayed_rows}
 
     @staticmethod
-    def get_global_milestone_velocity(db: Session) -> Tuple[int, int]:
-        """Query 3: Return (completed_count, total_count) of all non-deleted milestones."""
-        row = (
-            db.query(
-                func.count(ProjectMilestone.id),
-                func.sum(
-                    case((ProjectMilestone.status == MilestoneStatus.COMPLETED, 1), else_=0)
-                ),
-            )
-            .filter(ProjectMilestone.is_deleted == False)  # noqa: E712
-            .first()
-        )
-        total = row[0] or 0
-        completed = row[1] or 0
-        return int(completed), int(total)
-
-    @staticmethod
     def get_task_kpis(db: Session, now: datetime) -> Dict[str, int]:
         """
-        Query 4: Return organizational task KPIs:
+        Query 3: Return organizational task KPIs:
           - open_tasks: status != DONE
           - overdue_tasks: status != DONE and due_date < now
           - completed_last_30_days: status == DONE and (completed_at or updated_at) >= now - 30d
@@ -136,32 +119,22 @@ class ExecutiveRepository:
         }
 
     @staticmethod
-    def get_total_active_employees(db: Session) -> int:
-        """Query 5: Return count of all active employees organization-wide."""
-        count = (
-            db.query(func.count(Employee.emp_id))
-            .filter(Employee.status == CommonStatus.ACTIVE)
-            .scalar()
-        )
-        return int(count or 0)
-
-    @staticmethod
-    def get_department_summaries_data(
+    def get_department_summaries_and_totals(
         db: Session, delayed_project_ids: Set[int]
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], Tuple[int, int], int]:
         """
-        Query 6 & 7: Return department summaries using fixed set-based queries.
-
-        Department attribution:
-          Project belongs to its assigned PM's dept_id (project.pm_id -> pm.dept_id).
-          Projects with no PM or where PM has no dept_id roll into the 'Unassigned' bucket (dept_id = None).
+        Queries 4, 5, 6, 7:
+        Return:
+          - summaries: List of department summary dicts (including Unassigned bucket)
+          - (global_completed_ms, global_total_ms): Organizational milestone counts
+          - total_active_employees: Count of all active employees organization-wide
+        All in 4 grouped queries, keeping total overview queries strictly <= 8.
         """
-        # A. All defined departments
+        # Query 4: All defined departments
         departments = db.query(Department.dept_id, Department.name).all()
         dept_name_by_id: Dict[Optional[int], str] = {d[0]: d[1] for d in departments}
 
-        # B. Grouped project rollups by PM dept_id
-        # Project -> ProjectManager (LEFT OUTER JOIN)
+        # Query 5: Grouped project rollups by PM dept_id
         project_rows = (
             db.query(
                 Project.project_id,
@@ -172,7 +145,7 @@ class ExecutiveRepository:
             .all()
         )
 
-        # C. Grouped milestone counts by project
+        # Query 6: Grouped milestone counts by project
         milestone_rows = (
             db.query(
                 ProjectMilestone.project_id,
@@ -189,7 +162,11 @@ class ExecutiveRepository:
             m[0]: (int(m[2] or 0), int(m[1] or 0)) for m in milestone_rows
         }
 
-        # D. Employee counts by employee.dept_id
+        # Derive global milestone counts from ms_by_proj
+        global_completed_ms = sum(m[0] for m in ms_by_proj.values())
+        global_total_ms = sum(m[1] for m in ms_by_proj.values())
+
+        # Query 7: Employee counts by employee.dept_id
         emp_rows = (
             db.query(Employee.dept_id, func.count(Employee.emp_id))
             .filter(Employee.status == CommonStatus.ACTIVE)
@@ -197,6 +174,7 @@ class ExecutiveRepository:
             .all()
         )
         emp_by_dept: Dict[Optional[int], int] = {e[0]: int(e[1] or 0) for e in emp_rows}
+        total_active_employees = sum(emp_by_dept.values())
 
         # Aggregate metrics per department bucket
         dept_metrics: Dict[Optional[int], Dict[str, Any]] = {}
@@ -257,7 +235,7 @@ class ExecutiveRepository:
 
         # Sort: named departments by dept_id ASC, Unassigned at the end
         summaries.sort(key=lambda s: (s["dept_id"] is None, s["dept_id"] or 0))
-        return summaries
+        return summaries, (global_completed_ms, global_total_ms), total_active_employees
 
     # ------------------------------------------------------------------
     # Department Drilldown (GET /api/v1/executive/dashboard/departments/{id})
@@ -265,19 +243,22 @@ class ExecutiveRepository:
 
     @staticmethod
     def get_department_by_id(db: Session, dept_id: int) -> Optional[Department]:
-        """Fetch department by primary key ID."""
+        """Query D1: Fetch department by primary key ID."""
         return db.query(Department).filter(Department.dept_id == dept_id).first()
 
     @staticmethod
     def get_department_projects_data(
-        db: Session, dept_id: int, today: date
+        db: Session,
+        dept_id: int,
+        today: date,
+        team_count_map: Optional[Dict[int, int]] = None,
     ) -> List[Dict[str, Any]]:
         """
-        Fetch all projects attributed to this department (PM's dept_id == dept_id)
-        along with their task %, milestone completion, delayed flag, team count,
-        and assigned headcount in fixed queries.
+        Fetch all projects attributed to this department along with their
+        task %, milestone completion, delayed flag, team count, and assigned headcount.
+        Uses team_count_map if provided to avoid a redundant query.
         """
-        # 1. Projects attributed to this PM dept_id
+        # D2: Projects attributed to this PM dept_id
         projects = (
             db.query(Project)
             .join(ProjectManager, Project.pm_id == ProjectManager.pm_id)
@@ -290,7 +271,7 @@ class ExecutiveRepository:
 
         proj_ids = [p.project_id for p in projects]
 
-        # 2. Milestones aggregated by project_id
+        # D3: Milestones aggregated by project_id
         ms_rows = (
             db.query(
                 ProjectMilestone.project_id,
@@ -322,7 +303,7 @@ class ExecutiveRepository:
             m[0]: (int(m[1] or 0), int(m[2] or 0), (int(m[3] or 0) > 0)) for m in ms_rows
         }
 
-        # 3. Tasks aggregated by project_id
+        # D4: Tasks aggregated by project_id
         task_rows = (
             db.query(
                 Task.project_id,
@@ -337,16 +318,19 @@ class ExecutiveRepository:
             t[0]: (int(t[1] or 0), int(t[2] or 0)) for t in task_rows
         }
 
-        # 4. Teams count aggregated by project_id
-        team_counts = (
-            db.query(Team.project_id, func.count(Team.team_id))
-            .filter(Team.project_id.in_(proj_ids))
-            .group_by(Team.project_id)
-            .all()
-        )
-        team_count_map: Dict[int, int] = {tc[0]: int(tc[1] or 0) for tc in team_counts}
+        # D5: Teams count aggregated by project_id (if not precomputed)
+        if team_count_map is None:
+            team_counts = (
+                db.query(Team.project_id, func.count(Team.team_id))
+                .filter(Team.project_id.in_(proj_ids))
+                .group_by(Team.project_id)
+                .all()
+            )
+            resolved_team_counts: Dict[int, int] = {tc[0]: int(tc[1] or 0) for tc in team_counts}
+        else:
+            resolved_team_counts = team_count_map
 
-        # 5. Assigned headcount by project_id (distinct active employees with active assignment)
+        # D6: Assigned headcount by project_id
         headcount_rows = (
             db.query(
                 ProjectAssignment.project_id,
@@ -385,7 +369,7 @@ class ExecutiveRepository:
                     "milestones_completed": comp_ms,
                     "milestones_total": tot_ms,
                     "is_delayed": is_delayed,
-                    "team_count": team_count_map.get(p.project_id, 0),
+                    "team_count": resolved_team_counts.get(p.project_id, 0),
                     "assigned_headcount": headcount_map.get(p.project_id, 0),
                 }
             )
@@ -393,100 +377,94 @@ class ExecutiveRepository:
         return results
 
     @staticmethod
-    def get_department_teams_data(db: Session, dept_id: int) -> List[Dict[str, Any]]:
+    def get_department_teams_data(
+        db: Session, dept_id: int
+    ) -> Tuple[List[Dict[str, Any]], Dict[int, int]]:
         """
         Fetch teams belonging to a department through their project
-        (team.project_id -> project -> PM's dept_id).
+        (team.project_id -> project -> PM's dept_id) in a single grouped query.
+        Returns:
+            (teams_list, team_counts_by_project_id)
         """
-        # Fetch teams joined with Project and PM
         team_rows = (
             db.query(
                 Team.team_id,
                 Team.name,
+                Team.project_id,
                 Project.name,
+                func.count(func.distinct(TeamMember.team_member_id)),
+                func.count(
+                    func.distinct(
+                        case((Task.status != TaskStatus.DONE, Task.task_id), else_=None)
+                    )
+                ),
             )
             .join(Project, Team.project_id == Project.project_id)
             .join(ProjectManager, Project.pm_id == ProjectManager.pm_id)
+            .outerjoin(TeamMember, Team.team_id == TeamMember.team_id)
+            .outerjoin(Task, Team.team_id == Task.team_id)
             .filter(ProjectManager.dept_id == dept_id)
+            .group_by(Team.team_id, Team.name, Team.project_id, Project.name)
             .order_by(Team.team_id)
             .all()
         )
-        if not team_rows:
-            return []
 
-        team_ids = [t[0] for t in team_rows]
-
-        # Member counts per team
-        member_counts = (
-            db.query(TeamMember.team_id, func.count(TeamMember.team_member_id))
-            .filter(TeamMember.team_id.in_(team_ids))
-            .group_by(TeamMember.team_id)
-            .all()
-        )
-        member_map: Dict[int, int] = {mc[0]: int(mc[1] or 0) for mc in member_counts}
-
-        # Open tasks per team
-        open_task_rows = (
-            db.query(Task.team_id, func.count(Task.task_id))
-            .filter(
-                Task.team_id.in_(team_ids),
-                Task.status != TaskStatus.DONE,
+        team_counts_by_proj: Dict[int, int] = {}
+        teams: List[Dict[str, Any]] = []
+        for tid, tname, pid, pname, member_count, open_tasks in team_rows:
+            team_counts_by_proj[pid] = team_counts_by_proj.get(pid, 0) + 1
+            teams.append(
+                {
+                    "team_id": tid,
+                    "name": tname,
+                    "project_name": pname,
+                    "member_count": int(member_count or 0),
+                    "open_tasks": int(open_tasks or 0),
+                }
             )
-            .group_by(Task.team_id)
-            .all()
-        )
-        task_map: Dict[int, int] = {ot[0]: int(ot[1] or 0) for ot in open_task_rows}
 
-        return [
-            {
-                "team_id": tid,
-                "name": tname,
-                "project_name": pname,
-                "member_count": member_map.get(tid, 0),
-                "open_tasks": task_map.get(tid, 0),
-            }
-            for tid, tname, pname in team_rows
-        ]
+        return teams, team_counts_by_proj
 
     @staticmethod
     def get_department_resource_allocation(
         db: Session, dept_id: int
     ) -> Dict[str, Any]:
         """
-        Fetch headcount and allocation for all active employees within a department.
+        Fetch headcount and allocation for all active employees within a department in 1 query:
           - total_employees: active employees in department
           - allocated_employees: active employees with >= 1 active ProjectAssignment
           - unallocated_employees: total - allocated
           - headcount_by_designation: grouped count by employee designation
         """
-        # 1. Total employees and designations
         emp_rows = (
-            db.query(Employee.designation, func.count(Employee.emp_id))
+            db.query(
+                Employee.emp_id,
+                Employee.designation,
+                func.count(ProjectAssignment.assignment_id),
+            )
+            .outerjoin(
+                ProjectAssignment,
+                and_(
+                    ProjectAssignment.emp_id == Employee.emp_id,
+                    ProjectAssignment.released_on.is_(None),
+                ),
+            )
             .filter(
                 Employee.dept_id == dept_id,
                 Employee.status == CommonStatus.ACTIVE,
             )
-            .group_by(Employee.designation)
+            .group_by(Employee.emp_id, Employee.designation)
             .all()
         )
-        headcount_by_designation: Dict[str, int] = {
-            r[0] or "Unassigned": int(r[1] or 0) for r in emp_rows
-        }
-        total_employees = sum(headcount_by_designation.values())
 
-        # 2. Distinct allocated employees in this department
-        allocated_count = (
-            db.query(func.count(func.distinct(Employee.emp_id)))
-            .join(ProjectAssignment, ProjectAssignment.emp_id == Employee.emp_id)
-            .filter(
-                Employee.dept_id == dept_id,
-                Employee.status == CommonStatus.ACTIVE,
-                ProjectAssignment.released_on.is_(None),
-            )
-            .scalar()
-        ) or 0
-        allocated_employees = int(allocated_count)
+        total_employees = len(emp_rows)
+        allocated_employees = sum(1 for r in emp_rows if (r[2] or 0) > 0)
         unallocated_employees = max(0, total_employees - allocated_employees)
+
+        headcount_by_designation: Dict[str, int] = {}
+        for r in emp_rows:
+            desig = r[1] or "Unassigned"
+            headcount_by_designation[desig] = headcount_by_designation.get(desig, 0) + 1
 
         return {
             "total_employees": total_employees,
