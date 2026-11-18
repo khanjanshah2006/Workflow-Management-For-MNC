@@ -56,6 +56,9 @@ class BackupStatusResponse(BaseModel):
     last_verified_at: datetime
     active_connections: int
     details: str
+    last_successful_backup: Optional[datetime] = None
+    last_failed_backup: Optional[datetime] = None
+    recent_failures_count: int = 0
 
 
 # ==========================================
@@ -105,3 +108,48 @@ class ElevatedAccessGrantResponse(BaseModel):
     reason: str
 
 
+# ==========================================
+# Database Backup & Anomaly Schemas (US-49, US-50)
+# ==========================================
+
+class BackupTriggerResponse(BaseModel):
+    backup_id: int
+    backup_type: str
+    file_path: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    status: str
+    created_at: datetime
+    triggered_by_account_id: Optional[UUID] = None
+    details: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnomalyAlert(BaseModel):
+    id: Optional[str] = None
+    title: Optional[str] = None
+    description: Optional[str] = None
+    alert_type: str
+    severity: str
+    ip_address: Optional[str] = None
+    source_ip: Optional[str] = None
+    account_id: Optional[UUID] = None
+    target_account_id: Optional[UUID] = None
+    attempted_email: Optional[str] = None
+    target_account: Optional[str] = None
+    old_role: Optional[str] = None
+    new_role: Optional[str] = None
+    count: int = 1
+    attempts_count: Optional[int] = None
+    first_timestamp: datetime
+    last_timestamp: datetime
+    timestamp: Optional[datetime] = None
+    status: str = "ACTIVE"
+    details: str
+
+
+class AnomalyAlertsResponse(BaseModel):
+    window_minutes: int = 15
+    total_alerts: int
+    alerts: List[AnomalyAlert]
+    notes: Optional[str] = None

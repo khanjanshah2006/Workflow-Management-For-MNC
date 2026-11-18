@@ -289,7 +289,7 @@ export const adminApi = {
   getAnomalyAlerts: async () => {
     try {
       const response = await apiClient.get("/api/v1/admin/anomaly-alerts");
-      return Array.isArray(response) ? response : [];
+      return Array.isArray(response) ? response : (response?.alerts || []);
     } catch (err) {
       if (import.meta.env?.DEV && (err?.status === 404 || err?.status === 0)) {
         console.warn("Backend anomaly-alerts unavailable (404/offline); using dev mock data:", err.message);
