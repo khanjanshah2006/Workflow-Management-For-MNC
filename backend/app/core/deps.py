@@ -1,8 +1,7 @@
-
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
 from jose import JWTError
 
@@ -11,17 +10,17 @@ from app.db.session import get_db
 from app.features.auth.repository import AuthRepository
 from app.models.user_account import UserAccount
 
-bearer_scheme = HTTPBearer()
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/v1/auth/login")
 
 
 def get_current_user(
-    credentials: HTTPAuthorizationCredentials = Depends(bearer_scheme),
+    token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db),
 ) -> UserAccount:
     """
-    Extracts and validates the JWT Bearer token from the Authorization header.
+    FastAPI dependency that extracts and validates the JWT Bearer token
+    from the Authorization header, returning the active UserAccount entity.
     """
-
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -29,7 +28,6 @@ def get_current_user(
     )
 
     try:
-        token = credentials.credentials
         payload = decode_token(token)
 
         account_id_str: str | None = payload.get("sub")
@@ -67,4 +65,3 @@ def require_roles(*args, **kwargs):
 
 
 require_role = require_roles
-
