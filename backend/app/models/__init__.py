@@ -12,6 +12,7 @@ from app.models.enums import (
     LeaveStatus,
     SkillProficiency,
     AuditAction,
+    ReportFormat,
 )
 from app.models.user_account import UserAccount
 from app.models.department import Department
@@ -32,6 +33,7 @@ from app.models.support import SupportTicket, TicketActivity
 from app.models.system_parameter import SystemParameter
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.system_backup_log import SystemBackupLog
+from app.models.executive_report import ExecutiveReport
 
 __all__ = [
     "Base",
@@ -47,6 +49,7 @@ __all__ = [
     "LeaveStatus",
     "SkillProficiency",
     "AuditAction",
+    "ReportFormat",
     "UserAccount",
     "Department",
     "Employee",
@@ -75,4 +78,5 @@ __all__ = [
     "SystemParameter",
     "ElevatedAccessGrant",
     "SystemBackupLog",
+    "ExecutiveReport",
 ]

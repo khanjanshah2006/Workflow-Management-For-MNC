@@ -37,3 +37,13 @@ The system also supports HR Managers, Clients, MNC Executives, IT Support, and S
 ## Expected Outcome
 
 The system provides a structured way to manage organizational workflows and helps improve task coordination, workload visibility, project tracking, and communication within an MNC.
+
+## Wave 3 Demo Data
+
+Run the idempotent demo seed from `backend/` after `alembic upgrade head`:
+
+```bash
+python scripts/seed_wave3_demo.py
+```
+
+It creates a Team Lead (`john.teamlead@company.com`), three employees (`sarah.connor@`, `john.matrix@`, `kyle.reese@company.com`), `pm@company.com`, `hr@company.com`, `executive@company.com` and `client@acme.com`, plus the "Alpha ERP Modernization" project, team, leave types, leave requests and tasks. All accounts use the password in the `SEED_PASSWORD` environment variable (default `Password@123`). Dates are relative to today, so re-running it refreshes the demo instead of duplicating it.

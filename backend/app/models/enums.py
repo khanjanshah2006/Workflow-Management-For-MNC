@@ -10,6 +10,7 @@ class UserType(str, enum.Enum):
     ADMIN = "ADMIN"
     IT_SUPPORT = "IT_SUPPORT"
     SYSTEM_ADMIN = "SYSTEM_ADMIN"
+    MNC_EXECUTIVE = "MNC_EXECUTIVE"
 
 
 class CommonStatus(str, enum.Enum):
@@ -81,3 +82,9 @@ class AuditAction(str, enum.Enum):
     DELETE = "DELETE"
     LOGIN = "LOGIN"
     APPROVE = "APPROVE"
+    EXPORT = "EXPORT"
+
+
+class ReportFormat(str, enum.Enum):
+    PDF = "PDF"
+    CSV = "CSV"
