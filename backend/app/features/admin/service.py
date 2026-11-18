@@ -1,18 +1,30 @@
-import json
+﻿import json
+import logging
 import math
-from datetime import datetime, timezone
+import os
+import shutil
+import sqlite3
+import subprocess
+from collections import defaultdict
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
+from urllib.parse import unquote
 from typing import List, Optional
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.engine import make_url
+from fastapi import HTTPException, status
 
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
-from app.db.session import engine
+from app.db.session import engine, DATABASE_URL as SESSION_DATABASE_URL
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
     AdminPasswordReset,
     BackupStatusResponse,
+    AnomalyAlert,
+    AnomalyAlertsResponse,
     ElevatedAccessGrantCreate,
     ElevatedAccessGrantResponse,
     SystemParameterResponse,
@@ -25,6 +37,18 @@ from app.features.admin.schemas import (
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 
+
+
+logger = logging.getLogger(__name__)
+
+def _json_object(value):
+    if not value:
+        return {}
+    try:
+        parsed = json.loads(value) if isinstance(value, str) else value
+        return parsed if isinstance(parsed, dict) else {}
+    except (TypeError, ValueError):
+        return {}
 
 class UserNotFoundError(Exception):
     pass
@@ -340,4 +364,198 @@ class AdminService:
         grants = AdminRepository.list_active_elevated_grants(db=db, now=now)
         return [ElevatedAccessGrantResponse.model_validate(g) for g in grants]
 
+
+
+    def trigger_backup(db: Session, actor, ip_address: str | None = None):
+        log = AdminRepository.create_backup_log(db, actor.account_id)
+        backup_dir = Path(os.getenv("BACKUP_DIR", "./backups")).expanduser().resolve()
+        filename = f"database_backup_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}_{log.backup_id}.dump"
+        target = backup_dir / filename
+        database_url = os.getenv("DATABASE_URL") or SESSION_DATABASE_URL or ""
+
+        try:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            timeout = int(os.getenv("BACKUP_TIMEOUT_SECONDS", "300"))
+            if database_url.startswith("sqlite"):
+                url = make_url(database_url)
+                source_path = Path(url.database or "")
+                if not source_path.exists():
+                    raise RuntimeError("Configured SQLite database file does not exist")
+                source = sqlite3.connect(str(source_path))
+                destination = sqlite3.connect(str(target))
+                try:
+                    source.backup(destination)
+                finally:
+                    destination.close()
+                    source.close()
+            else:
+                if not database_url:
+                    raise RuntimeError("DATABASE_URL is not configured")
+                url = make_url(database_url)
+                configured_dump = os.getenv("PG_DUMP_PATH")
+                pg_dump = configured_dump or shutil.which("pg_dump")
+                if pg_dump:
+                    pg_dump = str(pg_dump).strip().strip('"').strip("'")
+                if not pg_dump or not Path(pg_dump).is_file():
+                    if configured_dump:
+                        raise FileNotFoundError(f"Configured PG_DUMP_PATH is invalid: '{pg_dump}'")
+                    raise FileNotFoundError("pg_dump is not installed or not found on system PATH")
+
+                command = [
+                    pg_dump, "--no-password", "--format=custom",
+                    "--file", str(target),
+                    "--host", str(url.host or "localhost"),
+                    "--port", str(url.port or 5432),
+                    "--username", str(url.username or "postgres"),
+                    "--dbname", str(url.database or "postgres"),
+                ]
+                env = os.environ.copy()
+                # Ensure the pg_dump binary directory is in PATH so dependent DLLs (libpq, openssl) load cleanly
+                dump_bin_dir = str(Path(pg_dump).parent)
+                current_path = env.get("PATH", "")
+                if dump_bin_dir not in current_path:
+                    env["PATH"] = f"{dump_bin_dir}{os.pathsep}{current_path}"
+
+                if url.password:
+                    env["PGPASSWORD"] = unquote(url.password)
+
+                sslmode = url.query.get("sslmode")
+                if sslmode:
+                    env["PGSSLMODE"] = str(sslmode)
+                elif url.host and url.host not in ("localhost", "127.0.0.1"):
+                    env["PGSSLMODE"] = "require"
+
+                completed = subprocess.run(
+                    command, env=env, capture_output=True, text=True,
+                    timeout=timeout, check=False,
+                )
+                if completed.returncode != 0:
+                    err_msg = completed.stderr.strip() if completed.stderr else f"Exit code {completed.returncode}"
+                    logger.error(
+                        "pg_dump failed (exit code %s): %s",
+                        completed.returncode,
+                        err_msg[-2000:],
+                    )
+                    raise RuntimeError(f"pg_dump execution failed (exit code {completed.returncode}): {err_msg[-500:]}")
+
+            if not target.is_file() or target.stat().st_size == 0:
+                raise RuntimeError("Backup command did not produce a non-empty file")
+            row = AdminRepository.finish_backup_log(
+                db, log, "COMPLETED", str(target), target.stat().st_size
+            )
+            write_audit_log(
+                db, AuditAction.CREATE, "SYSTEM_BACKUP", str(row.backup_id),
+                account_id=actor.account_id,
+                new_value={"status": "COMPLETED", "backup_name": filename, "file_size_bytes": row.file_size_bytes},
+                ip_address=ip_address,
+            )
+            # Never return the server's absolute storage path.
+            return {
+                "backup_id": row.backup_id, "backup_type": row.backup_type,
+                "file_path": filename, "file_size_bytes": row.file_size_bytes,
+                "status": row.status, "created_at": row.created_at,
+                "triggered_by_account_id": row.triggered_by_account_id,
+                "details": "Database backup completed successfully.",
+            }
+        except Exception as exc:
+            try:
+                if target.exists():
+                    target.unlink()
+            except OSError:
+                logger.exception("Could not remove partial backup artifact")
+            row = AdminRepository.finish_backup_log(db, log, "FAILED", None, None)
+            err_detail = str(exc)
+            write_audit_log(
+                db, AuditAction.CREATE, "SYSTEM_BACKUP", str(row.backup_id),
+                account_id=actor.account_id,
+                new_value={"status": "FAILED", "reason": type(exc).__name__},
+                ip_address=ip_address,
+            )
+            logger.warning("On-demand backup %s failed (%s): %s", row.backup_id, type(exc).__name__, exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Database backup could not be completed. Check server logs for details.",
+            ) from exc
+
+    @staticmethod
+    def get_anomaly_alerts(db: Session):
+        now = datetime.now(timezone.utc)
+        failed_window = int(os.getenv("FAILED_LOGIN_WINDOW_MINUTES", "15"))
+        threshold = int(os.getenv("FAILED_LOGIN_THRESHOLD", "5"))
+        rows = AdminRepository.audit_rows_since(db, now - timedelta(minutes=failed_window))
+
+        ip_groups = defaultdict(list)
+        account_groups = defaultdict(list)
+        for row in rows:
+            if row.action != AuditAction.LOGIN or row.entity_name != "USER_ACCOUNT":
+                continue
+            data = _json_object(row.new_value)
+            if data.get("status") != "FAILED":
+                continue
+            if row.ip_address:
+                ip_groups[row.ip_address].append((row, data))
+            account_key = str(row.account_id) if row.account_id else str(data.get("attempted_email", "")).strip().lower()
+            if account_key:
+                account_groups[account_key].append((row, data))
+
+        alerts = []
+        for ip, events in ip_groups.items():
+            if len(events) > threshold:
+                times = [event[0].created_at for event in events]
+                alerts.append(AnomalyAlert(
+                    alert_type="FAILED_LOGIN_BURST", severity="HIGH",
+                    ip_address=ip, count=len(events),
+                    first_timestamp=min(times), last_timestamp=max(times),
+                    details=f"More than {threshold} failed login attempts from this IP in {failed_window} minutes.",
+                ))
+        for account_key, events in account_groups.items():
+            if len(events) > threshold:
+                times = [event[0].created_at for event in events]
+                sample = events[0][1]
+                try:
+                    account_id = UUID(account_key)
+                except (ValueError, TypeError):
+                    account_id = None
+                alerts.append(AnomalyAlert(
+                    alert_type="FAILED_LOGIN_BURST", severity="HIGH",
+                    account_id=account_id,
+                    attempted_email=sample.get("attempted_email"),
+                    count=len(events), first_timestamp=min(times), last_timestamp=max(times),
+                    details=f"More than {threshold} failed login attempts for this account in {failed_window} minutes.",
+                ))
+
+        # Role elevations are reviewed over 24 hours; no volume threshold is assumed.
+        elevation_rows = AdminRepository.audit_rows_since(db, now - timedelta(hours=24))
+        rank = {"ADMIN": 1, "SYSTEM_ADMIN": 2}
+        for row in elevation_rows:
+            if row.entity_name != "USER_ACCOUNT" or row.action not in (AuditAction.UPDATE, AuditAction.CREATE):
+                continue
+            old_data, new_data = _json_object(row.old_value), _json_object(row.new_value)
+            old_role = str(old_data.get("user_type", "")).upper() or None
+            new_role = str(new_data.get("user_type", "")).upper() or None
+            if not new_role:
+                continue
+            old_rank = rank.get(old_role, 0)
+            new_rank = rank.get(new_role, 0)
+            if new_rank <= old_rank:
+                continue
+            try:
+                target_id = UUID(str(row.entity_ref_id))
+            except (ValueError, TypeError):
+                target_id = None
+            alerts.append(AnomalyAlert(
+                alert_type="PRIVILEGE_ESCALATION",
+                severity="CRITICAL" if new_role == "SYSTEM_ADMIN" else "HIGH",
+                account_id=row.account_id, target_account_id=target_id,
+                old_role=old_role, new_role=new_role, count=1,
+                first_timestamp=row.created_at, last_timestamp=row.created_at,
+                details=f"Account role elevated from {old_role or 'UNASSIGNED'} to {new_role}.",
+            ))
+
+        return AnomalyAlertsResponse(
+            window_minutes=failed_window,
+            total_alerts=len(alerts),
+            alerts=alerts,
+            notes="Privilege elevations are listed individually over the last 24 hours; no spike threshold is configured.",
+        )
 

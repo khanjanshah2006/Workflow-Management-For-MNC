@@ -1,0 +1,164 @@
+import os
+import unittest
+import uuid
+from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
+
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.core.security import create_access_token, hash_password
+from app.db.base import Base
+from app.db.session import get_db
+from app.main import app
+from app.models.audit_log import AuditLog
+from app.models.enums import AuditAction, UserType
+from app.models.system_backup_log import SystemBackupLog
+from app.models.user_account import UserAccount
+
+
+engine = create_engine(
+    "sqlite:///:memory:",
+    connect_args={"check_same_thread": False},
+    poolclass=StaticPool,
+)
+TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+class TestBackupAndAnomalyAlerts(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        Base.metadata.create_all(bind=engine)
+
+        def override_get_db():
+            db = TestingSessionLocal()
+            try:
+                yield db
+            finally:
+                db.close()
+
+        app.dependency_overrides[get_db] = override_get_db
+        cls.client = TestClient(app)
+
+    @classmethod
+    def tearDownClass(cls):
+        app.dependency_overrides.clear()
+        Base.metadata.drop_all(bind=engine)
+
+    def setUp(self):
+        self.db = TestingSessionLocal()
+        self.db.query(AuditLog).delete()
+        self.db.query(SystemBackupLog).delete()
+        self.db.query(UserAccount).delete()
+        self.db.commit()
+        self.admin = self.make_user(UserType.SYSTEM_ADMIN)
+        self.general_admin = self.make_user(UserType.ADMIN)
+
+    def tearDown(self):
+        self.db.close()
+
+    def make_user(self, role):
+        user = UserAccount(
+            account_id=uuid.uuid4(), email=f"{uuid.uuid4().hex}@example.com",
+            password_hash=hash_password("TestPassword123!"),
+            user_type=role, is_active=True,
+        )
+        self.db.add(user)
+        self.db.commit()
+        return user
+
+    def headers(self, user):
+        token = create_access_token(data={
+            "sub": str(user.account_id), "email": user.email,
+            "user_type": user.user_type.value,
+        })
+        return {"Authorization": f"Bearer {token}"}
+
+    def audit(self, action, entity, ref, new_value, ip="203.0.113.5",
+              account_id=None, old_value=None, created_at=None):
+        row = AuditLog(
+            account_id=account_id, action=action, entity_name=entity,
+            entity_ref_id=str(ref), new_value=new_value, old_value=old_value,
+            ip_address=ip, created_at=created_at or datetime.now(timezone.utc),
+        )
+        self.db.add(row)
+        self.db.commit()
+        return row
+
+    def test_admin_role_is_forbidden(self):
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.general_admin),
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_system_admin_can_read_alerts(self):
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_alerts"], 0)
+
+    def test_six_failed_logins_trigger_alert_but_five_do_not(self):
+        for _ in range(5):
+            self.audit(AuditAction.LOGIN, "USER_ACCOUNT", "UNKNOWN",
+                       '{"status":"FAILED","attempted_email":"victim@example.com"}')
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        self.assertEqual(response.json()["total_alerts"], 0)
+        self.audit(AuditAction.LOGIN, "USER_ACCOUNT", "UNKNOWN",
+                   '{"status":"FAILED","attempted_email":"victim@example.com"}')
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["total_alerts"], 2)  # IP and account grouping
+
+    def test_successful_login_is_not_counted(self):
+        self.audit(AuditAction.LOGIN, "USER_ACCOUNT", "UNKNOWN",
+                   '{"status":"SUCCESS","attempted_email":"victim@example.com"}')
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        self.assertEqual(response.json()["total_alerts"], 0)
+
+    def test_privilege_promotion_is_detected_not_demotion(self):
+        target = self.make_user(UserType.EMPLOYEE)
+        self.audit(
+            AuditAction.UPDATE, "USER_ACCOUNT", target.account_id,
+            '{"user_type":"SYSTEM_ADMIN"}', account_id=self.admin.account_id,
+            old_value='{"user_type":"EMPLOYEE"}',
+        )
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.admin),
+        )
+        alerts = response.json()["alerts"]
+        self.assertEqual(len(alerts), 1)
+        self.assertEqual(alerts[0]["alert_type"], "PRIVILEGE_ESCALATION")
+        self.assertEqual(alerts[0]["severity"], "CRITICAL")
+
+    def test_missing_pg_dump_records_failed_backup(self):
+        with patch.dict(os.environ, {
+            "DATABASE_URL": "postgresql://postgres:secret@localhost:5432/testdb",
+            "BACKUP_DIR": os.path.join(os.getcwd(), "test-backups"),
+        }), patch("app.features.admin.service.shutil.which", return_value=None):
+            response = self.client.post(
+                "/api/v1/admin/backup/trigger",
+                headers=self.headers(self.admin),
+            )
+        self.assertEqual(response.status_code, 503)
+        row = self.db.query(SystemBackupLog).order_by(SystemBackupLog.backup_id.desc()).first()
+        self.assertEqual(row.status, "FAILED")
+        self.assertIsNone(row.file_path)
+
+
+if __name__ == "__main__":
+    unittest.main()

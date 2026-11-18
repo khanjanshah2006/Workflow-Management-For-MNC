@@ -1,4 +1,4 @@
-from datetime import datetime
+﻿from datetime import datetime
 from typing import Optional, List
 from uuid import UUID
 from pydantic import BaseModel, EmailStr, ConfigDict, Field
@@ -105,3 +105,40 @@ class ElevatedAccessGrantResponse(BaseModel):
     reason: str
 
 
+# ==========================================
+# Database Backup & Anomaly Schemas (US-49, US-50)
+# ==========================================
+
+class BackupTriggerResponse(BaseModel):
+    backup_id: int
+    backup_type: str
+    file_path: Optional[str] = None
+    file_size_bytes: Optional[int] = None
+    status: str
+    created_at: datetime
+    triggered_by_account_id: Optional[UUID] = None
+    details: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AnomalyAlert(BaseModel):
+    alert_type: str
+    severity: str
+    ip_address: Optional[str] = None
+    account_id: Optional[UUID] = None
+    target_account_id: Optional[UUID] = None
+    attempted_email: Optional[str] = None
+    old_role: Optional[str] = None
+    new_role: Optional[str] = None
+    count: int
+    first_timestamp: datetime
+    last_timestamp: datetime
+    details: str
+
+
+class AnomalyAlertsResponse(BaseModel):
+    window_minutes: int = 15
+    total_alerts: int
+    alerts: List[AnomalyAlert]
+    notes: Optional[str] = None

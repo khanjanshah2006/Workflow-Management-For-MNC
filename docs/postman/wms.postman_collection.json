@@ -2318,6 +2318,263 @@
             "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
           },
           "response": []
+        },
+        {
+          "name": "POST SYSTEM_ADMIN Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{system_admin_email}}\",\n  \"password\": \"{{system_admin_password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Use a Postman environment with system_admin_email and system_admin_password configured. Copy the returned access_token into system_admin_access_token."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Paginated Audit Logs",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/audit-logs",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "audit-logs"
+              ]
+            },
+            "description": "View system audit logs. Restricted to ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Trigger On-Demand Database Backup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{system_admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/backup/trigger",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "backup",
+                "trigger"
+              ]
+            },
+            "description": "SYSTEM_ADMIN only. Requires pg_dump to be installed and configured on the API server. Successful response returns the backup file name, not its absolute server path."
+          },
+          "response": [
+            {
+              "name": "201 Database Backup Created",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{system_admin_access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/admin/backup/trigger",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "backup",
+                    "trigger"
+                  ]
+                }
+              },
+              "status": "Created",
+              "code": 201,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"backup_id\": 1,\n  \"backup_type\": \"ON_DEMAND\",\n  \"file_path\": \"database_backup_20261117T000000Z_1.dump\",\n  \"file_size_bytes\": 1048576,\n  \"status\": \"COMPLETED\",\n  \"created_at\": \"2026-11-17T00:00:00Z\",\n  \"triggered_by_account_id\": \"0d124198-5cce-4e2c-9893-2505190340ff\",\n  \"details\": \"Database backup completed successfully.\"\n}"
+            },
+            {
+              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/admin/backup/trigger",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "backup",
+                    "trigger"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"detail\": \"Forbidden\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Security Anomaly Alerts",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{system_admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/anomaly-alerts",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "anomaly-alerts"
+              ]
+            },
+            "description": "SYSTEM_ADMIN only. Detects more than five failed logins in the configured 15-minute window and reports individual privilege elevations in the last 24 hours."
+          },
+          "response": [
+            {
+              "name": "200 Security Anomaly Alerts",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{system_admin_access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/admin/anomaly-alerts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "anomaly-alerts"
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"window_minutes\": 15,\n  \"total_alerts\": 1,\n  \"alerts\": [\n    {\n      \"alert_type\": \"FAILED_LOGIN_BURST\",\n      \"severity\": \"HIGH\",\n      \"ip_address\": \"203.0.113.15\",\n      \"count\": 6,\n      \"first_timestamp\": \"2026-11-17T00:10:00Z\",\n      \"last_timestamp\": \"2026-11-17T00:24:00Z\",\n      \"details\": \"More than 5 failed login attempts from this IP in 15 minutes.\"\n    }\n  ],\n  \"notes\": \"Privilege elevations are listed individually over the last 24 hours; no spike threshold is configured.\"\n}"
+            },
+            {
+              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{access_token}}"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/admin/anomaly-alerts",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "admin",
+                    "anomaly-alerts"
+                  ]
+                }
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "cookie": [],
+              "body": "{\n  \"detail\": \"Forbidden\"\n}"
+            }
+          ]
         }
       ]
     }
