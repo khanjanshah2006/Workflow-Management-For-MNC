@@ -4,15 +4,19 @@ A task is overdue when it has a due date earlier than ``today``, is not DONE,
 and belongs to a project that is not CANCELLED. ``today`` is always injected so
 that callers (and tests) control the reference date.
 """
-from datetime import date
+from datetime import date, datetime, timezone
 from typing import Optional
+from uuid import UUID
 
 from sqlalchemy import Select, case, func, select
 from sqlalchemy.orm import Session, aliased
 
+from app.core import notification_types
+from app.core.audit import write_audit_log
 from app.core.scope import led_team_ids, resolve_employee, resolve_pm
+from app.features.notifications.service import NotificationService
 from app.models.employee import Employee
-from app.models.enums import PriorityLevel, ProjectStatus, TaskStatus, UserType
+from app.models.enums import AuditAction, PriorityLevel, ProjectStatus, TaskStatus, UserType
 from app.models.milestone import ProjectMilestone
 from app.models.project import Project
 from app.models.task import Task
@@ -132,3 +136,92 @@ class OverdueService:
             for task, project_name, lead_name, assignee_name, milestone_title in rows
         ]
         return {"total_overdue": total, "page": page, "limit": limit, "items": items}
+
+    @staticmethod
+    def run_sweep(
+        db: Session,
+        actor: UserAccount,
+        today: date,
+        now: Optional[datetime] = None,
+        ip_address: Optional[str] = None,
+    ) -> dict:
+        """Notify TL + assignee once per overdue episode, then commit once.
+
+        Idempotency: tasks with ``overdue_notified_at`` already set are skipped.
+        Clearing the flag (see ``apply_due_date_change``) opens a new episode.
+        """
+        now = now or datetime.now(timezone.utc)
+        lead = aliased(Employee)
+        assignee = aliased(Employee)
+        rows = db.execute(
+            OverdueService.base_query(db, today)
+            .add_columns(lead.account_id, assignee.account_id)
+            .outerjoin(Team, Team.team_id == Task.team_id)
+            .outerjoin(lead, lead.emp_id == Team.lead_emp_id)
+            .outerjoin(assignee, assignee.emp_id == Task.assigned_to)
+            .order_by(Task.task_id)
+        ).all()
+
+        newly_flagged = 0
+        already_flagged = 0
+        notifications_sent = 0
+        for task, lead_account_id, assignee_account_id in rows:
+            if task.overdue_notified_at is not None:
+                already_flagged += 1
+                continue
+            notifications_sent += OverdueService._notify(
+                db, task, today, lead_account_id, assignee_account_id
+            )
+            task.overdue_notified_at = now
+            newly_flagged += 1
+
+        result = {
+            "evaluated_tasks": len(rows),
+            "newly_flagged_overdue": newly_flagged,
+            "already_flagged": already_flagged,
+        }
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="TASK_OVERDUE_SWEEP",
+            entity_ref_id="sweep",
+            account_id=actor.account_id,
+            new_value={**result, "notifications_sent": notifications_sent, "as_of": today.isoformat()},
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        return result
+
+    @staticmethod
+    def _notify(
+        db: Session,
+        task: Task,
+        today: date,
+        lead_account_id: Optional[UUID],
+        assignee_account_id: Optional[UUID],
+    ) -> int:
+        days = days_overdue(task.due_date, today)
+        link = f"/tasks/{task.task_id}"
+        sent = 0
+        if lead_account_id is not None:
+            NotificationService.create_notification(
+                db=db,
+                user_id=lead_account_id,
+                type=notification_types.TASK_OVERDUE,
+                title="Task Overdue",
+                message=f"Task #{task.task_id} '{task.title}' is {days} day(s) overdue (due {task.due_date.isoformat()}).",
+                link=link,
+            )
+            sent += 1
+        if assignee_account_id is not None:
+            NotificationService.create_notification(
+                db=db,
+                user_id=assignee_account_id,
+                type=notification_types.TASK_DEADLINE_MISSED,
+                title="Deadline Missed",
+                message=f"You missed the deadline for task #{task.task_id} '{task.title}' (due {task.due_date.isoformat()}).",
+                link=link,
+            )
+            sent += 1
+        return sent
