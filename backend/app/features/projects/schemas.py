@@ -295,3 +295,13 @@ class ProjectRisksResponse(BaseModel):
     repeatedly_rejected_tasks: List[RepeatedlyRejectedTask]
     blocked_tasks: List[BlockedTaskItem]
     at_risk_milestones: List[MilestoneRiskItem]
+
+
+class TeamWorkloadItem(BaseModel):
+    emp_id: int
+    full_name: str
+    role_in_project: str
+    open_tasks_in_project: int
+    open_tasks_all_projects: int
+    active_projects_count: int
+    utilization_pct: float

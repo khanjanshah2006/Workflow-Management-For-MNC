@@ -24,6 +24,7 @@ from app.features.projects.schemas import (
     EligibleEmployeeResponse,
     ProjectDashboardResponse,
     ProjectRisksResponse,
+    TeamWorkloadItem,
 )
 from app.features.projects.risk_service import ProjectRiskService
 from app.features.tasks.router import get_today
@@ -507,6 +508,25 @@ def get_project_risks(
         return ProjectRiskService.get_risks(
             db, project_id, current_user, today, assignee_id=assignee_id, include_done=include_done
         )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/team-workload",
+    response_model=List[TeamWorkloadItem],
+    summary="Cross-project workload of project staff (US-39)",
+    description="One row per employee actively assigned to the project, with open tasks here and across all projects, active project count and utilization. Aggregates only; no other projects' task details.",
+)
+def get_project_team_workload(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(risk_guard),
+) -> List[TeamWorkloadItem]:
+    try:
+        return ProjectRiskService.get_team_workload(db, project_id, current_user)
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnauthorizedProjectAccessError as exc:

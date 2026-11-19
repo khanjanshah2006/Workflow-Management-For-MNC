@@ -36,7 +36,7 @@ from app.models.enums import (
     UserType,
 )
 from app.models.milestone import ProjectMilestone
-from app.models.project import Project
+from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.system_parameter import SystemParameter
 from app.models.task import Task
@@ -474,3 +474,58 @@ def test_risks_score_is_project_wide(setup):
     other = _pm(db)
     _as(db.get(UserAccount, other.account_id))
     assert client.get(f"/api/v1/projects/{project.project_id}/risks").status_code == 403
+
+
+# ------------------------------------------------------------------
+# GET /api/v1/projects/{id}/team-workload (US-39)
+# ------------------------------------------------------------------
+
+def _assign(db, project: Project, emp: Employee, role: str, released: Optional[date] = None):
+    return _save(db, ProjectAssignment(
+        project_id=project.project_id, emp_id=emp.emp_id, role_in_project=role,
+        assigned_on=date(2026, 1, 1), released_on=released,
+    ))
+
+
+def test_team_workload_aggregates_across_projects_without_detail_leak(setup):
+    db, client = setup["db"], setup["client"]
+    pm = _pm(db)
+    project = _project(db, pm)
+    other_project = _project(db, _pm(db))
+    team, other_team = _team(db, project), _team(db, other_project)
+    matrix, sarah, released = _employee(db, "John Matrix"), _employee(db, "Sarah Connor"), _employee(db, "Gone")
+    _assign(db, project, matrix, "Backend Dev")
+    _assign(db, other_project, matrix, "Reviewer")
+    _assign(db, project, sarah, "QA")
+    _assign(db, project, released, "Consultant", released=date(2026, 2, 1))
+    _task(db, project, team, assignee=matrix)
+    _task(db, project, team, assignee=matrix, status=TaskStatus.REJECTED)
+    _task(db, project, team, assignee=matrix, status=TaskStatus.DONE)
+    _task(db, other_project, other_team, assignee=matrix, title="Secret other-project task")
+
+    _as(_pm_account(db, pm))
+    res = client.get(f"/api/v1/projects/{project.project_id}/team-workload")
+
+    assert res.status_code == 200, res.text
+    rows = {r["full_name"]: r for r in res.json()}
+    assert set(rows) == {"John Matrix", "Sarah Connor"}
+    assert rows["John Matrix"] == {
+        "emp_id": matrix.emp_id, "full_name": "John Matrix", "role_in_project": "Backend Dev",
+        "open_tasks_in_project": 2, "open_tasks_all_projects": 3,
+        "active_projects_count": 2, "utilization_pct": 50.0,
+    }
+    assert rows["Sarah Connor"]["open_tasks_in_project"] == 0
+    assert "Secret other-project task" not in res.text
+
+
+def test_team_workload_access_codes(setup):
+    db, client = setup["db"], setup["client"]
+    project = _project(db, _pm(db))
+
+    _as(_pm_account(db, _pm(db)))
+    assert client.get(f"/api/v1/projects/{project.project_id}/team-workload").status_code == 403
+    assert client.get("/api/v1/projects/9999/team-workload").status_code == 404
+
+    _as(_user(db, UserType.ADMIN))
+    res = client.get(f"/api/v1/projects/{project.project_id}/team-workload")
+    assert res.status_code == 200 and res.json() == []
