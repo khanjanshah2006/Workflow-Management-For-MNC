@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
@@ -6,8 +7,11 @@ from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.features.tasks.comments import TaskCommentService
+from app.features.tasks.overdue import OverdueService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
+    OverdueSweepResponse,
+    OverdueTasksResponse,
     PaginatedTasksResponse,
     ReviewDecision,
     TaskAssignRequest,
@@ -180,6 +184,77 @@ def get_review_queue(
         priority=priority,
         page=page,
         limit=limit,
+    )
+
+
+# ── Overdue Escalation (S5: US-15, US-19) ───────────────────────────────
+# Must stay above GET /{id}, otherwise "/overdue" is parsed as an id (422).
+
+def get_today() -> date:
+    """Reference date for overdue checks; overridable in tests."""
+    return date.today()
+
+
+@router.get(
+    "/overdue",
+    response_model=OverdueTasksResponse,
+    status_code=status.HTTP_200_OK,
+    summary="List overdue tasks (US-15)",
+    description=(
+        "Tasks with a due date before today that are not DONE, on non-CANCELLED projects. "
+        "TL sees led teams, PM sees own projects, ADMIN/SYSTEM_ADMIN see all. "
+        "Sorted by days overdue (desc), then priority (CRITICAL first)."
+    ),
+)
+def get_overdue_tasks(
+    project_id: Optional[int] = Query(None, gt=0),
+    team_id: Optional[int] = Query(None, gt=0),
+    assignee_id: Optional[int] = Query(None, gt=0),
+    priority: Optional[PriorityLevel] = Query(None),
+    page: int = Query(1, ge=1),
+    limit: int = Query(20, ge=1, le=100),
+    today: date = Depends(get_today),
+    current_user: UserAccount = Depends(require_role(["TEAM_LEAD", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> OverdueTasksResponse:
+    return OverdueTasksResponse(
+        **OverdueService.list_overdue(
+            db=db,
+            actor=current_user,
+            today=today,
+            project_id=project_id,
+            team_id=team_id,
+            assignee_id=assignee_id,
+            priority=priority,
+            page=page,
+            limit=limit,
+        )
+    )
+
+
+@router.post(
+    "/check-overdue",
+    response_model=OverdueSweepResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Run the overdue sweep (US-19)",
+    description=(
+        "Manually triggered sweep. Notifies the team lead (TASK_OVERDUE) and assignee "
+        "(TASK_DEADLINE_MISSED) once per overdue episode and writes one audit row."
+    ),
+)
+def check_overdue_tasks(
+    request: Request,
+    today: date = Depends(get_today),
+    current_user: UserAccount = Depends(require_role(["ADMIN", "SYSTEM_ADMIN"])),
+    db: Session = Depends(get_db),
+) -> OverdueSweepResponse:
+    return OverdueSweepResponse(
+        **OverdueService.run_sweep(
+            db=db,
+            actor=current_user,
+            today=today,
+            ip_address=request.client.host if request.client else None,
+        )
     )
 
 

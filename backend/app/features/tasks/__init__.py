@@ -1,3 +1,4 @@
+from app.features.tasks.overdue import OverdueService, apply_due_date_change
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.router import (
     project_tasks_router,
@@ -31,6 +32,8 @@ __all__ = [
     "tasks_router",
     "project_tasks_router",
     "TaskRepository",
+    "OverdueService",
+    "apply_due_date_change",
     "TaskService",
     "TaskSubmissionService",
     "TaskProgressService",
