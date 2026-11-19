@@ -259,3 +259,65 @@ def test_overdue_and_repeated_rejection_counts(setup):
     assert ProjectRiskService.overdue_tasks_count(db, project.project_id, TODAY) == 1
     assert ProjectRiskService.repeatedly_rejected_count(db, project.project_id, threshold=2) == 1
     assert ProjectRiskService.repeatedly_rejected_count(db, project.project_id, threshold=1) == 2
+
+
+# ------------------------------------------------------------------
+# GET /api/v1/projects/{id}/dashboard
+# ------------------------------------------------------------------
+
+def test_pm_dashboard_aggregates_accurate_status_counts(setup):
+    db, client = setup["db"], setup["client"]
+    pm = _pm(db)
+    project = _project(db, pm)
+    team = _team(db, project)
+    milestone = _milestone(db, project, TODAY + timedelta(days=2), title="Sprint 2")
+    statuses = [TaskStatus.DONE] * 3 + [TaskStatus.TODO, TaskStatus.BLOCKED, TaskStatus.REJECTED, TaskStatus.IN_REVIEW]
+    for status in statuses:
+        _task(db, project, team, status=status, milestone=milestone)
+    _task(db, project, team, status=TaskStatus.IN_PROGRESS, due=TODAY - timedelta(days=1), rejection_count=2)
+
+    _as(_pm_account(db, pm))
+    res = client.get(f"/api/v1/projects/{project.project_id}/dashboard")
+
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["total_tasks"] == 8
+    assert body["tasks_by_status"] == {
+        "TODO": 1, "IN_PROGRESS": 1, "IN_REVIEW": 1, "DONE": 3, "BLOCKED": 1, "REJECTED": 1,
+    }
+    assert body["completion_pct"] == round(3 / 8 * 100)
+    assert body["overdue_tasks_count"] == 1
+    assert body["blocked_tasks_count"] == 1
+    assert body["at_risk_milestones_count"] == 1
+    assert body["repeatedly_rejected_count"] == 1
+    assert body["rejection_threshold"] == 2
+    assert body["upcoming_milestones"] == [{
+        "milestone_id": milestone.id, "title": "Sprint 2",
+        "target_date": (TODAY + timedelta(days=2)).isoformat(), "open_tasks": 4,
+    }]
+
+
+def test_dashboard_empty_project_has_zero_completion(setup):
+    db, client = setup["db"], setup["client"]
+    project = _project(db, _pm(db))
+
+    _as(_user(db, UserType.ADMIN))
+    body = client.get(f"/api/v1/projects/{project.project_id}/dashboard").json()
+
+    assert body["total_tasks"] == 0 and body["completion_pct"] == 0
+    assert all(v == 0 for v in body["tasks_by_status"].values())
+
+
+def test_dashboard_access_codes(setup):
+    db, client = setup["db"], setup["client"]
+    project = _project(db, _pm(db))
+
+    _as(_pm_account(db, _pm(db)))
+    assert client.get(f"/api/v1/projects/{project.project_id}/dashboard").status_code == 403
+    assert client.get("/api/v1/projects/9999/dashboard").status_code == 404
+
+    _as(_user(db, UserType.EMPLOYEE))
+    assert client.get(f"/api/v1/projects/{project.project_id}/dashboard").status_code == 403
+
+    _as(_user(db, UserType.SYSTEM_ADMIN))
+    assert client.get(f"/api/v1/projects/{project.project_id}/dashboard").status_code == 200

@@ -234,3 +234,30 @@ class EligibleEmployeeResponse(BaseModel):
         return self
 
 
+
+
+# ==========================================
+# PM Risk & Quality Dashboard (S5-BE-2: US-23, US-38, US-39)
+# ==========================================
+
+class MilestoneRiskItem(BaseModel):
+    milestone_id: int
+    title: str
+    target_date: date
+    open_tasks: int
+
+
+class ProjectDashboardResponse(BaseModel):
+    project_id: int
+    project_name: str
+    status: ProjectStatus
+    completion_pct: int
+    total_tasks: int
+    tasks_by_status: dict[str, int]
+    overdue_tasks_count: int
+    blocked_tasks_count: int
+    at_risk_milestones_count: int
+    overdue_milestones_count: int
+    repeatedly_rejected_count: int
+    rejection_threshold: int
+    upcoming_milestones: List[MilestoneRiskItem]
