@@ -1148,6 +1148,248 @@
             "description": "List all members of a team."
           },
           "response": []
+        },
+        {
+          "name": "GET PM Project Dashboard (US-23)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('all six statuses present', () => pm.expect(Object.keys(b.tasks_by_status)).to.have.members(['TODO','IN_PROGRESS','IN_REVIEW','DONE','BLOCKED','REJECTED']));",
+                  "pm.test('completion_pct matches DONE / total', () => pm.expect(b.completion_pct).to.eql(b.total_tasks ? Math.round(b.tasks_by_status.DONE / b.total_tasks * 100) : 0));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "dashboard"
+              ]
+            },
+            "description": "Status counts, completion %, overdue/blocked counts, milestone risk and repeated rejections. Login as the managing PM, ADMIN or SYSTEM_ADMIN first."
+          },
+          "response": []
+        },
+        {
+          "name": "GET PM Project Risks (US-38)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const b = pm.response.json();",
+                  "pm.test('flagged tasks meet threshold', () => b.repeatedly_rejected_tasks.forEach(t => pm.expect(t.rejection_count).to.be.at.least(b.rejection_threshold)));",
+                  "pm.test('risk_score is a band', () => pm.expect(['LOW','MEDIUM','HIGH']).to.include(b.risk_score));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/risks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "risks"
+              ]
+            },
+            "description": "Repeatedly rejected tasks (rejection_count >= REPEATED_REJECTION_THRESHOLD) with audit-log rejection history, blocked tasks, at-risk milestones and a project-wide risk score."
+          },
+          "response": []
+        },
+        {
+          "name": "GET PM Project Risks by Assignee (US-38)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('only that assignee', () => pm.response.json().repeatedly_rejected_tasks.forEach(t => pm.expect(t.assignee_id).to.eql(1)));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/risks?assignee_id=1",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "risks"
+              ],
+              "query": [
+                {
+                  "key": "assignee_id",
+                  "value": "1"
+                }
+              ]
+            },
+            "description": "Risk lists narrowed to one employee. The risk score stays project-wide."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Project Team Workload (US-39)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('aggregates only', () => pm.response.json().forEach(r => pm.expect(r).to.have.all.keys('emp_id','full_name','role_in_project','open_tasks_in_project','open_tasks_all_projects','active_projects_count','utilization_pct')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/1/team-workload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "1",
+                "team-workload"
+              ]
+            },
+            "description": "Cross-project workload for each employee actively staffed on the project."
+          },
+          "response": []
+        },
+        {
+          "name": "GET PM Dashboard - Other PM's Project (403)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 for a project another PM manages', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/2/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "2",
+                "dashboard"
+              ]
+            },
+            "description": "Login as a PM who does not manage project 2."
+          },
+          "response": []
+        },
+        {
+          "name": "GET PM Dashboard - Nonexistent Project (404)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 for a missing project', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/projects/9999/dashboard",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "projects",
+                "9999",
+                "dashboard"
+              ]
+            },
+            "description": "Project 9999 does not exist."
+          },
+          "response": []
         }
       ]
     },
