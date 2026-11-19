@@ -26,6 +26,9 @@ REJECTION_THRESHOLD_KEY = "REPEATED_REJECTION_THRESHOLD"
 DEFAULT_REJECTION_THRESHOLD = 2
 AT_RISK_WINDOW_DAYS = 3
 UPCOMING_WINDOW_DAYS = 14
+# Risk score bands: LOW < 4 <= MEDIUM < 10 <= HIGH
+RISK_MEDIUM_FROM = 4
+RISK_HIGH_FROM = 10
 
 
 class ProjectRiskService:
@@ -184,6 +187,72 @@ class ProjectRiskService:
                 ProjectMilestone.target_date < today,
             )
         ) or 0
+
+    @staticmethod
+    def blocked_tasks(db: Session, project_id: int, assignee_id: Optional[int] = None) -> list[dict]:
+        stmt = (
+            select(Task, Employee.full_name)
+            .outerjoin(Employee, Employee.emp_id == Task.assigned_to)
+            .where(Task.project_id == project_id, Task.status == TaskStatus.BLOCKED)
+            .order_by(Task.updated_at, Task.task_id)
+        )
+        if assignee_id is not None:
+            stmt = stmt.where(Task.assigned_to == assignee_id)
+        return [
+            {
+                "task_id": task.task_id,
+                "title": task.title,
+                "assignee_name": assignee_name,
+                "blocker_reason": task.blocker_reason,
+                # No dedicated column; updated_at is the best available signal.
+                "blocked_since": task.updated_at,
+            }
+            for task, assignee_name in db.execute(stmt).all()
+        ]
+
+    @staticmethod
+    def risk_points(overdue: int, blocked: int, repeatedly_rejected: int, milestones_at_risk_or_overdue: int) -> int:
+        return 2 * overdue + 2 * blocked + repeatedly_rejected + 3 * milestones_at_risk_or_overdue
+
+    @staticmethod
+    def risk_level(points: int) -> str:
+        if points < RISK_MEDIUM_FROM:
+            return "LOW"
+        if points < RISK_HIGH_FROM:
+            return "MEDIUM"
+        return "HIGH"
+
+    @staticmethod
+    def get_risks(
+        db: Session,
+        project_id: int,
+        user: UserAccount,
+        today: date,
+        assignee_id: Optional[int] = None,
+        include_done: bool = False,
+    ) -> dict:
+        """Risk lists for the project. The score is project-wide; assignee_id only narrows the lists."""
+        ProjectRiskService.get_authorized_project(db, project_id, user)
+        threshold = ProjectRiskService.rejection_threshold(db)
+        at_risk = ProjectRiskService.at_risk_milestones(db, project_id, today)
+        points = ProjectRiskService.risk_points(
+            overdue=ProjectRiskService.overdue_tasks_count(db, project_id, today),
+            blocked=ProjectRiskService.status_counts(db, project_id)[TaskStatus.BLOCKED.value],
+            repeatedly_rejected=ProjectRiskService.repeatedly_rejected_count(db, project_id, threshold),
+            milestones_at_risk_or_overdue=len(at_risk)
+            + ProjectRiskService.overdue_milestones_count(db, project_id, today),
+        )
+        return {
+            "project_id": project_id,
+            "risk_score": ProjectRiskService.risk_level(points),
+            "risk_points": points,
+            "rejection_threshold": threshold,
+            "repeatedly_rejected_tasks": ProjectRiskService.repeatedly_rejected_tasks(
+                db, project_id, threshold, assignee_id=assignee_id, include_done=include_done
+            ),
+            "blocked_tasks": ProjectRiskService.blocked_tasks(db, project_id, assignee_id=assignee_id),
+            "at_risk_milestones": at_risk,
+        }
 
     @staticmethod
     def get_dashboard(db: Session, project_id: int, user: UserAccount, today: date) -> dict:

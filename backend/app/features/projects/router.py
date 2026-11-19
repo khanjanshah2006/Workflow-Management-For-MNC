@@ -23,6 +23,7 @@ from app.features.projects.schemas import (
     MilestoneResponse,
     EligibleEmployeeResponse,
     ProjectDashboardResponse,
+    ProjectRisksResponse,
 )
 from app.features.projects.risk_service import ProjectRiskService
 from app.features.tasks.router import get_today
@@ -482,6 +483,30 @@ def get_project_dashboard(
 ) -> ProjectDashboardResponse:
     try:
         return ProjectRiskService.get_dashboard(db, project_id, current_user, today)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/risks",
+    response_model=ProjectRisksResponse,
+    summary="PM project risk view (US-38)",
+    description="Repeatedly rejected tasks (rejection_count >= REPEATED_REJECTION_THRESHOLD) with full rejection history, blocked tasks, at-risk milestones and a project-wide risk score. assignee_id narrows the task lists only.",
+)
+def get_project_risks(
+    project_id: int,
+    assignee_id: Optional[int] = Query(None, description="Only list tasks assigned to this employee"),
+    include_done: bool = Query(False, description="Include DONE tasks in repeated rejections"),
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(risk_guard),
+    today: date = Depends(get_today),
+) -> ProjectRisksResponse:
+    try:
+        return ProjectRiskService.get_risks(
+            db, project_id, current_user, today, assignee_id=assignee_id, include_done=include_done
+        )
     except ProjectNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except UnauthorizedProjectAccessError as exc:

@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional, List, Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus, CommonStatus
+from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus, CommonStatus, TaskStatus
 from app.features.employees.schemas import EmployeeWorkloadResponse
 
 
@@ -261,3 +261,37 @@ class ProjectDashboardResponse(BaseModel):
     repeatedly_rejected_count: int
     rejection_threshold: int
     upcoming_milestones: List[MilestoneRiskItem]
+
+
+class RejectionHistoryEntry(BaseModel):
+    rejected_at: datetime
+    feedback: Optional[str] = None
+
+
+class RepeatedlyRejectedTask(BaseModel):
+    task_id: int
+    title: str
+    assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = None
+    rejection_count: int
+    status: TaskStatus
+    latest_rejection_feedback: Optional[str] = None
+    rejection_history: List[RejectionHistoryEntry]
+
+
+class BlockedTaskItem(BaseModel):
+    task_id: int
+    title: str
+    assignee_name: Optional[str] = None
+    blocker_reason: Optional[str] = None
+    blocked_since: datetime
+
+
+class ProjectRisksResponse(BaseModel):
+    project_id: int
+    risk_score: str
+    risk_points: int
+    rejection_threshold: int
+    repeatedly_rejected_tasks: List[RepeatedlyRejectedTask]
+    blocked_tasks: List[BlockedTaskItem]
+    at_risk_milestones: List[MilestoneRiskItem]

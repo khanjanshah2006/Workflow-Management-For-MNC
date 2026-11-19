@@ -392,3 +392,85 @@ def test_rejection_threshold_reads_system_parameter(setup):
     db.add(SystemParameter(key="REPEATED_REJECTION_THRESHOLD", value="4", value_type="integer"))
     db.commit()
     assert ProjectRiskService.rejection_threshold(db) == 4
+
+
+# ------------------------------------------------------------------
+# Risk score & GET /api/v1/projects/{id}/risks
+# ------------------------------------------------------------------
+
+def test_risk_score_formula_boundaries():
+    points = ProjectRiskService.risk_points
+    level = ProjectRiskService.risk_level
+    assert points(overdue=1, blocked=1, repeatedly_rejected=1, milestones_at_risk_or_overdue=1) == 8
+    assert points(overdue=0, blocked=0, repeatedly_rejected=0, milestones_at_risk_or_overdue=0) == 0
+    assert [level(p) for p in (0, 3, 4, 9, 10, 25)] == ["LOW", "LOW", "MEDIUM", "MEDIUM", "HIGH", "HIGH"]
+
+
+def test_risks_filters_by_configurable_threshold(setup):
+    db, client = setup["db"], setup["client"]
+    pm = _pm(db)
+    project = _project(db, pm)
+    team = _team(db, project)
+    kyle, sarah = _employee(db, "Kyle Reese"), _employee(db, "Sarah Connor")
+    flagged = _task(db, project, team, status=TaskStatus.REJECTED, rejection_count=3, assignee=kyle)
+    _task(db, project, team, status=TaskStatus.REJECTED, rejection_count=2, assignee=sarah)
+    _reject(db, flagged, "Unit tests failing in CI pipeline.", 3)
+    _as(_pm_account(db, pm))
+    url = f"/api/v1/projects/{project.project_id}/risks"
+
+    body = client.get(url).json()
+    assert body["rejection_threshold"] == 2
+    assert len(body["repeatedly_rejected_tasks"]) == 2
+
+    db.add(SystemParameter(key="REPEATED_REJECTION_THRESHOLD", value="3", value_type="integer"))
+    db.commit()
+    body = client.get(url).json()
+    assert body["rejection_threshold"] == 3
+    assert [t["task_id"] for t in body["repeatedly_rejected_tasks"]] == [flagged.task_id]
+    assert body["repeatedly_rejected_tasks"][0]["rejection_history"][0]["feedback"] == "Unit tests failing in CI pipeline."
+
+    body = client.get(url, params={"assignee_id": sarah.emp_id}).json()
+    assert body["repeatedly_rejected_tasks"] == []
+
+
+def test_blocked_tasks_include_blocker_reason(setup):
+    db, client = setup["db"], setup["client"]
+    pm = _pm(db)
+    project = _project(db, pm)
+    team = _team(db, project)
+    sarah = _employee(db, "Sarah Connor")
+    _task(db, project, team, status=TaskStatus.BLOCKED, assignee=sarah, title="Stripe Gateway Integration",
+          blocker_reason="Waiting for client merchant test credentials.")
+    _task(db, project, team, status=TaskStatus.IN_PROGRESS)
+
+    _as(_pm_account(db, pm))
+    body = client.get(f"/api/v1/projects/{project.project_id}/risks").json()
+
+    assert len(body["blocked_tasks"]) == 1
+    blocked = body["blocked_tasks"][0]
+    assert blocked["title"] == "Stripe Gateway Integration"
+    assert blocked["assignee_name"] == "Sarah Connor"
+    assert blocked["blocker_reason"] == "Waiting for client merchant test credentials."
+    assert blocked["blocked_since"]
+
+
+def test_risks_score_is_project_wide(setup):
+    db, client = setup["db"], setup["client"]
+    project = _project(db, _pm(db))
+    team = _team(db, project)
+    m = _milestone(db, project, TODAY + timedelta(days=1))
+    _task(db, project, team, due=TODAY - timedelta(days=3), milestone=m)  # overdue (2) + at-risk milestone (3)
+    _task(db, project, team, status=TaskStatus.BLOCKED)                  # blocked (2)
+    _task(db, project, team, status=TaskStatus.REJECTED, rejection_count=2)  # repeated rejection (1)
+    _milestone(db, project, TODAY - timedelta(days=2))                   # overdue milestone (3)
+
+    _as(_user(db, UserType.SYSTEM_ADMIN))
+    body = client.get(f"/api/v1/projects/{project.project_id}/risks").json()
+
+    assert body["risk_points"] == 11
+    assert body["risk_score"] == "HIGH"
+    assert len(body["at_risk_milestones"]) == 1
+
+    other = _pm(db)
+    _as(db.get(UserAccount, other.account_id))
+    assert client.get(f"/api/v1/projects/{project.project_id}/risks").status_code == 403
