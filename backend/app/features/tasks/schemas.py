@@ -361,3 +361,40 @@ class TaskReviewResponse(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+
+# ============================================================================
+# S5: Overdue Escalation Schemas (US-15, US-19)
+# ============================================================================
+
+class OverdueTaskItem(BaseModel):
+    """A single overdue task row with denormalised context for triage."""
+    task_id: int
+    title: str
+    project_id: int
+    project_name: str
+    team_id: int
+    team_lead_name: Optional[str] = None
+    assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = None
+    milestone_title: Optional[str] = None
+    due_date: date
+    days_overdue: int = Field(..., gt=0, description="today - due_date, in days")
+    priority: PriorityLevel
+    status: TaskStatus
+    progress_pct: int
+
+
+class OverdueTasksResponse(BaseModel):
+    """Paginated overdue task list (GET /api/v1/tasks/overdue)."""
+    total_overdue: int
+    page: int
+    limit: int
+    items: List[OverdueTaskItem] = []
+
+
+class OverdueSweepResponse(BaseModel):
+    """Result of a manual overdue sweep (POST /api/v1/tasks/check-overdue)."""
+    evaluated_tasks: int = Field(..., description="Overdue tasks found in this run")
+    newly_flagged_overdue: int = Field(..., description="Tasks notified for the first time in this episode")
+    already_flagged: int = Field(..., description="Tasks skipped because they were already notified")
