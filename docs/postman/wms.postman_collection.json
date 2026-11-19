@@ -1719,6 +1719,364 @@
             "description": "Team Lead or PM rejects submitted task requesting revisions. Sets status to REJECTED, records feedback, increments rejection_count, and notifies employee."
           },
           "response": []
+        },
+        {
+          "name": "GET Overdue Tasks - As Team Lead (S5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Every item is overdue\", function () {",
+                  "    pm.response.json().items.forEach(function (t) { pm.expect(t.days_overdue).to.be.above(0); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/overdue?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "overdue"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Team Lead sees overdue tasks only for teams they lead. Sorted by days_overdue desc, then priority (CRITICAL first). Optional filters: project_id, team_id, assignee_id, priority."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{team_lead_access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tasks/overdue?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tasks",
+                    "overdue"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "Team Lead sees overdue tasks only for teams they lead. Sorted by days_overdue desc, then priority (CRITICAL first). Optional filters: project_id, team_id, assignee_id, priority."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"total_overdue\": 1,\n  \"page\": 1,\n  \"limit\": 20,\n  \"items\": [\n    {\n      \"task_id\": 28,\n      \"title\": \"Database Index Optimization\",\n      \"project_id\": 1,\n      \"project_name\": \"Alpha ERP Modernization\",\n      \"team_id\": 3,\n      \"team_lead_name\": \"John Doe\",\n      \"assignee_id\": 12,\n      \"assignee_name\": \"Sarah Connor\",\n      \"milestone_title\": \"Sprint 2 Deliverables\",\n      \"due_date\": \"2026-11-13\",\n      \"days_overdue\": 5,\n      \"priority\": \"CRITICAL\",\n      \"status\": \"IN_PROGRESS\",\n      \"progress_pct\": 40\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Overdue Tasks - As PM (S5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Every item is overdue\", function () {",
+                  "    pm.response.json().items.forEach(function (t) { pm.expect(t.days_overdue).to.be.above(0); });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{pm_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/overdue?page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "overdue"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "PM sees overdue tasks across all projects they manage. DONE tasks, tasks without a due date and CANCELLED projects are excluded."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{pm_access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tasks/overdue?page=1&limit=20",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tasks",
+                    "overdue"
+                  ],
+                  "query": [
+                    {
+                      "key": "page",
+                      "value": "1"
+                    },
+                    {
+                      "key": "limit",
+                      "value": "20"
+                    }
+                  ]
+                },
+                "description": "PM sees overdue tasks across all projects they manage. DONE tasks, tasks without a due date and CANCELLED projects are excluded."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"total_overdue\": 1,\n  \"page\": 1,\n  \"limit\": 20,\n  \"items\": [\n    {\n      \"task_id\": 28,\n      \"title\": \"Database Index Optimization\",\n      \"project_id\": 1,\n      \"project_name\": \"Alpha ERP Modernization\",\n      \"team_id\": 3,\n      \"team_lead_name\": \"John Doe\",\n      \"assignee_id\": 12,\n      \"assignee_name\": \"Sarah Connor\",\n      \"milestone_title\": \"Sprint 2 Deliverables\",\n      \"due_date\": \"2026-11-13\",\n      \"days_overdue\": 5,\n      \"priority\": \"CRITICAL\",\n      \"status\": \"IN_PROGRESS\",\n      \"progress_pct\": 40\n    }\n  ]\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Run Overdue Sweep - As Admin (S5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Sweep counts present\", function () {",
+                  "    var b = pm.response.json();",
+                  "    pm.expect(b).to.have.keys(\"evaluated_tasks\", \"newly_flagged_overdue\", \"already_flagged\");",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{system_admin_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/check-overdue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "check-overdue"
+              ]
+            },
+            "description": "ADMIN / SYSTEM_ADMIN manual sweep. Sends TASK_OVERDUE to the team lead and TASK_DEADLINE_MISSED to the assignee once per overdue episode, stamps overdue_notified_at and writes one TASK_OVERDUE_SWEEP audit row. Run twice: the second run returns newly_flagged_overdue = 0. Check GET /api/v1/notifications as the TL/assignee afterwards."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "originalRequest": {
+                "method": "POST",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{system_admin_access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tasks/check-overdue",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tasks",
+                    "check-overdue"
+                  ]
+                },
+                "description": "ADMIN / SYSTEM_ADMIN manual sweep. Sends TASK_OVERDUE to the team lead and TASK_DEADLINE_MISSED to the assignee once per overdue episode, stamps overdue_notified_at and writes one TASK_OVERDUE_SWEEP audit row. Run twice: the second run returns newly_flagged_overdue = 0. Check GET /api/v1/notifications as the TL/assignee afterwards."
+              },
+              "status": "OK",
+              "code": 200,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"evaluated_tasks\": 45,\n  \"newly_flagged_overdue\": 3,\n  \"already_flagged\": 2\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Overdue Tasks - As Employee (403) (S5)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/overdue",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "overdue"
+              ]
+            },
+            "description": "EMPLOYEE is not allowed to view the overdue list."
+          },
+          "response": [
+            {
+              "name": "403 Forbidden",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Authorization",
+                    "value": "Bearer {{employee_access_token}}",
+                    "type": "text"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/v1/tasks/overdue",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "v1",
+                    "tasks",
+                    "overdue"
+                  ]
+                },
+                "description": "EMPLOYEE is not allowed to view the overdue list."
+              },
+              "status": "Forbidden",
+              "code": 403,
+              "_postman_previewlanguage": "json",
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access forbidden: requires one of ['TEAM_LEAD', 'PM', 'ADMIN', 'SYSTEM_ADMIN']\"\n}"
+            }
+          ]
         }
       ]
     },
