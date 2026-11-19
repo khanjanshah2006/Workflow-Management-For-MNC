@@ -7,10 +7,12 @@ from app.features.leave.schemas import (
     MilestoneConflictItem,
     TeamCoverageItem,
 )
+from app.features.leave.service import LeaveService
 
 __all__ = [
     "leave_router",
     "LeaveRepository",
+    "LeaveService",
     "ConflictingTaskItem",
     "MilestoneConflictItem",
     "TeamCoverageItem",
