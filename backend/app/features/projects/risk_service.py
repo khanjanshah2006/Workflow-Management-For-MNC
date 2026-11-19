@@ -3,7 +3,10 @@
 Read-only aggregates for one project. ``today`` is always injected so callers
 and tests control the reference date.
 """
+import json
+from collections import defaultdict
 from datetime import date, timedelta
+from typing import Optional
 
 from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session
@@ -11,7 +14,9 @@ from sqlalchemy.orm import Session
 from app.core.scope import get_int_param
 from app.features.projects.service import ProjectNotFoundError, ProjectService
 from app.features.tasks.overdue import OverdueService
-from app.models.enums import MilestoneStatus, TaskStatus, UserType
+from app.models.audit_log import AuditLog
+from app.models.employee import Employee
+from app.models.enums import AuditAction, MilestoneStatus, TaskStatus, UserType
 from app.models.milestone import ProjectMilestone
 from app.models.project import Project
 from app.models.task import Task
@@ -66,6 +71,71 @@ class ProjectRiskService:
                 Task.status != TaskStatus.DONE,
             )
         ) or 0
+
+    @staticmethod
+    def rejection_history(db: Session, task_ids: list[int]) -> dict[int, list[dict]]:
+        """Rejections per task, oldest first, from the audit rows TaskService.review_task writes.
+
+        One query for all tasks: entity TASK, action UPDATE, new_value.status == REJECTED.
+        """
+        history: dict[int, list[dict]] = defaultdict(list)
+        if not task_ids:
+            return history
+        rows = db.execute(
+            select(AuditLog.entity_ref_id, AuditLog.new_value, AuditLog.created_at)
+            .where(
+                AuditLog.entity_name == "TASK",
+                AuditLog.action == AuditAction.UPDATE,
+                AuditLog.entity_ref_id.in_([str(t) for t in task_ids]),
+            )
+            .order_by(AuditLog.created_at, AuditLog.log_id)
+        ).all()
+        for ref_id, new_value, created_at in rows:
+            try:
+                payload = json.loads(new_value or "")
+            except ValueError:
+                continue
+            if isinstance(payload, dict) and payload.get("status") == TaskStatus.REJECTED.value:
+                history[int(ref_id)].append(
+                    {"rejected_at": created_at, "feedback": payload.get("rejection_feedback")}
+                )
+        return history
+
+    @staticmethod
+    def repeatedly_rejected_tasks(
+        db: Session,
+        project_id: int,
+        threshold: int,
+        assignee_id: Optional[int] = None,
+        include_done: bool = False,
+    ) -> list[dict]:
+        """Tasks with rejection_count >= threshold, each with its full rejection history."""
+        stmt = (
+            select(Task, Employee.full_name)
+            .outerjoin(Employee, Employee.emp_id == Task.assigned_to)
+            .where(Task.project_id == project_id, Task.rejection_count >= threshold)
+            .order_by(Task.rejection_count.desc(), Task.task_id)
+        )
+        if assignee_id is not None:
+            stmt = stmt.where(Task.assigned_to == assignee_id)
+        if not include_done:
+            stmt = stmt.where(Task.status != TaskStatus.DONE)
+        rows = db.execute(stmt).all()
+
+        history = ProjectRiskService.rejection_history(db, [task.task_id for task, _ in rows])
+        return [
+            {
+                "task_id": task.task_id,
+                "title": task.title,
+                "assignee_id": task.assigned_to,
+                "assignee_name": assignee_name,
+                "rejection_count": task.rejection_count,
+                "status": task.status,
+                "latest_rejection_feedback": task.rejection_feedback,
+                "rejection_history": history.get(task.task_id, []),
+            }
+            for task, assignee_name in rows
+        ]
 
     @staticmethod
     def milestones_due_between(db: Session, project_id: int, start: date, end: date) -> list[dict]:

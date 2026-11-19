@@ -16,6 +16,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+from app.core.audit import write_audit_log
 from app.core.deps import get_current_user
 from app.db.base import Base
 from app.db.session import get_db
@@ -26,6 +27,7 @@ from app.main import app
 from app.models.client import Client
 from app.models.employee import Employee
 from app.models.enums import (
+    AuditAction,
     CommonStatus,
     MilestoneStatus,
     ProjectStatus,
@@ -36,6 +38,7 @@ from app.models.enums import (
 from app.models.milestone import ProjectMilestone
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
+from app.models.system_parameter import SystemParameter
 from app.models.task import Task
 from app.models.team import Team
 from app.models.user_account import UserAccount
@@ -321,3 +324,71 @@ def test_dashboard_access_codes(setup):
 
     _as(_user(db, UserType.SYSTEM_ADMIN))
     assert client.get(f"/api/v1/projects/{project.project_id}/dashboard").status_code == 200
+
+
+# ------------------------------------------------------------------
+# Repeated rejections & audit-log history
+# ------------------------------------------------------------------
+
+def _reject(db, task: Task, feedback: str, count: int):
+    """Write the audit row TaskService.review_task writes on rejection."""
+    write_audit_log(
+        db=db, action=AuditAction.UPDATE, entity_name="TASK", entity_ref_id=str(task.task_id),
+        old_value={"status": "IN_REVIEW"},
+        new_value={"status": "REJECTED", "rejection_feedback": feedback, "rejection_count": count},
+    )
+
+
+def test_rejection_history_built_from_audit_log(setup):
+    db = setup["db"]
+    project = _project(db, _pm(db))
+    team = _team(db, project)
+    kyle = _employee(db, "Kyle Reese")
+    task = _task(db, project, team, status=TaskStatus.REJECTED, rejection_count=3,
+                 assignee=kyle, title="OAuth2 Callback Handler")
+    other = _task(db, project, team, status=TaskStatus.REJECTED, rejection_count=2)
+    feedback = ["Missing error handling.", "Edge cases untested.", "Unit tests failing in CI pipeline."]
+    for i, text in enumerate(feedback, start=1):
+        _reject(db, task, text, i)
+    # Noise: an approval on the same task and a rejection on another task.
+    write_audit_log(db=db, action=AuditAction.UPDATE, entity_name="TASK",
+                    entity_ref_id=str(task.task_id), new_value={"status": "DONE"})
+    _reject(db, other, "Other task feedback.", 1)
+    task.rejection_feedback = feedback[-1]
+    db.commit()
+
+    items = ProjectRiskService.repeatedly_rejected_tasks(db, project.project_id, threshold=3)
+
+    assert len(items) == 1
+    item = items[0]
+    assert item["task_id"] == task.task_id and item["assignee_name"] == "Kyle Reese"
+    assert item["latest_rejection_feedback"] == feedback[-1]
+    assert [h["feedback"] for h in item["rejection_history"]] == feedback
+    assert all(h["rejected_at"] is not None for h in item["rejection_history"])
+
+
+def test_repeated_rejections_filter_by_threshold_assignee_and_done(setup):
+    db = setup["db"]
+    project = _project(db, _pm(db))
+    team = _team(db, project)
+    sarah, kyle = _employee(db, "Sarah"), _employee(db, "Kyle")
+    _task(db, project, team, rejection_count=2, assignee=sarah, title="sarah-2")
+    _task(db, project, team, rejection_count=4, assignee=kyle, title="kyle-4")
+    _task(db, project, team, rejection_count=1, assignee=kyle, title="kyle-1")
+    _task(db, project, team, rejection_count=3, assignee=kyle, status=TaskStatus.DONE, title="kyle-done")
+
+    def titles(**kw):
+        return [t["title"] for t in ProjectRiskService.repeatedly_rejected_tasks(db, project.project_id, **kw)]
+
+    assert titles(threshold=2) == ["kyle-4", "sarah-2"]
+    assert titles(threshold=3) == ["kyle-4"]
+    assert titles(threshold=2, assignee_id=sarah.emp_id) == ["sarah-2"]
+    assert titles(threshold=2, include_done=True) == ["kyle-4", "kyle-done", "sarah-2"]
+
+
+def test_rejection_threshold_reads_system_parameter(setup):
+    db = setup["db"]
+    assert ProjectRiskService.rejection_threshold(db) == 2
+    db.add(SystemParameter(key="REPEATED_REJECTION_THRESHOLD", value="4", value_type="integer"))
+    db.commit()
+    assert ProjectRiskService.rejection_threshold(db) == 4
