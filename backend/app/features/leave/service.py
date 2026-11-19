@@ -10,6 +10,7 @@ from app.core.audit import write_audit_log
 from app.core.notification_types import LEAVE_REQUESTED
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
+    LeaveBalanceOut,
     LeaveRequestCreate,
     LeaveRequestOut,
 )
@@ -302,3 +303,120 @@ class LeaveService:
             )
             for req, type_name in rows
         ]
+
+    @staticmethod
+    def cancel_leave_request(
+        db: Session,
+        current_user: UserAccount,
+        leave_id: int,
+    ) -> LeaveRequestOut:
+        """
+        Cancel a pending leave request (owner only).
+        Updates status to CANCELLED, logs UPDATE audit row, and commits.
+        """
+        employee = scope.resolve_employee(db, current_user)
+        if employee is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No employee profile linked to this account",
+            )
+
+        record = LeaveRepository.get_leave_request_with_type(db, leave_id)
+        if record is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Leave request not found",
+            )
+
+        leave_request, type_name = record
+
+        # Only the owner can cancel
+        if leave_request.emp_id != employee.emp_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You can only cancel your own leave requests",
+            )
+
+        # Only PENDING requests can be cancelled
+        if leave_request.status != LeaveStatus.PENDING:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Only pending requests can be cancelled",
+            )
+
+        leave_request.status = LeaveStatus.CANCELLED
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="LEAVE_REQUEST",
+            entity_ref_id=str(leave_request.leave_id),
+            account_id=current_user.account_id,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(leave_request)
+
+        return LeaveRequestOut(
+            leave_id=leave_request.leave_id,
+            emp_id=leave_request.emp_id,
+            leave_type_id=leave_request.leave_type_id,
+            leave_type_name=type_name,
+            start_date=leave_request.start_date,
+            end_date=leave_request.end_date,
+            total_days=leave_request.total_days,
+            reason=leave_request.reason,
+            status=leave_request.status,
+            applied_at=leave_request.applied_at,
+            reviewed_at=leave_request.reviewed_at,
+            reviewed_by_account_id=leave_request.reviewed_by_account_id,
+            review_remarks=leave_request.review_remarks,
+        )
+
+    @staticmethod
+    def get_employee_leave_balances(
+        db: Session,
+        emp_id: int,
+        year: Optional[int] = None,
+    ) -> List[LeaveBalanceOut]:
+        """
+        Calculate year-wise leave balances for an employee across all active leave types.
+        - used_days = APPROVED requests counted by start_date year.
+        - pending_days = PENDING requests counted by start_date year.
+        - available_days = yearly_quota - used_days - pending_days.
+        Negative balances are NOT clamped to zero.
+        """
+        if year is None:
+            year = date.today().year
+
+        active_types = LeaveRepository.list_active_leave_types(db)
+        balances: List[LeaveBalanceOut] = []
+
+        for lt in active_types:
+            used_days = LeaveRepository.get_leave_days_by_status(
+                db=db,
+                emp_id=emp_id,
+                leave_type_id=lt.leave_type_id,
+                year=year,
+                status=LeaveStatus.APPROVED,
+            )
+            pending_days = LeaveRepository.get_leave_days_by_status(
+                db=db,
+                emp_id=emp_id,
+                leave_type_id=lt.leave_type_id,
+                year=year,
+                status=LeaveStatus.PENDING,
+            )
+            available_days = lt.yearly_quota - used_days - pending_days
+
+            balances.append(
+                LeaveBalanceOut(
+                    leave_type_id=lt.leave_type_id,
+                    leave_type_name=lt.name,
+                    yearly_quota=lt.yearly_quota,
+                    used_days=used_days,
+                    pending_days=pending_days,
+                    available_days=available_days,
+                )
+            )
+
+        return balances
