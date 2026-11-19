@@ -1,4 +1,4 @@
-"""Business logic for the leave feature (US-16, S4-BE-1)."""
+"""Business logic for the leave feature (US-16, US-40, S4-BE-1)."""
 from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
@@ -6,13 +6,17 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import scope
+from app.core.audit import write_audit_log
+from app.core.notification_types import LEAVE_REQUESTED
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
     LeaveRequestCreate,
     LeaveRequestOut,
 )
-from app.models.enums import LeaveStatus
-from app.models.leave import LeaveType
+from app.features.notifications.service import NotificationService
+from app.models.employee import Employee
+from app.models.enums import AuditAction, LeaveStatus
+from app.models.leave import LeaveRequest, LeaveType
 from app.models.user_account import UserAccount
 
 
@@ -175,6 +179,24 @@ class LeaveService:
             reason=data.reason,
         )
 
+        # US-40: Automatic notifications to Team Leads and staffing PMs
+        cls._send_submission_notifications(
+            db=db,
+            employee=employee,
+            leave_request=leave_request,
+            total_days=total_days,
+        )
+
+        # Audit log for creation
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="LEAVE_REQUEST",
+            entity_ref_id=str(leave_request.leave_id),
+            account_id=current_user.account_id,
+            commit=False,
+        )
+
         db.commit()
         db.refresh(leave_request)
 
@@ -193,6 +215,48 @@ class LeaveService:
             reviewed_by_account_id=leave_request.reviewed_by_account_id,
             review_remarks=leave_request.review_remarks,
         )
+
+    @staticmethod
+    def _send_submission_notifications(
+        db: Session,
+        employee: Employee,
+        leave_request: LeaveRequest,
+        total_days: int,
+    ) -> None:
+        """
+        US-40: Immediately notify every Team Lead of active teams and every staffing PM.
+        Avoids duplicates, avoids notifying applicant themself, and does not silently skip.
+        """
+        tl_account_ids = scope.team_lead_account_ids_for(db, employee.emp_id)
+        pm_account_ids = scope.staffing_pm_account_ids_for(db, employee.emp_id)
+
+        # Deduplicate recipients
+        recipients = set(tl_account_ids) | set(pm_account_ids)
+        if employee.account_id is not None:
+            recipients.discard(employee.account_id)
+
+        # Collect affected project names
+        staffing_projects = scope.staffing_projects_for(db, employee.emp_id)
+        project_names = [p.name for p in staffing_projects]
+        projects_str = ", ".join(project_names) if project_names else "None"
+
+        title = f"Leave Request: {employee.full_name}"
+        message = (
+            f"{employee.full_name} has requested {total_days} day(s) of leave "
+            f"from {leave_request.start_date} to {leave_request.end_date}. "
+            f"Affected projects: {projects_str}."
+        )
+        link = f"/team-lead/leave?request={leave_request.leave_id}"
+
+        for account_id in recipients:
+            NotificationService.create_notification(
+                db=db,
+                user_id=account_id,
+                type=LEAVE_REQUESTED,
+                title=title,
+                message=message,
+                link=link,
+            )
 
     @staticmethod
     def list_my_leave_history(
