@@ -1,6 +1,6 @@
 """Business logic for the leave feature (US-16, S4-BE-1)."""
 from datetime import date, timedelta
-from typing import Optional, Tuple
+from typing import List, Optional, Tuple
 
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
@@ -193,3 +193,48 @@ class LeaveService:
             reviewed_by_account_id=leave_request.reviewed_by_account_id,
             review_remarks=leave_request.review_remarks,
         )
+
+    @staticmethod
+    def list_my_leave_history(
+        db: Session,
+        current_user: UserAccount,
+        status_filter: Optional[LeaveStatus] = None,
+        year: Optional[int] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> List[LeaveRequestOut]:
+        """List leave requests for the authenticated employee with isolation."""
+        employee = scope.resolve_employee(db, current_user)
+        if employee is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="No employee profile linked to this account",
+            )
+
+        rows = LeaveRepository.list_employee_requests(
+            db=db,
+            emp_id=employee.emp_id,
+            status=status_filter,
+            year=year,
+            page=page,
+            limit=limit,
+        )
+
+        return [
+            LeaveRequestOut(
+                leave_id=req.leave_id,
+                emp_id=req.emp_id,
+                leave_type_id=req.leave_type_id,
+                leave_type_name=type_name,
+                start_date=req.start_date,
+                end_date=req.end_date,
+                total_days=req.total_days,
+                reason=req.reason,
+                status=req.status,
+                applied_at=req.applied_at,
+                reviewed_at=req.reviewed_at,
+                reviewed_by_account_id=req.reviewed_by_account_id,
+                review_remarks=req.review_remarks,
+            )
+            for req, type_name in rows
+        ]
