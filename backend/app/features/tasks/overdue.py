@@ -225,3 +225,14 @@ class OverdueService:
             )
             sent += 1
         return sent
+
+
+def apply_due_date_change(task: Task, new_due_date: Optional[date]) -> None:
+    """Set a task's due date and reset its overdue episode when it changes.
+
+    Every code path that edits ``Task.due_date`` (S4-BE-5 and future task
+    edits) must go through this so the next sweep can notify again.
+    """
+    if task.due_date != new_due_date:
+        task.due_date = new_due_date
+        task.overdue_notified_at = None
