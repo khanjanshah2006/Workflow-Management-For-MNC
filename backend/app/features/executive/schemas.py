@@ -4,9 +4,11 @@ Pydantic V2 request/response schemas for Executive Dashboard & Analytics (US-24,
 Strictly read-only; absolutely no employee PII (full name, email, phone, salary) is exposed.
 """
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import Dict, List, Optional
 from pydantic import BaseModel, ConfigDict, Field
+
+from app.models.enums import ReportFormat
 
 
 class ProjectsByStatus(BaseModel):
@@ -100,3 +102,72 @@ class ExecutiveDepartmentDrilldownResponse(BaseModel):
     projects: List[DepartmentProjectItem] = Field(default_factory=list)
     teams: List[DepartmentTeamItem] = Field(default_factory=list)
     resource_allocation: DepartmentResourceAllocation
+
+
+# ------------------------------------------------------------------
+# Executive Management Reports Schemas (US-25, S7-BE-2)
+# ------------------------------------------------------------------
+
+class ExecutiveReportCreateRequest(BaseModel):
+    """Payload for POST /api/v1/executive/reports/generate."""
+    report_title: str = Field(
+        ...,
+        min_length=3,
+        max_length=255,
+        description="Human-readable title for the report (3-255 characters)",
+    )
+    period_start: date = Field(..., description="Start date of the reporting period (YYYY-MM-DD)")
+    period_end: date = Field(..., description="End date of the reporting period (YYYY-MM-DD)")
+    format: ReportFormat = Field(
+        ReportFormat.PDF,
+        description="Desired export file format (PDF or CSV)",
+    )
+    include_department_breakdown: bool = Field(
+        False,
+        description="Whether to include granular department summaries in the PDF report",
+    )
+
+
+class ExecutiveReportResponse(BaseModel):
+    """Metadata response for a generated executive management report."""
+    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+
+    report_id: int
+    report_title: str
+    format: str
+    period_start: date
+    period_end: date
+    include_department_breakdown: bool
+    file_size_bytes: int
+    generated_at: datetime
+    download_url: str
+
+    @classmethod
+    def from_orm_report(cls, report: "ExecutiveReport") -> "ExecutiveReportResponse":
+        fmt = (
+            report.report_format.value
+            if hasattr(report.report_format, "value")
+            else str(report.report_format)
+        )
+        return cls(
+            report_id=report.report_id,
+            report_title=report.report_title,
+            format=fmt,
+            period_start=report.period_start,
+            period_end=report.period_end,
+            include_department_breakdown=report.include_department_breakdown,
+            file_size_bytes=report.file_size_bytes,
+            generated_at=report.generated_at,
+            download_url=f"/api/v1/executive/reports/{report.report_id}/download",
+        )
+
+
+class PaginatedExecutiveReportsResponse(BaseModel):
+    """Paginated report history for GET /api/v1/executive/reports."""
+    model_config = ConfigDict(from_attributes=True)
+
+    items: List[ExecutiveReportResponse] = Field(default_factory=list)
+    total: int
+    page: int
+    limit: int
+
