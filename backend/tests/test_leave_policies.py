@@ -191,14 +191,40 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertIn("already exists", resp.json()["detail"].lower())
 
     def test_create_policy_validation_invalid_quota(self):
-        """Negative quota or exceeding 365 returns 422 Unprocessable Entity."""
+        """Negative quota or exceeding 366 returns 422 Unprocessable Entity."""
         payload_neg = {"name": "Bad Leave", "yearly_quota": -5, "is_paid": True}
         resp = self.client.post("/api/v1/leave/policies", json=payload_neg, headers=self.headers(self.hr_user))
         self.assertEqual(resp.status_code, 422)
 
-        payload_too_big = {"name": "Bad Leave 2", "yearly_quota": 400, "is_paid": True}
+        payload_too_big = {"name": "Bad Leave 2", "yearly_quota": 367, "is_paid": True}
         resp2 = self.client.post("/api/v1/leave/policies", json=payload_too_big, headers=self.headers(self.hr_user))
         self.assertEqual(resp2.status_code, 422)
+
+    def test_create_policy_blank_name_returns_422(self):
+        """A whitespace-only name is stripped first, so it fails the 2-char minimum."""
+        resp = self.client.post(
+            "/api/v1/leave/policies",
+            json={"name": "   ", "yearly_quota": 3},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 422)
+
+    def test_create_policy_accepts_spec_upper_limits(self):
+        """yearly_quota 366 and a 1000-char description are valid; name is stored stripped."""
+        resp = self.client.post(
+            "/api/v1/leave/policies",
+            json={"name": "  Leap Leave  ", "yearly_quota": 366, "description": "x" * 1000},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 201)
+        self.assertEqual(resp.json()["name"], "Leap Leave")
+
+        too_long = self.client.post(
+            "/api/v1/leave/policies",
+            json={"name": "Long Leave", "yearly_quota": 1, "description": "x" * 1001},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(too_long.status_code, 422)
 
     # ─────────────────────────────────────────────────────────────
     # 4. Update Policy Tests

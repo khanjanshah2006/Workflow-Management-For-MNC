@@ -1,80 +1,15 @@
-"""Pydantic schemas for the leave feature (US-14, US-16, US-17, US-19, US-40, S4-BE-1, S4-BE-3, S4-BE-5)."""
+"""Pydantic schemas for the leave feature (US-14, US-16, US-17, US-19, US-40, S4-BE-1, S4-BE-2, S4-BE-3, S4-BE-5)."""
 from datetime import date, datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app.models.enums import LeaveStatus
 
 
-# ──────────────────────────────────────────────
-# S4-BE-2  Leave Policy / Leave Type Schemas
-# ──────────────────────────────────────────────
-
-class LeavePolicyCreate(BaseModel):
-    """Payload to create a new leave type / policy (HR only)."""
-    name: str = Field(
-        ...,
-        min_length=2,
-        max_length=50,
-        description="Unique human-readable name, e.g. 'Annual Leave'",
-    )
-    yearly_quota: int = Field(
-        ...,
-        ge=0,
-        le=365,
-        description="Maximum days an employee can take per year (0 = unlimited carry-forward tracked externally)",
-    )
-    is_paid: bool = Field(default=True, description="Whether this leave type is paid")
-    description: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Optional human-readable description of the policy",
-    )
-
-
-class LeavePolicyUpdate(BaseModel):
-    """Payload to update an existing leave type / policy (HR only).
-    All fields are optional so callers can patch a single field.
-    """
-    yearly_quota: Optional[int] = Field(
-        default=None,
-        ge=0,
-        le=365,
-        description="New yearly quota; must be ≥ 0",
-    )
-    is_paid: Optional[bool] = Field(
-        default=None,
-        description="Update paid/unpaid classification",
-    )
-    description: Optional[str] = Field(
-        default=None,
-        max_length=500,
-        description="Update the policy description",
-    )
-    is_active: Optional[bool] = Field(
-        default=None,
-        description="Deactivate (soft-delete) or reactivate a policy",
-    )
-
-
-class LeavePolicyResponse(BaseModel):
-    """Full view of a leave type / policy record."""
-    model_config = ConfigDict(from_attributes=True)
-
-    leave_type_id: int
-    name: str
-    yearly_quota: int
-    is_paid: bool
-    is_active: bool
-    description: Optional[str] = None
-
-
-# ──────────────────────────────────────────────
-# S4-BE-1  Leave Request Schemas
-# ──────────────────────────────────────────────
+# ── US-16 / S4-BE-1 Schemas ──────────────────────────────────────────────────
 
 class LeaveRequestCreate(BaseModel):
     """Payload for submitting a leave request."""
@@ -96,8 +31,6 @@ class LeaveRequestCreate(BaseModel):
 
 class LeaveRequestOut(BaseModel):
     """Leave request response representation."""
-    model_config = ConfigDict(from_attributes=True)
-
     leave_id: int
     emp_id: int
     leave_type_id: int
@@ -112,22 +45,21 @@ class LeaveRequestOut(BaseModel):
     reviewed_by_account_id: Optional[UUID] = None
     review_remarks: Optional[str] = None
 
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PaginatedLeaveRequestsOut(BaseModel):
     """Paginated leave requests history response."""
-    model_config = ConfigDict(from_attributes=True)
-
     items: List[LeaveRequestOut]
     total: int
     page: int
     limit: int
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 class LeaveBalanceItem(BaseModel):
     """Leave balance calculation representation for a single active leave type."""
-    model_config = ConfigDict(from_attributes=True)
-
     leave_type_id: int
     leave_type_name: str
     yearly_quota: int
@@ -136,14 +68,14 @@ class LeaveBalanceItem(BaseModel):
     available_days: int
     is_paid: bool
 
+    model_config = ConfigDict(from_attributes=True)
+
 
 LeaveBalanceOut = LeaveBalanceItem
 
 
 class EmployeeLeaveBalanceResponse(BaseModel):
     """Wrapped year-wise leave balances response."""
-    model_config = ConfigDict(from_attributes=True)
-
     employee_id: int
     year: int
     balances: List[LeaveBalanceItem]
@@ -283,3 +215,46 @@ class TaskReallocationBatchOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# ── US-18 / S4-BE-2 Schemas ──────────────────────────────────────────────────
+
+# Stripped before the length check, so "   " is rejected rather than stored as "".
+PolicyName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=50)]
+YearlyQuota = Annotated[int, Field(ge=0, le=366)]
+PolicyDescription = Annotated[str, Field(max_length=1000)]
+
+
+class LeavePolicyCreate(BaseModel):
+    """Payload for creating a leave policy (leave type)."""
+    name: PolicyName
+    yearly_quota: YearlyQuota
+    is_paid: bool = True
+    description: Optional[PolicyDescription] = None
+
+
+class LeavePolicyUpdate(BaseModel):
+    """Partial update: only the fields sent are changed."""
+    name: Optional[PolicyName] = None
+    yearly_quota: Optional[YearlyQuota] = None
+    is_paid: Optional[bool] = None
+    description: Optional[PolicyDescription] = None
+    is_active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> "LeavePolicyUpdate":
+        for field in ("name", "yearly_quota", "is_paid", "is_active"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+class LeavePolicyResponse(BaseModel):
+    """Leave policy representation."""
+    leave_type_id: int
+    name: str
+    yearly_quota: int
+    is_paid: bool
+    is_active: bool
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)
