@@ -13,12 +13,9 @@ router = APIRouter()
 ALLOWED_REVIEWER_ROLES = [
     "TEAM_LEAD",
     "PM",
-    "PROJECT_MANAGER",
     "HR",
-    "HR_MANAGER",
     "ADMIN",
     "SYSTEM_ADMIN",
-    "EMPLOYEE",
 ]
 
 

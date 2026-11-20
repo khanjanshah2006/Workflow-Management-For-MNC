@@ -1,6 +1,6 @@
 """Database queries and data-access layer for Leave Management (S4)."""
 from datetime import date
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
@@ -32,7 +32,165 @@ from app.models.user_account import UserAccount
 
 
 class LeaveRepository:
-    """Data-access repository for leave requests, conflict detection, and reviewer scoping."""
+    """Repository handling database access for leave requests, balances, and conflict detection."""
+
+    # ── S4-BE-1 / US-16 / US-40 Queries ──────────────────────────────────────
+
+    @staticmethod
+    def get_leave_type(db: Session, leave_type_id: int) -> Optional[LeaveType]:
+        """Fetch a LeaveType by primary key."""
+        return db.scalar(select(LeaveType).where(LeaveType.leave_type_id == leave_type_id))
+
+    @staticmethod
+    def list_active_leave_types(db: Session) -> Sequence[LeaveType]:
+        """Fetch all active leave types ordered by leave_type_id."""
+        stmt = (
+            select(LeaveType)
+            .where(LeaveType.is_active.is_(True))
+            .order_by(LeaveType.leave_type_id.asc())
+        )
+        return list(db.scalars(stmt))
+
+    @staticmethod
+    def has_overlapping_request(
+        db: Session,
+        emp_id: int,
+        start_date: date,
+        end_date: date,
+        exclude_leave_id: Optional[int] = None,
+    ) -> bool:
+        """
+        Check if employee has an overlapping PENDING or APPROVED leave request.
+        Two intervals [s1, e1] and [s2, e2] overlap iff s1 <= e2 and e1 >= s2.
+        """
+        stmt = select(LeaveRequest.leave_id).where(
+            LeaveRequest.emp_id == emp_id,
+            LeaveRequest.status.in_([LeaveStatus.PENDING, LeaveStatus.APPROVED]),
+            LeaveRequest.start_date <= end_date,
+            LeaveRequest.end_date >= start_date,
+        )
+        if exclude_leave_id is not None:
+            stmt = stmt.where(LeaveRequest.leave_id != exclude_leave_id)
+        stmt = stmt.limit(1)
+        return db.scalar(stmt) is not None
+
+    @staticmethod
+    def get_leave_days_by_status(
+        db: Session,
+        emp_id: int,
+        leave_type_id: int,
+        year: int,
+        status: LeaveStatus,
+    ) -> int:
+        """
+        Calculate total days of leaves for an employee, leave type, status, and calendar year.
+        Uses calendar year of start_date.
+        """
+        stmt = select(func.coalesce(func.sum(LeaveRequest.total_days), 0)).where(
+            LeaveRequest.emp_id == emp_id,
+            LeaveRequest.leave_type_id == leave_type_id,
+            LeaveRequest.status == status,
+            LeaveRequest.start_date >= date(year, 1, 1),
+            LeaveRequest.start_date <= date(year, 12, 31),
+        )
+        result = db.scalar(stmt)
+        return int(result or 0)
+
+    @staticmethod
+    def create_leave_request(
+        db: Session,
+        emp_id: int,
+        leave_type_id: int,
+        start_date: date,
+        end_date: date,
+        total_days: int,
+        reason: str,
+    ) -> LeaveRequest:
+        """Create and flush a new PENDING leave request record."""
+        leave_request = LeaveRequest(
+            emp_id=emp_id,
+            leave_type_id=leave_type_id,
+            start_date=start_date,
+            end_date=end_date,
+            total_days=total_days,
+            reason=reason,
+            status=LeaveStatus.PENDING,
+        )
+        db.add(leave_request)
+        db.flush()
+        db.refresh(leave_request)
+        return leave_request
+
+    @staticmethod
+    def get_leave_request_by_id(db: Session, leave_id: int) -> Optional[LeaveRequest]:
+        """Fetch a LeaveRequest by primary key."""
+        return db.scalar(select(LeaveRequest).where(LeaveRequest.leave_id == leave_id))
+
+    @staticmethod
+    def get_leave_request_with_type(
+        db: Session, leave_id: int
+    ) -> Optional[Tuple[LeaveRequest, str]]:
+        """Fetch a LeaveRequest along with leave_type.name by primary key."""
+        stmt = (
+            select(LeaveRequest, LeaveType.name)
+            .join(LeaveType, LeaveType.leave_type_id == LeaveRequest.leave_type_id)
+            .where(LeaveRequest.leave_id == leave_id)
+        )
+        row = db.execute(stmt).first()
+        if row is None:
+            return None
+        return row[0], row[1]
+
+    @staticmethod
+    def count_employee_requests(
+        db: Session,
+        emp_id: int,
+        status: Optional[LeaveStatus] = None,
+        year: Optional[int] = None,
+    ) -> int:
+        """Count total leave requests for an employee matching optional status and year filters."""
+        stmt = select(func.count(LeaveRequest.leave_id)).where(LeaveRequest.emp_id == emp_id)
+        if status is not None:
+            stmt = stmt.where(LeaveRequest.status == status)
+        if year is not None:
+            stmt = stmt.where(
+                LeaveRequest.start_date >= date(year, 1, 1),
+                LeaveRequest.start_date <= date(year, 12, 31),
+            )
+        result = db.scalar(stmt)
+        return int(result or 0)
+
+    @staticmethod
+    def list_employee_requests(
+        db: Session,
+        emp_id: int,
+        status: Optional[LeaveStatus] = None,
+        year: Optional[int] = None,
+        page: int = 1,
+        limit: int = 20,
+    ) -> Sequence[Tuple[LeaveRequest, str]]:
+        """
+        List leave requests for an employee joined with leave type name,
+        ordered by applied_at DESC, with optional status and year filters.
+        """
+        stmt = (
+            select(LeaveRequest, LeaveType.name)
+            .join(LeaveType, LeaveType.leave_type_id == LeaveRequest.leave_type_id)
+            .where(LeaveRequest.emp_id == emp_id)
+        )
+        if status is not None:
+            stmt = stmt.where(LeaveRequest.status == status)
+        if year is not None:
+            stmt = stmt.where(
+                LeaveRequest.start_date >= date(year, 1, 1),
+                LeaveRequest.start_date <= date(year, 12, 31),
+            )
+        stmt = stmt.order_by(LeaveRequest.applied_at.desc(), LeaveRequest.leave_id.desc())
+        offset = (page - 1) * limit
+        stmt = stmt.offset(offset).limit(limit)
+        return list(db.execute(stmt).all())
+
+    # ── S4-BE-3 / US-17 Conflict Detection Queries ───────────────────────────
 
     @staticmethod
     def get_leave_request_with_details(
@@ -98,28 +256,28 @@ class LeaveRepository:
         # Check Project Manager scope: manages a project the applicant is assigned to
         pm = resolve_pm(db, current_user)
         if pm:
-            staffed_projects = staffing_projects_for(db, applicant_emp_id)
-            if any(p.pm_id == pm.pm_id for p in staffed_projects):
-                return True
+            managed_projects = staffing_projects_for(db, applicant_emp_id)
+            for proj in managed_projects:
+                if proj.pm_id == pm.pm_id:
+                    return True
 
-            applicant_team_projects = db.scalars(
+            applicant_team_projects = (
                 select(Team.project_id)
-                .join(TeamMember, TeamMember.team_id == Team.team_id)
+                .join(TeamMember, Team.team_id == TeamMember.team_id)
                 .where(
                     TeamMember.emp_id == applicant_emp_id,
                     Team.status == TeamStatus.ACTIVE,
-                    Team.project_id.is_not(None),
+                    Team.project_id.isnot(None),
                 )
-            ).all()
-            if applicant_team_projects:
-                managed_project = db.scalar(
-                    select(Project.project_id).where(
-                        Project.project_id.in_(applicant_team_projects),
-                        Project.pm_id == pm.pm_id,
-                    ).limit(1)
-                )
-                if managed_project:
-                    return True
+            )
+            managed_project = db.scalar(
+                select(Project.project_id).where(
+                    Project.project_id.in_(applicant_team_projects),
+                    Project.pm_id == pm.pm_id,
+                ).limit(1)
+            )
+            if managed_project:
+                return True
 
         return False
 
@@ -184,6 +342,19 @@ class LeaveRepository:
         for proj in staffed_projects:
             all_project_ids.add(proj.project_id)
 
+        applicant_team_projects = (
+            db.query(Team.project_id)
+            .join(TeamMember, Team.team_id == TeamMember.team_id)
+            .filter(
+                TeamMember.emp_id == emp_id,
+                Team.status == TeamStatus.ACTIVE,
+                Team.project_id.isnot(None),
+            )
+            .all()
+        )
+        for row in applicant_team_projects:
+            all_project_ids.add(row[0])
+
         if not all_project_ids:
             return []
 
@@ -196,34 +367,34 @@ class LeaveRepository:
                 ProjectMilestone.target_date >= start_date,
                 ProjectMilestone.target_date <= end_date,
             )
-            .order_by(ProjectMilestone.target_date.asc(), ProjectMilestone.id.asc())
+            .order_by(ProjectMilestone.target_date.asc())
             .all()
         )
 
         if not milestones:
             return []
 
-        milestone_ids = [m.id for m in milestones]
-        active_statuses = [
+        ms_ids = [m.id for m in milestones]
+        active_task_statuses = [
             TaskStatus.TODO,
             TaskStatus.IN_PROGRESS,
             TaskStatus.BLOCKED,
             TaskStatus.REJECTED,
         ]
 
-        # Single grouped query to count open tasks on these milestones assigned to applicant
-        open_task_counts = dict(
+        task_counts = (
             db.query(Task.milestone_id, func.count(Task.task_id))
             .filter(
+                Task.milestone_id.in_(ms_ids),
                 Task.assigned_to == emp_id,
-                Task.milestone_id.in_(milestone_ids),
-                Task.status.in_(active_statuses),
+                Task.status.in_(active_task_statuses),
             )
             .group_by(Task.milestone_id)
             .all()
         )
+        count_map = {row[0]: row[1] for row in task_counts}
 
-        return [(m, open_task_counts.get(m.id, 0)) for m in milestones]
+        return [(m, count_map.get(m.id, 0)) for m in milestones]
 
     @staticmethod
     def get_team_coverage(
@@ -231,113 +402,80 @@ class LeaveRepository:
         applicant_emp_id: int,
         start_date: date,
         end_date: date,
-        threshold: int = 5,
+        threshold: int,
     ) -> List[Dict[str, Any]]:
         """
-        Distinct active teammates sharing an active team with the applicant.
-        Returns metrics for each: active_tasks_count, has_leave_overlap,
-        has_pending_leave_overlap, and is_available_for_reassignment.
+        Distinct active teammates sharing at least one active team with applicant.
+        Computes active_tasks_count (via one batch grouped query), leave overlap,
+        and reassignment availability without N+1 queries.
         """
-        app_team_ids = employee_team_ids(db, applicant_emp_id)
-        all_active_teams = app_team_ids.union(led_team_ids(db, applicant_emp_id))
-
-        if not all_active_teams:
-            return []
-
-        # Teammate employee IDs sharing an active team with applicant
-        teammate_emp_ids = set(
-            db.scalars(
-                select(TeamMember.emp_id)
-                .join(Team, Team.team_id == TeamMember.team_id)
-                .join(Employee, Employee.emp_id == TeamMember.emp_id)
-                .where(
-                    TeamMember.team_id.in_(all_active_teams),
-                    Team.status == TeamStatus.ACTIVE,
-                    TeamMember.emp_id != applicant_emp_id,
-                    Employee.status == CommonStatus.ACTIVE,
-                )
-                .distinct()
-            ).all()
+        applicant_teams = (
+            select(TeamMember.team_id)
+            .join(Team, Team.team_id == TeamMember.team_id)
+            .where(
+                TeamMember.emp_id == applicant_emp_id,
+                Team.status == TeamStatus.ACTIVE,
+            )
         )
 
-        # Include any active team leads of these teams (excluding applicant)
-        leads = db.scalars(
-            select(Team.lead_emp_id)
-            .join(Employee, Employee.emp_id == Team.lead_emp_id)
-            .where(
-                Team.team_id.in_(all_active_teams),
-                Team.status == TeamStatus.ACTIVE,
-                Team.lead_emp_id.is_not(None),
-                Team.lead_emp_id != applicant_emp_id,
-                Employee.status == CommonStatus.ACTIVE,
-            )
-            .distinct()
-        ).all()
-        teammate_emp_ids.update(leads)
-
-        if not teammate_emp_ids:
-            return []
-
-        # Fetch teammate employee records ordered by emp_id
         teammates = (
             db.query(Employee)
-            .filter(Employee.emp_id.in_(teammate_emp_ids))
-            .order_by(Employee.emp_id.asc())
+            .join(TeamMember, TeamMember.emp_id == Employee.emp_id)
+            .join(Team, Team.team_id == TeamMember.team_id)
+            .filter(
+                TeamMember.team_id.in_(applicant_teams),
+                Employee.emp_id != applicant_emp_id,
+                Employee.status == CommonStatus.ACTIVE,
+                Team.status == TeamStatus.ACTIVE,
+            )
+            .distinct()
+            .order_by(Employee.full_name.asc())
             .all()
         )
 
-        # 1. Grouped query for active tasks count: status ∈ ACTIVE ∪ {IN_REVIEW}
-        task_statuses = [
+        if not teammates:
+            return []
+
+        teammate_ids = [tm.emp_id for tm in teammates]
+
+        workload_statuses = [
             TaskStatus.TODO,
             TaskStatus.IN_PROGRESS,
             TaskStatus.BLOCKED,
             TaskStatus.REJECTED,
             TaskStatus.IN_REVIEW,
         ]
-        workload_query = (
+
+        task_counts = (
             db.query(Task.assigned_to, func.count(Task.task_id))
             .filter(
-                Task.assigned_to.in_(teammate_emp_ids),
-                Task.status.in_(task_statuses),
+                Task.assigned_to.in_(teammate_ids),
+                Task.status.in_(workload_statuses),
             )
             .group_by(Task.assigned_to)
             .all()
         )
-        workloads = {emp_id: count for emp_id, count in workload_query}
+        task_count_map = {row[0]: row[1] for row in task_counts}
 
-        # 2. Approved leave overlaps in window W
-        approved_overlaps = set(
-            db.scalars(
-                select(LeaveRequest.emp_id)
-                .where(
-                    LeaveRequest.emp_id.in_(teammate_emp_ids),
-                    LeaveRequest.status == LeaveStatus.APPROVED,
-                    LeaveRequest.start_date <= end_date,
-                    LeaveRequest.end_date >= start_date,
-                )
-                .distinct()
-            ).all()
+        overlapping_leaves = (
+            db.query(LeaveRequest.emp_id, LeaveRequest.status)
+            .filter(
+                LeaveRequest.emp_id.in_(teammate_ids),
+                LeaveRequest.status.in_([LeaveStatus.APPROVED, LeaveStatus.PENDING]),
+                LeaveRequest.start_date <= end_date,
+                LeaveRequest.end_date >= start_date,
+            )
+            .all()
         )
 
-        # 3. Pending leave overlaps in window W
-        pending_overlaps = set(
-            db.scalars(
-                select(LeaveRequest.emp_id)
-                .where(
-                    LeaveRequest.emp_id.in_(teammate_emp_ids),
-                    LeaveRequest.status == LeaveStatus.PENDING,
-                    LeaveRequest.start_date <= end_date,
-                    LeaveRequest.end_date >= start_date,
-                )
-                .distinct()
-            ).all()
-        )
+        approved_overlap_set = {row[0] for row in overlapping_leaves if row[1] == LeaveStatus.APPROVED}
+        pending_overlap_set = {row[0] for row in overlapping_leaves if row[1] == LeaveStatus.PENDING}
 
         coverage_items = []
         for tm in teammates:
-            active_cnt = workloads.get(tm.emp_id, 0)
-            has_approved = tm.emp_id in approved_overlaps
-            has_pending = tm.emp_id in pending_overlaps
+            active_cnt = task_count_map.get(tm.emp_id, 0)
+            has_approved = tm.emp_id in approved_overlap_set
+            has_pending = tm.emp_id in pending_overlap_set
             is_available = (not has_approved) and (active_cnt < threshold)
 
             coverage_items.append(

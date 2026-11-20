@@ -3,8 +3,14 @@ from app.features.leave.repository import LeaveRepository
 from app.features.leave.router import router as leave_router
 from app.features.leave.schemas import (
     ConflictingTaskItem,
+    EmployeeLeaveBalanceResponse,
+    LeaveBalanceItem,
+    LeaveBalanceOut,
     LeaveConflictReportOut,
+    LeaveRequestCreate,
+    LeaveRequestOut,
     MilestoneConflictItem,
+    PaginatedLeaveRequestsOut,
     TeamCoverageItem,
 )
 from app.features.leave.service import LeaveService
@@ -13,6 +19,12 @@ __all__ = [
     "leave_router",
     "LeaveRepository",
     "LeaveService",
+    "LeaveRequestCreate",
+    "LeaveRequestOut",
+    "PaginatedLeaveRequestsOut",
+    "LeaveBalanceItem",
+    "LeaveBalanceOut",
+    "EmployeeLeaveBalanceResponse",
     "ConflictingTaskItem",
     "MilestoneConflictItem",
     "TeamCoverageItem",

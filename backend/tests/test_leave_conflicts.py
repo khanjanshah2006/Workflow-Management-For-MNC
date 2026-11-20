@@ -110,8 +110,8 @@ def test_setup():
         )
 
     alice_acc = make_user("alice@company.com", UserType.EMPLOYEE)
-    lead_acc = make_user("lead@company.com", UserType.EMPLOYEE)
-    other_lead_acc = make_user("otherlead@company.com", UserType.EMPLOYEE)
+    lead_acc = make_user("lead@company.com", UserType.TEAM_LEAD)
+    other_lead_acc = make_user("otherlead@company.com", UserType.TEAM_LEAD)
     bob_acc = make_user("bob@company.com", UserType.EMPLOYEE)
     charlie_acc = make_user("charlie@company.com", UserType.EMPLOYEE)
     pm_acc = make_user("pm@company.com", UserType.PM)
@@ -274,8 +274,8 @@ def test_setup():
 
     tokens = {
         "alice": make_token(alice_acc, "EMPLOYEE"),
-        "lead": make_token(lead_acc, "EMPLOYEE"),
-        "other_lead": make_token(other_lead_acc, "EMPLOYEE"),
+        "lead": make_token(lead_acc, "TEAM_LEAD"),
+        "other_lead": make_token(other_lead_acc, "TEAM_LEAD"),
         "bob": make_token(bob_acc, "EMPLOYEE"),
         "charlie": make_token(charlie_acc, "EMPLOYEE"),
         "pm": make_token(pm_acc, "PM"),
