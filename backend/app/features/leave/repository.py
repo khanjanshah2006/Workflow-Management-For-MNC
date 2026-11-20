@@ -50,13 +50,8 @@ class LeaveRepository:
 
     @staticmethod
     def list_leave_types(db: Session, include_inactive: bool = False) -> Sequence[LeaveType]:
-        """Return all leave types ordered by leave_type_id.
-
-        Args:
-            include_inactive: If True return all rows including deactivated ones.
-                              HR/SYSTEM_ADMIN can pass True; employees see only active.
-        """
-        stmt = select(LeaveType).order_by(LeaveType.leave_type_id.asc())
+        """Return leave types ordered by name; active only unless include_inactive."""
+        stmt = select(LeaveType).order_by(LeaveType.name.asc())
         if not include_inactive:
             stmt = stmt.where(LeaveType.is_active.is_(True))
         return list(db.scalars(stmt))

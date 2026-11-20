@@ -57,7 +57,8 @@ class TestLeavePolicies(unittest.TestCase):
 
         # Seed test actors
         self.hr_user = self.make_user(UserType.HR)
-        self.sys_admin = self.make_user(UserType.SYSTEM_ADMIN)
+        self.admin = self.make_user(UserType.ADMIN)
+        self.executive = self.make_user(UserType.MNC_EXECUTIVE)
         self.employee = self.make_user(UserType.EMPLOYEE)
         self.pm_user = self.make_user(UserType.PM)
 
@@ -110,25 +111,59 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertEqual(data[0]["name"], "Annual Leave")
         self.assertTrue(data[0]["is_active"])
 
-    def test_list_all_policies_hr_success(self):
-        """GET /api/v1/leave/policies/all returns active and inactive policies for HR."""
-        active = LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True, is_active=True)
-        inactive = LeaveType(name="Old Sabbatical", yearly_quota=10, is_paid=False, is_active=False)
-        self.db.add_all([active, inactive])
+    def test_list_policies_all_authenticated_roles(self):
+        """Every logged-in role, including ADMIN and MNC_EXECUTIVE, can list policies, ordered by name."""
+        self.db.add_all([
+            LeaveType(name="Sick Leave", yearly_quota=10, is_paid=True),
+            LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True),
+        ])
         self.db.commit()
 
-        resp = self.client.get("/api/v1/leave/policies/all", headers=self.headers(self.hr_user))
-        self.assertEqual(resp.status_code, 200)
-        data = resp.json()
-        self.assertEqual(len(data), 2)
-        names = {item["name"] for item in data}
-        self.assertIn("Annual Leave", names)
-        self.assertIn("Old Sabbatical", names)
+        for user in (self.employee, self.pm_user, self.hr_user, self.admin, self.executive):
+            resp = self.client.get("/api/v1/leave/policies", headers=self.headers(user))
+            self.assertEqual(resp.status_code, 200, user.user_type)
+            self.assertEqual([p["name"] for p in resp.json()], ["Annual Leave", "Sick Leave"])
 
-    def test_list_all_policies_forbidden_for_employee(self):
-        """GET /api/v1/leave/policies/all returns 403 Forbidden for non-HR/Admin."""
-        resp = self.client.get("/api/v1/leave/policies/all", headers=self.headers(self.employee))
-        self.assertEqual(resp.status_code, 403)
+    def test_include_inactive_for_hr_and_admin(self):
+        """HR and ADMIN see deactivated policies with ?include_inactive=true."""
+        self.db.add_all([
+            LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True, is_active=True),
+            LeaveType(name="Old Sabbatical", yearly_quota=10, is_paid=False, is_active=False),
+        ])
+        self.db.commit()
+
+        for user in (self.hr_user, self.admin):
+            resp = self.client.get(
+                "/api/v1/leave/policies?include_inactive=true", headers=self.headers(user)
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertEqual({p["name"] for p in resp.json()}, {"Annual Leave", "Old Sabbatical"})
+
+    def test_inactive_policies_hidden_from_non_hr(self):
+        """include_inactive is ignored for roles other than HR and ADMIN."""
+        self.db.add_all([
+            LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True, is_active=True),
+            LeaveType(name="Old Sabbatical", yearly_quota=10, is_paid=False, is_active=False),
+        ])
+        self.db.commit()
+
+        resp = self.client.get(
+            "/api/v1/leave/policies?include_inactive=true", headers=self.headers(self.employee)
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual([p["name"] for p in resp.json()], ["Annual Leave"])
+
+    def test_patch_method_not_supported(self):
+        """Updates use PUT; PATCH is not routed."""
+        lt = LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True)
+        self.db.add(lt)
+        self.db.commit()
+        resp = self.client.patch(
+            f"/api/v1/leave/policies/{lt.leave_type_id}",
+            json={"yearly_quota": 5},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 405)
 
     # ─────────────────────────────────────────────────────────────
     # 2. Create Policy Tests
@@ -158,15 +193,15 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertEqual(audit.account_id, self.hr_user.account_id)
         self.assertIn("Sick Leave", audit.new_value)
 
-    def test_create_policy_system_admin_success(self):
-        """SYSTEM_ADMIN can also create leave policies."""
+    def test_create_policy_admin_success(self):
+        """ADMIN can also create leave policies."""
         payload = {
             "name": "Maternity Leave",
             "yearly_quota": 90,
             "is_paid": True,
             "description": "Maternity benefit leave",
         }
-        resp = self.client.post("/api/v1/leave/policies", json=payload, headers=self.headers(self.sys_admin))
+        resp = self.client.post("/api/v1/leave/policies", json=payload, headers=self.headers(self.admin))
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["name"], "Maternity Leave")
 
@@ -231,13 +266,13 @@ class TestLeavePolicies(unittest.TestCase):
     # ─────────────────────────────────────────────────────────────
 
     def test_update_policy_quota_and_description(self):
-        """HR updates yearly_quota and description via PATCH; returns 200 with updated fields."""
+        """HR updates yearly_quota and description via PUT; returns 200 with updated fields."""
         lt = LeaveType(name="Bereavement Leave", yearly_quota=3, is_paid=True, is_active=True)
         self.db.add(lt)
         self.db.commit()
 
         payload = {"yearly_quota": 5, "description": "Extended bereavement period"}
-        resp = self.client.patch(
+        resp = self.client.put(
             f"/api/v1/leave/policies/{lt.leave_type_id}",
             json=payload,
             headers=self.headers(self.hr_user),
@@ -259,12 +294,12 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertIn('"yearly_quota": 5', audit.new_value)
 
     def test_update_policy_reactivate(self):
-        """HR can reactivate an inactive policy by passing is_active=True in PATCH."""
+        """HR can reactivate an inactive policy by passing is_active=True in PUT."""
         lt = LeaveType(name="Study Leave", yearly_quota=10, is_paid=False, is_active=False)
         self.db.add(lt)
         self.db.commit()
 
-        resp = self.client.patch(
+        resp = self.client.put(
             f"/api/v1/leave/policies/{lt.leave_type_id}",
             json={"is_active": True},
             headers=self.headers(self.hr_user),
@@ -278,7 +313,7 @@ class TestLeavePolicies(unittest.TestCase):
         self.db.add(lt)
         self.db.commit()
 
-        resp = self.client.patch(
+        resp = self.client.put(
             f"/api/v1/leave/policies/{lt.leave_type_id}",
             json={"yearly_quota": 20},
             headers=self.headers(self.employee),
@@ -287,7 +322,7 @@ class TestLeavePolicies(unittest.TestCase):
 
     def test_update_policy_not_found(self):
         """Updating a nonexistent policy returns 404."""
-        resp = self.client.patch(
+        resp = self.client.put(
             "/api/v1/leave/policies/88888",
             json={"yearly_quota": 10},
             headers=self.headers(self.hr_user),

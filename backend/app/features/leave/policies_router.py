@@ -1,17 +1,18 @@
-"""Leave policies / leave types (S4-BE-2).
+"""Leave policies / leave types (US-18, S4-BE-2).
 
-Endpoints
----------
-GET    /api/v1/leave/policies          – list all active policies (all roles)
-GET    /api/v1/leave/policies/all      – list including inactive (HR / SYSTEM_ADMIN)
-POST   /api/v1/leave/policies          – create a new policy (HR only)
-PATCH  /api/v1/leave/policies/{id}     – update quota / description (HR only)
+GET  /api/v1/leave/policies        all authenticated roles; HR/ADMIN may pass ?include_inactive=true
+POST /api/v1/leave/policies        HR, ADMIN
+PUT  /api/v1/leave/policies/{id}   HR, ADMIN (partial update; is_active=false deactivates)
+
+There is no DELETE: leave_request.leave_type_id is ON DELETE RESTRICT, so policies
+are retired through is_active instead.
 """
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.features.leave.schemas import (
@@ -20,20 +21,18 @@ from app.features.leave.schemas import (
     LeavePolicyUpdate,
 )
 from app.features.leave.service import (
-    LeavePolicyService,
-    LeavePolicyNotFoundError,
     DuplicateLeavePolicyNameError,
+    LeavePolicyNotFoundError,
+    LeavePolicyService,
 )
+from app.models.enums import UserType
 from app.models.user_account import UserAccount
 
 router = APIRouter()
 
-# ── RBAC guards ──────────────────────────────────────────────────────
-hr_or_admin_guard = require_role(["HR", "SYSTEM_ADMIN"])
-any_internal_guard = require_role(["EMPLOYEE", "TEAM_LEAD", "PM", "HR", "SYSTEM_ADMIN", "IT_SUPPORT"])
+POLICY_ADMIN_ROLES = ["HR", "ADMIN"]
+policy_admin_guard = require_role(POLICY_ADMIN_ROLES)
 
-
-# ── Helpers ──────────────────────────────────────────────────────────
 
 def _get_client_ip(request: Request) -> str:
     xff = request.headers.get("X-Forwarded-For")
@@ -42,83 +41,52 @@ def _get_client_ip(request: Request) -> str:
     return request.client.host if request.client else "unknown"
 
 
-# ── List active leave policies (any authenticated user) ──────────────
-
 @router.get(
     "/policies",
     response_model=List[LeavePolicyResponse],
-    status_code=status.HTTP_200_OK,
-    summary="List active leave policies (US-18, S4-BE-2)",
+    summary="List leave policies (US-18, S4-BE-2)",
     description=(
-        "Returns all **active** leave type definitions (name, yearly quota, paid/unpaid). "
-        "Accessible by all internal roles so employees know their available leave types."
+        "All authenticated roles see active policies, ordered by name. "
+        "HR and ADMIN may pass `include_inactive=true` to also see deactivated ones; "
+        "the flag is ignored for other roles."
     ),
 )
 def list_policies(
+    include_inactive: bool = Query(False, description="HR/ADMIN only: include deactivated policies"),
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(any_internal_guard),
+    current_user: UserAccount = Depends(get_current_user),
 ) -> List[LeavePolicyResponse]:
-    return LeavePolicyService.list_policies(db, include_inactive=False)
+    can_see_inactive = current_user.user_type in (UserType.HR, UserType.ADMIN)
+    return LeavePolicyService.list_policies(db, include_inactive=include_inactive and can_see_inactive)
 
-
-# ── List ALL policies including inactive (HR / SYSTEM_ADMIN) ─────────
-
-@router.get(
-    "/policies/all",
-    response_model=List[LeavePolicyResponse],
-    status_code=status.HTTP_200_OK,
-    summary="List all leave policies including inactive (US-18, S4-BE-2) [HR/Admin]",
-    description="Returns active **and** deactivated leave type definitions. HR and System Admin only.",
-)
-def list_all_policies(
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(hr_or_admin_guard),
-) -> List[LeavePolicyResponse]:
-    return LeavePolicyService.list_policies(db, include_inactive=True)
-
-
-# ── Create a new leave policy (HR only) ──────────────────────────────
 
 @router.post(
     "/policies",
     response_model=LeavePolicyResponse,
     status_code=status.HTTP_201_CREATED,
-    summary="Create a leave policy / leave type (US-18, S4-BE-2) [HR]",
-    description=(
-        "HR creates a new named leave type with its annual entitlement (yearly quota) "
-        "and paid/unpaid classification. Name must be unique."
-    ),
+    summary="Create a leave policy (US-18, S4-BE-2) [HR, ADMIN]",
 )
 def create_policy(
     payload: LeavePolicyCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(hr_or_admin_guard),
+    current_user: UserAccount = Depends(policy_admin_guard),
 ) -> LeavePolicyResponse:
     try:
         return LeavePolicyService.create_policy(
-            db=db,
-            payload=payload,
-            actor=current_user,
-            ip_address=_get_client_ip(request),
+            db=db, payload=payload, actor=current_user, ip_address=_get_client_ip(request)
         )
     except DuplicateLeavePolicyNameError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=str(exc),
-        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
 
-# ── Update quota / description / paid flag (HR only) ─────────────────
-
-@router.patch(
+@router.put(
     "/policies/{leave_type_id}",
     response_model=LeavePolicyResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Update leave policy quota / description / status (US-18, S4-BE-2) [HR]",
+    summary="Update a leave policy (US-18, S4-BE-2) [HR, ADMIN]",
     description=(
-        "HR updates the yearly quota, paid classification, description, or active status "
-        "of an existing leave policy. All fields are optional (patch semantics)."
+        "Partial update of name, yearly_quota, is_paid, description and is_active. "
+        "Lowering a quota below what is already used is allowed."
     ),
 )
 def update_policy(
@@ -126,7 +94,7 @@ def update_policy(
     payload: LeavePolicyUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(hr_or_admin_guard),
+    current_user: UserAccount = Depends(policy_admin_guard),
 ) -> LeavePolicyResponse:
     try:
         return LeavePolicyService.update_policy(
@@ -138,3 +106,5 @@ def update_policy(
         )
     except LeavePolicyNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except DuplicateLeavePolicyNameError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
