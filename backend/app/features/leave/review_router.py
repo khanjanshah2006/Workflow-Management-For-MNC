@@ -28,7 +28,7 @@ def _parse_status_filter(value: str) -> Optional[LeaveStatus]:
     except ValueError as exc:
         allowed = ", ".join([item.value for item in LeaveStatus] + ["ALL"])
         raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status_code=422,
             detail=f"status must be one of: {allowed}",
         ) from exc
 

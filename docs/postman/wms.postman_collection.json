@@ -2758,6 +2758,310 @@
             "description": "Owner cancels their pending leave request."
           },
           "response": []
+        },
+        {
+          "name": "GET Pending Leave Review Queue (S4-BE-4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/pending?status=PENDING&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists pending requests for review. Team Leads only see members of active teams they lead; HR and Admin see all requests."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queue request succeeds', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Queue contains paginated items', function () { var body = pm.response.json(); pm.expect(body).to.have.property('items'); pm.expect(body).to.have.property('total'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Leave Request (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "Approves a pending request, revalidates overlaps and quota, and notifies the applicant and staffing PMs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"Approved. Coverage arranged with John Matrix.\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Leave request approved', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('APPROVED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Already Processed Leave (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "Repeat the approve request after a decision; expects 400 Request already processed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Already processed request is rejected', function () { pm.response.to.have.status(400); pm.expect(pm.response.json().detail).to.eql('Request already processed'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Reject Leave Request (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id_to_reject}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id_to_reject}}",
+                "reject"
+              ]
+            },
+            "description": "Rejects a pending request. Remarks must contain at least 10 characters after trimming.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"Critical release on Dec 8; cannot release coverage.\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Leave request rejected', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('REJECTED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Reject Leave with Blank Remarks (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id_to_reject}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id_to_reject}}",
+                "reject"
+              ]
+            },
+            "description": "Validation check for missing or blank rejection remarks; expects 422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"   \"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Blank rejection remarks are rejected', function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Request Outside Team Scope (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{other_team_leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{other_team_leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "A Team Lead must receive 403 for an applicant outside the teams they lead.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Out-of-scope reviewer is forbidden', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
