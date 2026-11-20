@@ -337,3 +337,111 @@ def test_pending_queue_counts_conflicting_tasks_in_one_item_field(leave_api):
     assert response.status_code == 200
     item = next(item for item in response.json()["items"] if item["leave_id"] == request.leave_id)
     assert item["conflicting_task_count"] == 1
+
+
+def test_tl_approve_pending_leave_notifies_employee_and_staffing_pms(leave_api):
+    client, db, _, users, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={"review_remarks": "Coverage arranged."})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "APPROVED"
+    assert response.json()["reviewed_by_account_id"] == str(users["lead"].account_id)
+    assert response.json()["review_remarks"] == "Coverage arranged."
+    notifications = db.query(Notification).all()
+    assert {(item.account_id, item.type) for item in notifications} == {
+        (users["applicant"].account_id, "LEAVE_APPROVED"),
+        (users["pm"].account_id, "STAFF_LEAVE_APPROVED"),
+    }
+    assert response.json()["reviewed_at"] is not None
+
+
+def test_hr_approval_also_notifies_applicant_team_lead(leave_api):
+    client, db, actor, users, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    actor["user"] = users["hr"]
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 200
+    assert response.json()["review_remarks"] is None
+    recipients = {(item.account_id, item.type) for item in db.query(Notification).all()}
+    assert (users["applicant"].account_id, "LEAVE_APPROVED") in recipients
+    assert (users["lead"].account_id, "LEAVE_APPROVED") in recipients
+    assert (users["pm"].account_id, "STAFF_LEAVE_APPROVED") in recipients
+
+
+def test_approval_audit_contains_prior_and_new_status(leave_api):
+    client, db, _, users, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 200
+    audit = db.query(AuditLog).filter_by(entity_name="LEAVE_REQUEST", entity_ref_id=str(request.leave_id)).one()
+    assert audit.action == AuditAction.APPROVE
+    assert audit.account_id == users["lead"].account_id
+    assert json.loads(audit.old_value) == {"status": "PENDING"}
+    assert json.loads(audit.new_value) == {"status": "APPROVED", "review_remarks": None}
+
+
+def test_approve_revalidates_quota_after_policy_change(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type, days=3)
+    leave_type.yearly_quota = 2
+    db.commit()
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 400
+    assert "Insufficient leave balance" in response.json()["detail"]
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+    assert db.query(Notification).count() == 0
+
+
+def test_approve_rechecks_overlap_before_decision(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    add_request(db, leave_type, start=date(2026, 12, 8), end=date(2026, 12, 10), days=3, status=LeaveStatus.APPROVED)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 409
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_tl_outside_applicant_team_cannot_decide(leave_api, decision):
+    client, db, actor, users, _, leave_type = leave_api
+    request = add_request(db, leave_type, emp_id=2)
+    actor["user"] = users["lead"]
+    payload = {"review_remarks": "Unable to approve this request."} if decision == "reject" else {}
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/{decision}", json=payload)
+
+    assert response.status_code == 403
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+def test_self_approval_is_forbidden(leave_api):
+    client, db, actor, _, _, leave_type = leave_api
+    request = add_request(db, leave_type, emp_id=3)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 403
+    assert "own leave" in response.json()["detail"]
+
+
+@pytest.mark.parametrize("status_value", [LeaveStatus.APPROVED, LeaveStatus.REJECTED])
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_already_processed_request_returns_400(leave_api, status_value, decision):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type, status=status_value)
+    payload = {"review_remarks": "This request was previously reviewed."} if decision == "reject" else {}
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/{decision}", json=payload)
+
+    assert response.status_code == 400
+    assert response.json()["detail"] == "Request already processed"
