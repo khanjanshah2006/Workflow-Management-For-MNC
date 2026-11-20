@@ -1,3 +1,4 @@
+from datetime import date
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy.orm import Session
@@ -21,7 +22,12 @@ from app.features.projects.schemas import (
     MilestoneUpdate,
     MilestoneResponse,
     EligibleEmployeeResponse,
+    ProjectDashboardResponse,
+    ProjectRisksResponse,
+    TeamWorkloadItem,
 )
+from app.features.projects.risk_service import ProjectRiskService
+from app.features.tasks.router import get_today
 from app.features.projects.service import (
     ProjectService,
     ProjectNotFoundError,
@@ -43,6 +49,8 @@ router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
 
 # Role guard for project leadership
 pm_or_admin_guard = require_role(["PM", "PROJECT_MANAGER", "ADMIN"])
+# PM risk dashboard (S5-BE-2) also admits SYSTEM_ADMIN.
+risk_guard = require_role(["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"])
 
 
 # ==========================================
@@ -456,3 +464,70 @@ def delete_milestone(
     except UnauthorizedProjectAccessError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
+
+
+# ==========================================
+# PM Risk & Quality Dashboard (S5-BE-2: US-23, US-38, US-39)
+# ==========================================
+
+@router.get(
+    "/{project_id}/dashboard",
+    response_model=ProjectDashboardResponse,
+    summary="PM project dashboard (US-23)",
+    description="Task status counts, completion, overdue/blocked counts, milestone risk and repeated rejections for one project. Managing PM, ADMIN or SYSTEM_ADMIN.",
+)
+def get_project_dashboard(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(risk_guard),
+    today: date = Depends(get_today),
+) -> ProjectDashboardResponse:
+    try:
+        return ProjectRiskService.get_dashboard(db, project_id, current_user, today)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/risks",
+    response_model=ProjectRisksResponse,
+    summary="PM project risk view (US-38)",
+    description="Repeatedly rejected tasks (rejection_count >= REPEATED_REJECTION_THRESHOLD) with full rejection history, blocked tasks, at-risk milestones and a project-wide risk score. assignee_id narrows the task lists only.",
+)
+def get_project_risks(
+    project_id: int,
+    assignee_id: Optional[int] = Query(None, description="Only list tasks assigned to this employee"),
+    include_done: bool = Query(False, description="Include DONE tasks in repeated rejections"),
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(risk_guard),
+    today: date = Depends(get_today),
+) -> ProjectRisksResponse:
+    try:
+        return ProjectRiskService.get_risks(
+            db, project_id, current_user, today, assignee_id=assignee_id, include_done=include_done
+        )
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+
+
+@router.get(
+    "/{project_id}/team-workload",
+    response_model=List[TeamWorkloadItem],
+    summary="Cross-project workload of project staff (US-39)",
+    description="One row per employee actively assigned to the project, with open tasks here and across all projects, active project count and utilization. Aggregates only; no other projects' task details.",
+)
+def get_project_team_workload(
+    project_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(risk_guard),
+) -> List[TeamWorkloadItem]:
+    try:
+        return ProjectRiskService.get_team_workload(db, project_id, current_user)
+    except ProjectNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except UnauthorizedProjectAccessError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc

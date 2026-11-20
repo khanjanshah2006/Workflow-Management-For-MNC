@@ -2,7 +2,7 @@ from datetime import date, datetime
 from typing import Optional, List, Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus, CommonStatus
+from app.models.enums import PriorityLevel, ProjectStatus, TeamStatus, MilestoneStatus, CommonStatus, TaskStatus
 from app.features.employees.schemas import EmployeeWorkloadResponse
 
 
@@ -234,3 +234,74 @@ class EligibleEmployeeResponse(BaseModel):
         return self
 
 
+
+
+# ==========================================
+# PM Risk & Quality Dashboard (S5-BE-2: US-23, US-38, US-39)
+# ==========================================
+
+class MilestoneRiskItem(BaseModel):
+    milestone_id: int
+    title: str
+    target_date: date
+    open_tasks: int
+
+
+class ProjectDashboardResponse(BaseModel):
+    project_id: int
+    project_name: str
+    status: ProjectStatus
+    completion_pct: int
+    total_tasks: int
+    tasks_by_status: dict[str, int]
+    overdue_tasks_count: int
+    blocked_tasks_count: int
+    at_risk_milestones_count: int
+    overdue_milestones_count: int
+    repeatedly_rejected_count: int
+    rejection_threshold: int
+    upcoming_milestones: List[MilestoneRiskItem]
+
+
+class RejectionHistoryEntry(BaseModel):
+    rejected_at: datetime
+    feedback: Optional[str] = None
+
+
+class RepeatedlyRejectedTask(BaseModel):
+    task_id: int
+    title: str
+    assignee_id: Optional[int] = None
+    assignee_name: Optional[str] = None
+    rejection_count: int
+    status: TaskStatus
+    latest_rejection_feedback: Optional[str] = None
+    rejection_history: List[RejectionHistoryEntry]
+
+
+class BlockedTaskItem(BaseModel):
+    task_id: int
+    title: str
+    assignee_name: Optional[str] = None
+    blocker_reason: Optional[str] = None
+    blocked_since: datetime
+
+
+class ProjectRisksResponse(BaseModel):
+    project_id: int
+    risk_score: str
+    risk_points: int
+    rejection_threshold: int
+    repeatedly_rejected_tasks: List[RepeatedlyRejectedTask]
+    blocked_tasks: List[BlockedTaskItem]
+    at_risk_milestones: List[MilestoneRiskItem]
+
+
+class TeamWorkloadItem(BaseModel):
+    emp_id: int
+    full_name: str
+    role_in_project: str
+    open_tasks_in_project: int
+    open_tasks_all_projects: int
+    active_projects_count: int
+    utilization_pct: float
