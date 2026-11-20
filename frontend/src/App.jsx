@@ -4,6 +4,7 @@ import {
   Route,
   Navigate,
   useLocation,
+  Outlet,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -100,8 +101,28 @@ function App() {
               {/* Root route: role-based home redirection */}
               <Route path="/" element={<RootRedirect />} />
 
-              {/* Client Portal routes (outside internal AppLayout shell) */}
-              {/* S6-FE-1 routes (Client Deliverables & Feedback: /client/projects) */}
+              {/* Client Portal Route Tree (strictly outside internal AppLayout shell) */}
+              {/* S6-FE-1 integration slot: Client Deliverables & Feedback */}
+              <Route
+                path="/client"
+                element={
+                  <ProtectedRoute allowedRoles={["CLIENT"]}>
+                    <Outlet />
+                  </ProtectedRoute>
+                }
+              >
+                <Route index element={<Navigate to="/client/projects" replace />} />
+                <Route
+                  path="projects"
+                  element={
+                    <PagePlaceholder
+                      title="Client Projects"
+                      description="Client portal workspace for deliverables and project tracking."
+                    />
+                  }
+                />
+                <Route path="*" element={<Navigate to="/client/projects" replace />} />
+              </Route>
 
               {/* Guarded Internal Application Shell: requires internal role */}
               <Route
@@ -260,7 +281,6 @@ function App() {
                 {/* S4-FE-2 routes (Team Lead Leave Triage & Conflict Calendar: /team-lead/leave) */}
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
-                {/* S6-FE-1 routes */}
                 {/* S7-FE-1 routes (MNC Executive Dashboard & Export: /executive/console) */}
 
                 <Route path="*" element={<NotFound />} />
