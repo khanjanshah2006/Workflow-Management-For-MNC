@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from sqlalchemy import case, func, select
+from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.scope import (
@@ -141,16 +141,10 @@ class LeaveRepository:
         ]
 
         priority_weight = case(
-            {
-                PriorityLevel.CRITICAL: 1,
-                "CRITICAL": 1,
-                PriorityLevel.HIGH: 2,
-                "HIGH": 2,
-                PriorityLevel.MEDIUM: 3,
-                "MEDIUM": 3,
-                PriorityLevel.LOW: 4,
-                "LOW": 4,
-            },
+            (or_(Task.priority == PriorityLevel.CRITICAL, Task.priority == "CRITICAL"), 1),
+            (or_(Task.priority == PriorityLevel.HIGH, Task.priority == "HIGH"), 2),
+            (or_(Task.priority == PriorityLevel.MEDIUM, Task.priority == "MEDIUM"), 3),
+            (or_(Task.priority == PriorityLevel.LOW, Task.priority == "LOW"), 4),
             else_=5,
         )
 
