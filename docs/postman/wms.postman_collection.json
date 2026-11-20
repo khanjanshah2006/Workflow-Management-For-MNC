@@ -20,6 +20,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    pm.environment.set(\"hr_access_token\", jsonData.access_token);",
                   "    console.log(\"HR access token set:\", jsonData.access_token);",
                   "}"
                 ],
@@ -754,7 +755,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Active Team Members",
+              "name": "200 OK – Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -767,7 +768,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK \u2013 Empty Team",
+              "name": "200 OK – Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -780,7 +781,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
+              "name": "403 Forbidden – Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -793,7 +794,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found \u2013 Team Non-existent",
+              "name": "404 Not Found – Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -835,7 +836,7 @@
           },
           "response": [
             {
-              "name": "200 OK \u2013 Tasks Stub",
+              "name": "200 OK – Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -848,7 +849,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden \u2013 Other Team",
+              "name": "403 Forbidden – Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1711,7 +1712,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2330,13 +2331,29 @@
       "description": "Leave requests and approvals (features/leave)",
       "item": [
         {
-          "name": "GET List Active Leave Policies (US-18)",
+          "name": "GET List Leave Policies - As Employee (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Only active policies\", function () {",
+                  "    pm.response.json().forEach(function (p) { pm.expect(p.is_active).to.eql(true); });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{employee_access_token}}",
                 "type": "text"
               }
             ],
@@ -2352,23 +2369,36 @@
                 "policies"
               ]
             },
-            "description": "Lists all active leave policies (leave types, yearly quota, paid/unpaid status). Accessible to all authenticated internal employees."
+            "description": "All authenticated roles can list policies. Non-HR callers see active policies only, ordered by name. Run 'Login as Employee' first."
           },
           "response": []
         },
         {
-          "name": "GET List All Leave Policies Including Inactive (US-18)",
+          "name": "GET List Leave Policies - Include Inactive as HR (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{hr_access_token}}",
                 "type": "text"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/leave/policies/all",
+              "raw": "{{base_url}}/api/v1/leave/policies?include_inactive=true",
               "host": [
                 "{{base_url}}"
               ],
@@ -2376,24 +2406,33 @@
                 "api",
                 "v1",
                 "leave",
-                "policies",
-                "all"
+                "policies"
+              ],
+              "query": [
+                {
+                  "key": "include_inactive",
+                  "value": "true"
+                }
               ]
             },
-            "description": "Lists all leave policies including inactive (deactivated) ones. Accessible only to HR and SYSTEM_ADMIN."
+            "description": "HR and ADMIN may pass include_inactive=true to also see deactivated policies. Run 'Login as HR' first."
           },
           "response": []
         },
         {
-          "name": "POST Create Leave Policy (US-18)",
+          "name": "POST Create Leave Policy - As HR (US-18)",
           "event": [
             {
               "listen": "test",
               "script": {
                 "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
                   "if (pm.response.code === 201) {",
                   "    var data = pm.response.json();",
-                  "    pm.environment.set('leave_type_id', data.leave_type_id);",
+                  "    pm.environment.set(\"leave_type_id\", data.leave_type_id);",
+                  "    pm.environment.set(\"leave_policy_name\", data.name);",
                   "}"
                 ],
                 "type": "text/javascript"
@@ -2405,7 +2444,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{hr_access_token}}",
                 "type": "text"
               },
               {
@@ -2413,10 +2452,6 @@
                 "value": "application/json"
               }
             ],
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"name\": \"Casual Leave\",\n  \"yearly_quota\": 12,\n  \"is_paid\": true,\n  \"description\": \"Short paid leaves for personal commitments.\"\n}"
-            },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/policies",
               "host": [
@@ -2429,46 +2464,35 @@
                 "policies"
               ]
             },
-            "description": "Creates a new company leave policy with annual quota and paid/unpaid classification. HR and SYSTEM_ADMIN only."
+            "description": "HR or ADMIN creates a policy. Name is stripped, 2-50 chars; yearly_quota 0-366; description up to 1000 chars. Saves leave_type_id and leave_policy_name for the next requests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Casual Leave {{$timestamp}}\",\n  \"yearly_quota\": 12,\n  \"is_paid\": true,\n  \"description\": \"Short paid leaves for personal commitments.\"\n}"
+            }
           },
           "response": []
         },
         {
-          "name": "GET Leave Policy Details (US-18)",
-          "request": {
-            "method": "GET",
-            "header": [
-              {
-                "key": "Authorization",
-                "value": "Bearer {{access_token}}",
-                "type": "text"
+          "name": "POST Create Leave Policy - As Employee (403) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
               }
-            ],
-            "url": {
-              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "leave",
-                "policies",
-                "{{leave_type_id}}"
-              ]
-            },
-            "description": "Retrieves the full specification for a specific leave policy ID."
-          },
-          "response": []
-        },
-        {
-          "name": "PATCH Update Leave Policy (US-18)",
+            }
+          ],
           "request": {
-            "method": "PATCH",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{employee_access_token}}",
                 "type": "text"
               },
               {
@@ -2476,36 +2500,55 @@
                 "value": "application/json"
               }
             ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "Only HR and ADMIN may create policies.",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"yearly_quota\": 15,\n  \"description\": \"Updated annual quota for casual leaves.\"\n}"
-            },
-            "url": {
-              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
-              "host": [
-                "{{base_url}}"
-              ],
-              "path": [
-                "api",
-                "v1",
-                "leave",
-                "policies",
-                "{{leave_type_id}}"
-              ]
-            },
-            "description": "Updates annual quota, description, paid status, or active flag for an existing leave policy. HR and SYSTEM_ADMIN only."
+              "raw": "{\n  \"name\": \"Employee Leave\",\n  \"yearly_quota\": 5,\n  \"is_paid\": true\n}"
+            }
           },
           "response": []
         },
         {
-          "name": "DELETE Deactivate Leave Policy (US-18)",
+          "name": "PUT Update Leave Policy Quota (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Quota updated\", function () {",
+                  "    pm.expect(pm.response.json().yearly_quota).to.eql(15);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
-            "method": "DELETE",
+            "method": "PUT",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{hr_access_token}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
@@ -2521,23 +2564,44 @@
                 "{{leave_type_id}}"
               ]
             },
-            "description": "Soft-deactivates an existing leave policy. Deactivated policies are hidden from regular employees while retaining historical audit records. HR and SYSTEM_ADMIN only."
+            "description": "Partial update of name, yearly_quota, is_paid, description or is_active (is_active=false deactivates; there is no DELETE). Only changed fields are audited.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"yearly_quota\": 15\n}"
+            }
           },
           "response": []
         },
         {
-          "name": "GET Employee Leave Quota Balance (US-18)",
+          "name": "POST Create Leave Policy - Duplicate Name (409) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
-            "method": "GET",
+            "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}",
+                "value": "Bearer {{hr_access_token}}",
                 "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
               }
             ],
             "url": {
-              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}/balance/{{emp_id}}",
+              "raw": "{{base_url}}/api/v1/leave/policies",
               "host": [
                 "{{base_url}}"
               ],
@@ -2545,13 +2609,62 @@
                 "api",
                 "v1",
                 "leave",
-                "policies",
-                "{{leave_type_id}}",
-                "balance",
-                "{{emp_id}}"
+                "policies"
               ]
             },
-            "description": "Calculates and returns an employee's total yearly quota, approved used days, and remaining available days for a leave type in the current year. HR and SYSTEM_ADMIN access."
+            "description": "Names are unique case-insensitively. Reuses the name created by 'Create Leave Policy - As HR'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{leave_policy_name}}\",\n  \"yearly_quota\": 3,\n  \"is_paid\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy - Negative Quota (422) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "yearly_quota must be between 0 and 366.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Negative Leave\",\n  \"yearly_quota\": -1,\n  \"is_paid\": true\n}"
+            }
           },
           "response": []
         },
