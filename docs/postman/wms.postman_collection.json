@@ -2327,6 +2327,232 @@
       "description": "Leave requests and approvals (features/leave)",
       "item": [
         {
+          "name": "GET List Active Leave Policies (US-18)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "Lists all active leave policies (leave types, yearly quota, paid/unpaid status). Accessible to all authenticated internal employees."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List All Leave Policies Including Inactive (US-18)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/all",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "all"
+              ]
+            },
+            "description": "Lists all leave policies including inactive (deactivated) ones. Accessible only to HR and SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    pm.environment.set('leave_type_id', data.leave_type_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Casual Leave\",\n  \"yearly_quota\": 12,\n  \"is_paid\": true,\n  \"description\": \"Short paid leaves for personal commitments.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "Creates a new company leave policy with annual quota and paid/unpaid classification. HR and SYSTEM_ADMIN only."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Leave Policy Details (US-18)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "{{leave_type_id}}"
+              ]
+            },
+            "description": "Retrieves the full specification for a specific leave policy ID."
+          },
+          "response": []
+        },
+        {
+          "name": "PATCH Update Leave Policy (US-18)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"yearly_quota\": 15,\n  \"description\": \"Updated annual quota for casual leaves.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "{{leave_type_id}}"
+              ]
+            },
+            "description": "Updates annual quota, description, paid status, or active flag for an existing leave policy. HR and SYSTEM_ADMIN only."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Deactivate Leave Policy (US-18)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "{{leave_type_id}}"
+              ]
+            },
+            "description": "Soft-deactivates an existing leave policy. Deactivated policies are hidden from regular employees while retaining historical audit records. HR and SYSTEM_ADMIN only."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Employee Leave Quota Balance (US-18)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}/balance/{{emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "{{leave_type_id}}",
+                "balance",
+                "{{emp_id}}"
+              ]
+            },
+            "description": "Calculates and returns an employee's total yearly quota, approved used days, and remaining available days for a leave type in the current year. HR and SYSTEM_ADMIN access."
+          },
+          "response": []
+        },
+        {
           "name": "POST Submit Leave Request (US-16)",
           "event": [
             {

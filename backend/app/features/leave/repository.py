@@ -1,4 +1,4 @@
-"""Database queries for the leave feature (US-16, US-40, S4-BE-1)."""
+"""Database queries for the leave feature (US-16, US-18, US-40, S4-BE-1, S4-BE-2)."""
 from datetime import date
 from typing import Optional, Sequence, Tuple
 from sqlalchemy import func, select
@@ -9,12 +9,84 @@ from app.models.leave import LeaveRequest, LeaveType
 
 
 class LeaveRepository:
-    """Repository handling database access for leave requests and balances."""
+    """Repository handling database access for leave requests, policies, and balances."""
+
+    # ──────────────────────────────────────────────
+    # S4-BE-2  Leave Policy / Leave Type operations
+    # ──────────────────────────────────────────────
 
     @staticmethod
     def get_leave_type(db: Session, leave_type_id: int) -> Optional[LeaveType]:
-        """Fetch a LeaveType by primary key."""
+        """Fetch a LeaveType by primary key (active or inactive)."""
         return db.scalar(select(LeaveType).where(LeaveType.leave_type_id == leave_type_id))
+
+    @staticmethod
+    def get_leave_type_by_name(db: Session, name: str) -> Optional[LeaveType]:
+        """Case-insensitive lookup by name (used for duplicate-name checks)."""
+        return db.scalar(
+            select(LeaveType).where(func.lower(LeaveType.name) == name.strip().lower())
+        )
+
+    @staticmethod
+    def list_leave_types(db: Session, include_inactive: bool = False) -> Sequence[LeaveType]:
+        """Return all leave types ordered by leave_type_id.
+
+        Args:
+            include_inactive: If True return all rows including deactivated ones.
+                              HR/SYSTEM_ADMIN can pass True; employees see only active.
+        """
+        stmt = select(LeaveType).order_by(LeaveType.leave_type_id.asc())
+        if not include_inactive:
+            stmt = stmt.where(LeaveType.is_active.is_(True))
+        return list(db.scalars(stmt))
+
+    @staticmethod
+    def create_leave_type(
+        db: Session,
+        name: str,
+        yearly_quota: int,
+        is_paid: bool,
+        description: Optional[str],
+    ) -> LeaveType:
+        """Insert a new leave type row and return the persisted record."""
+        lt = LeaveType(
+            name=name.strip(),
+            yearly_quota=yearly_quota,
+            is_paid=is_paid,
+            description=description,
+            is_active=True,
+        )
+        db.add(lt)
+        db.commit()
+        db.refresh(lt)
+        return lt
+
+    @staticmethod
+    def update_leave_type(
+        db: Session,
+        leave_type: LeaveType,
+        *,
+        yearly_quota: Optional[int] = None,
+        is_paid: Optional[bool] = None,
+        description: Optional[str] = None,
+        is_active: Optional[bool] = None,
+    ) -> LeaveType:
+        """Apply partial updates to a leave type row."""
+        if yearly_quota is not None:
+            leave_type.yearly_quota = yearly_quota
+        if is_paid is not None:
+            leave_type.is_paid = is_paid
+        if description is not None:
+            leave_type.description = description
+        if is_active is not None:
+            leave_type.is_active = is_active
+        db.commit()
+        db.refresh(leave_type)
+        return leave_type
+
+    # ──────────────────────────────────────────────
+    # S4-BE-1  Leave Request operations
+    # ──────────────────────────────────────────────
 
     @staticmethod
     def list_active_leave_types(db: Session) -> Sequence[LeaveType]:
@@ -72,6 +144,22 @@ class LeaveRepository:
         return int(result or 0)
 
     @staticmethod
+    def used_days_in_year(
+        db: Session,
+        emp_id: int,
+        leave_type_id: int,
+        year: int,
+    ) -> int:
+        """Sum of total_days for APPROVED requests for this employee/type in given calendar year."""
+        return LeaveRepository.get_leave_days_by_status(
+            db=db,
+            emp_id=emp_id,
+            leave_type_id=leave_type_id,
+            year=year,
+            status=LeaveStatus.APPROVED,
+        )
+
+    @staticmethod
     def create_leave_request(
         db: Session,
         emp_id: int,
@@ -100,6 +188,11 @@ class LeaveRepository:
     def get_leave_request_by_id(db: Session, leave_id: int) -> Optional[LeaveRequest]:
         """Fetch a LeaveRequest by primary key."""
         return db.scalar(select(LeaveRequest).where(LeaveRequest.leave_id == leave_id))
+
+    @staticmethod
+    def get_leave_request(db: Session, leave_id: int) -> Optional[LeaveRequest]:
+        """Alias for get_leave_request_by_id for backwards-compatibility."""
+        return LeaveRepository.get_leave_request_by_id(db, leave_id)
 
     @staticmethod
     def get_leave_request_with_type(

@@ -1,5 +1,5 @@
-"""Business logic for the leave feature (US-16, US-40, S4-BE-1)."""
-from datetime import date, timedelta
+"""Business logic for the leave feature (US-16, US-40, S4-BE-1, S4-BE-2)."""
+from datetime import date, datetime, timedelta, timezone
 from typing import List, Optional, Tuple
 
 from fastapi import HTTPException, status
@@ -13,6 +13,10 @@ from app.features.leave.schemas import (
     EmployeeLeaveBalanceResponse,
     LeaveBalanceItem,
     LeaveBalanceOut,
+    LeaveBalanceResponse,
+    LeavePolicyCreate,
+    LeavePolicyResponse,
+    LeavePolicyUpdate,
     LeaveRequestCreate,
     LeaveRequestOut,
     PaginatedLeaveRequestsOut,
@@ -25,7 +29,7 @@ from app.models.user_account import UserAccount
 
 
 class LeaveService:
-    """Service providing core leave operations and validations."""
+    """Service providing core leave operations and validations (S4-BE-1)."""
 
     @staticmethod
     def calculate_business_days(start_date: date, end_date: date) -> int:
@@ -456,4 +460,217 @@ class LeaveService:
             employee_id=emp_id,
             year=year,
             balances=balances,
+        )
+
+
+# ────────────────────────────────────────────────────────────────────
+# Custom exceptions (router catches these → raises HTTPException)
+# ────────────────────────────────────────────────────────────────────
+
+class LeavePolicyNotFoundError(Exception):
+    pass
+
+
+class DuplicateLeavePolicyNameError(Exception):
+    pass
+
+
+class LeavePolicyInactiveError(Exception):
+    pass
+
+
+# ────────────────────────────────────────────────────────────────────
+# S4-BE-2 — Leave Policy / Leave Type Service
+# ────────────────────────────────────────────────────────────────────
+
+class LeavePolicyService:
+    """Service layer for leave type (policy) CRUD operations — S4-BE-2."""
+
+    @staticmethod
+    def list_policies(
+        db: Session,
+        include_inactive: bool = False,
+    ) -> List[LeavePolicyResponse]:
+        """
+        Return all leave types.
+
+        HR / SYSTEM_ADMIN may pass include_inactive=True to see deactivated
+        policies.  Employees/Team Leads/PMs always see only active ones.
+        """
+        rows = LeaveRepository.list_leave_types(db, include_inactive=include_inactive)
+        return [LeavePolicyResponse.model_validate(r) for r in rows]
+
+    @staticmethod
+    def get_policy(db: Session, leave_type_id: int) -> LeavePolicyResponse:
+        """Fetch a single policy by ID (raises LeavePolicyNotFoundError if missing)."""
+        lt = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not lt:
+            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
+        return LeavePolicyResponse.model_validate(lt)
+
+    @staticmethod
+    def create_policy(
+        db: Session,
+        payload: LeavePolicyCreate,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> LeavePolicyResponse:
+        """
+        Create a new leave type / policy.
+
+        Rules:
+        - Name must be unique (case-insensitive).
+        - yearly_quota ≥ 0 (0 = managed externally).
+        """
+        # Duplicate name guard
+        existing = LeaveRepository.get_leave_type_by_name(db, payload.name)
+        if existing:
+            raise DuplicateLeavePolicyNameError(
+                f"A leave policy named '{payload.name}' already exists."
+            )
+
+        lt = LeaveRepository.create_leave_type(
+            db=db,
+            name=payload.name,
+            yearly_quota=payload.yearly_quota,
+            is_paid=payload.is_paid,
+            description=payload.description,
+        )
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name="LEAVE_TYPE",
+            entity_ref_id=str(lt.leave_type_id),
+            account_id=actor.account_id,
+            new_value={
+                "name": lt.name,
+                "yearly_quota": lt.yearly_quota,
+                "is_paid": lt.is_paid,
+            },
+            ip_address=ip_address,
+        )
+
+        return LeavePolicyResponse.model_validate(lt)
+
+    @staticmethod
+    def update_policy(
+        db: Session,
+        leave_type_id: int,
+        payload: LeavePolicyUpdate,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> LeavePolicyResponse:
+        """
+        Partial-update a leave policy.
+
+        Rules:
+        - Policy must exist.
+        - Only HR / SYSTEM_ADMIN may update (enforced at router layer).
+        - If is_active is set to True we allow it even if currently inactive
+          (reactivation).
+        """
+        lt = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not lt:
+            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
+
+        old_snapshot = {
+            "yearly_quota": lt.yearly_quota,
+            "is_paid": lt.is_paid,
+            "description": lt.description,
+            "is_active": lt.is_active,
+        }
+
+        updated = LeaveRepository.update_leave_type(
+            db=db,
+            leave_type=lt,
+            yearly_quota=payload.yearly_quota,
+            is_paid=payload.is_paid,
+            description=payload.description,
+            is_active=payload.is_active,
+        )
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="LEAVE_TYPE",
+            entity_ref_id=str(leave_type_id),
+            account_id=actor.account_id,
+            old_value=old_snapshot,
+            new_value={
+                "yearly_quota": updated.yearly_quota,
+                "is_paid": updated.is_paid,
+                "description": updated.description,
+                "is_active": updated.is_active,
+            },
+            ip_address=ip_address,
+        )
+
+        return LeavePolicyResponse.model_validate(updated)
+
+    @staticmethod
+    def deactivate_policy(
+        db: Session,
+        leave_type_id: int,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> LeavePolicyResponse:
+        """
+        Soft-delete a leave policy by setting is_active = False.
+
+        Does not delete the row so existing LeaveRequest FK references remain valid.
+        """
+        lt = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not lt:
+            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
+
+        if not lt.is_active:
+            raise LeavePolicyInactiveError(
+                f"Leave policy #{leave_type_id} is already inactive."
+            )
+
+        updated = LeaveRepository.update_leave_type(db=db, leave_type=lt, is_active=False)
+
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="LEAVE_TYPE",
+            entity_ref_id=str(leave_type_id),
+            account_id=actor.account_id,
+            old_value={"is_active": True},
+            new_value={"is_active": False},
+            ip_address=ip_address,
+        )
+
+        return LeavePolicyResponse.model_validate(updated)
+
+    # ────────────────────────────────────────────────────────────────
+    # Shared helper used by S4-BE-1 (leave balance calculation)
+    # ────────────────────────────────────────────────────────────────
+
+    @staticmethod
+    def get_balance(
+        db: Session,
+        emp_id: int,
+        leave_type_id: int,
+    ) -> LeaveBalanceResponse:
+        """Calculate remaining leave days for an employee for the current year."""
+        lt = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not lt:
+            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
+        if not lt.is_active:
+            raise LeavePolicyInactiveError(
+                f"Leave policy '{lt.name}' is deactivated and cannot be used."
+            )
+
+        year = datetime.now(timezone.utc).year
+        used = LeaveRepository.used_days_in_year(db, emp_id, leave_type_id, year)
+        remaining = max(0, lt.yearly_quota - used)
+
+        return LeaveBalanceResponse(
+            leave_type_id=lt.leave_type_id,
+            leave_type_name=lt.name,
+            yearly_quota=lt.yearly_quota,
+            used_days=used,
+            remaining_days=remaining,
         )
