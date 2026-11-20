@@ -24,6 +24,7 @@ import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
+import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
@@ -282,12 +283,12 @@ function App() {
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
 
-                {/* Executive: Guarded & MNC_EXECUTIVE permitted */}
+                {/* Executive: Guarded & MNC_EXECUTIVE, ADMIN, SYSTEM_ADMIN permitted */}
                 {/* S7-FE-1 routes (MNC Executive Dashboard & Export: /executive/console) */}
                 <Route
                   path="/executive"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
                       <Navigate to="/executive/console" replace />
                     </ProtectedRoute>
                   }
@@ -295,11 +296,8 @@ function App() {
                 <Route
                   path="/executive/console"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
-                      <PagePlaceholder
-                        title="Executive Console"
-                        description="Executive dashboard for enterprise metrics, risk indicators, and delivery health."
-                      />
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
+                      <ExecutiveConsolePage />
                     </ProtectedRoute>
                   }
                 />
