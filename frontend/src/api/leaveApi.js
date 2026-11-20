@@ -1,5 +1,5 @@
 import { apiClient } from "./client.js";
-import mockLeaveData from "../features/leave/mockLeaveData.json";
+import mockLeaveData from "../features/leave/mockLeaveData.json" with { type: "json" };
 
 /**
  * WorkSphere Leave Management API Service (S4 / US-16)
