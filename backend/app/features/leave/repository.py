@@ -165,22 +165,6 @@ class LeaveRepository:
         return int(result or 0)
 
     @staticmethod
-    def used_days_in_year(
-        db: Session,
-        emp_id: int,
-        leave_type_id: int,
-        year: int,
-    ) -> int:
-        """Sum of total_days for APPROVED requests for this employee/type in given calendar year."""
-        return LeaveRepository.get_leave_days_by_status(
-            db=db,
-            emp_id=emp_id,
-            leave_type_id=leave_type_id,
-            year=year,
-            status=LeaveStatus.APPROVED,
-        )
-
-    @staticmethod
     def create_leave_request(
         db: Session,
         emp_id: int,
@@ -209,11 +193,6 @@ class LeaveRepository:
     def get_leave_request_by_id(db: Session, leave_id: int) -> Optional[LeaveRequest]:
         """Fetch a LeaveRequest by primary key."""
         return db.scalar(select(LeaveRequest).where(LeaveRequest.leave_id == leave_id))
-
-    @staticmethod
-    def get_leave_request(db: Session, leave_id: int) -> Optional[LeaveRequest]:
-        """Alias for get_leave_request_by_id for backwards-compatibility."""
-        return LeaveRepository.get_leave_request_by_id(db, leave_id)
 
     @staticmethod
     def get_leave_request_with_type(

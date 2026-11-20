@@ -72,17 +72,6 @@ class LeavePolicyResponse(BaseModel):
     description: Optional[str] = None
 
 
-class LeaveBalanceResponse(BaseModel):
-    """Remaining leave days for a given leave type in the current year."""
-    model_config = ConfigDict(from_attributes=True)
-
-    leave_type_id: int
-    leave_type_name: str
-    yearly_quota: int
-    used_days: int
-    remaining_days: int
-
-
 # ──────────────────────────────────────────────
 # S4-BE-1  Leave Request Schemas
 # ──────────────────────────────────────────────
@@ -123,9 +112,6 @@ class LeaveRequestOut(BaseModel):
     reviewed_by_account_id: Optional[UUID] = None
     review_remarks: Optional[str] = None
 
-
-# Backwards compatibility alias for LeaveRequestOut
-LeaveRequestResponse = LeaveRequestOut
 
 
 class PaginatedLeaveRequestsOut(BaseModel):

@@ -5,10 +5,7 @@ Endpoints
 GET    /api/v1/leave/policies          – list all active policies (all roles)
 GET    /api/v1/leave/policies/all      – list including inactive (HR / SYSTEM_ADMIN)
 POST   /api/v1/leave/policies          – create a new policy (HR only)
-GET    /api/v1/leave/policies/{id}     – get a single policy (all roles)
 PATCH  /api/v1/leave/policies/{id}     – update quota / description (HR only)
-DELETE /api/v1/leave/policies/{id}     – soft-deactivate a policy (HR only)
-GET    /api/v1/leave/policies/{id}/balance/{emp_id}  – balance for employee (HR / TL / self)
 """
 from typing import List
 
@@ -21,13 +18,11 @@ from app.features.leave.schemas import (
     LeavePolicyCreate,
     LeavePolicyResponse,
     LeavePolicyUpdate,
-    LeaveBalanceResponse,
 )
 from app.features.leave.service import (
     LeavePolicyService,
     LeavePolicyNotFoundError,
     DuplicateLeavePolicyNameError,
-    LeavePolicyInactiveError,
 )
 from app.models.user_account import UserAccount
 
@@ -114,25 +109,6 @@ def create_policy(
         )
 
 
-# ── Get a single leave policy ─────────────────────────────────────────
-
-@router.get(
-    "/policies/{leave_type_id}",
-    response_model=LeavePolicyResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get a leave policy by ID (S4-BE-2)",
-)
-def get_policy(
-    leave_type_id: int,
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(any_internal_guard),
-) -> LeavePolicyResponse:
-    try:
-        return LeavePolicyService.get_policy(db, leave_type_id)
-    except LeavePolicyNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-
-
 # ── Update quota / description / paid flag (HR only) ─────────────────
 
 @router.patch(
@@ -162,64 +138,3 @@ def update_policy(
         )
     except LeavePolicyNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-
-
-# ── Soft-deactivate a leave policy (HR only) ─────────────────────────
-
-@router.delete(
-    "/policies/{leave_type_id}",
-    response_model=LeavePolicyResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Deactivate (soft-delete) a leave policy (US-18, S4-BE-2) [HR]",
-    description=(
-        "Marks the leave type as inactive so it no longer appears to employees. "
-        "Existing leave requests that referenced this type are preserved. "
-        "Reactivation is possible via PATCH with is_active=true."
-    ),
-)
-def deactivate_policy(
-    leave_type_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(hr_or_admin_guard),
-) -> LeavePolicyResponse:
-    try:
-        return LeavePolicyService.deactivate_policy(
-            db=db,
-            leave_type_id=leave_type_id,
-            actor=current_user,
-            ip_address=_get_client_ip(request),
-        )
-    except LeavePolicyNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except LeavePolicyInactiveError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
-
-
-# ── Employee leave balance for a given leave type ─────────────────────
-
-@router.get(
-    "/policies/{leave_type_id}/balance/{emp_id}",
-    response_model=LeaveBalanceResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Check employee's remaining leave balance for a policy (S4-BE-2)",
-    description=(
-        "Returns the yearly quota, used days (approved requests current year), "
-        "and remaining days for the specified employee and leave type. "
-        "HR, SYSTEM_ADMIN, and TEAM_LEAD can check any employee; "
-        "employees can only check themselves (enforced at router level by HR guard "
-        "— full self-service scoping is S4-BE-1 scope)."
-    ),
-)
-def get_employee_balance(
-    leave_type_id: int,
-    emp_id: int,
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(hr_or_admin_guard),
-) -> LeaveBalanceResponse:
-    try:
-        return LeavePolicyService.get_balance(db, emp_id=emp_id, leave_type_id=leave_type_id)
-    except LeavePolicyNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
-    except LeavePolicyInactiveError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))

@@ -1,5 +1,5 @@
 """Business logic for the leave feature (US-16, US-40, S4-BE-1, S4-BE-2)."""
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
 from fastapi import HTTPException, status
@@ -14,7 +14,6 @@ from app.features.leave.schemas import (
     EmployeeLeaveBalanceResponse,
     LeaveBalanceItem,
     LeaveBalanceOut,
-    LeaveBalanceResponse,
     LeavePolicyCreate,
     LeavePolicyResponse,
     LeavePolicyUpdate,
@@ -608,10 +607,6 @@ class DuplicateLeavePolicyNameError(Exception):
     pass
 
 
-class LeavePolicyInactiveError(Exception):
-    pass
-
-
 # ────────────────────────────────────────────────────────────────────
 # S4-BE-2 — Leave Policy / Leave Type Service
 # ────────────────────────────────────────────────────────────────────
@@ -740,70 +735,3 @@ class LeavePolicyService:
         )
 
         return LeavePolicyResponse.model_validate(updated)
-
-    @staticmethod
-    def deactivate_policy(
-        db: Session,
-        leave_type_id: int,
-        actor: UserAccount,
-        ip_address: Optional[str] = None,
-    ) -> LeavePolicyResponse:
-        """
-        Soft-delete a leave policy by setting is_active = False.
-
-        Does not delete the row so existing LeaveRequest FK references remain valid.
-        """
-        lt = LeaveRepository.get_leave_type(db, leave_type_id)
-        if not lt:
-            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
-
-        if not lt.is_active:
-            raise LeavePolicyInactiveError(
-                f"Leave policy #{leave_type_id} is already inactive."
-            )
-
-        updated = LeaveRepository.update_leave_type(db=db, leave_type=lt, is_active=False)
-
-        write_audit_log(
-            db=db,
-            action=AuditAction.UPDATE,
-            entity_name="LEAVE_TYPE",
-            entity_ref_id=str(leave_type_id),
-            account_id=actor.account_id,
-            old_value={"is_active": True},
-            new_value={"is_active": False},
-            ip_address=ip_address,
-        )
-
-        return LeavePolicyResponse.model_validate(updated)
-
-    # ────────────────────────────────────────────────────────────────
-    # Shared helper used by S4-BE-1 (leave balance calculation)
-    # ────────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def get_balance(
-        db: Session,
-        emp_id: int,
-        leave_type_id: int,
-    ) -> LeaveBalanceResponse:
-        """Calculate remaining leave days for an employee for the current year."""
-        lt = LeaveRepository.get_leave_type(db, leave_type_id)
-        if not lt:
-            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
-        if not lt.is_active:
-            raise LeavePolicyInactiveError(
-                f"Leave policy '{lt.name}' is deactivated and cannot be used."
-            )
-
-        year = datetime.now(timezone.utc).year
-        used = LeaveRepository.used_days_in_year(db, emp_id, leave_type_id, year)
-        remaining = max(0, lt.yearly_quota - used)
-
-        return LeaveBalanceResponse(
-            leave_type_id=lt.leave_type_id,
-            leave_type_name=lt.name,
-            yearly_quota=lt.yearly_quota,
-            used_days=used,
-            remaining_days=remaining,
-        )
