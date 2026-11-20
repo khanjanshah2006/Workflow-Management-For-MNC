@@ -5,6 +5,7 @@ from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core import scope
+from app.core.audit import write_audit_log
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
     ExtendedDeadlineTaskOut,
@@ -14,7 +15,10 @@ from app.features.leave.schemas import (
     TaskReallocationBatchIn,
     TaskReallocationBatchOut,
 )
+from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
+from app.features.tasks.service import TaskService
+from app.models.audit_log import AuditAction
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.enums import CommonStatus, LeaveStatus, TaskStatus
 from app.models.leave import LeaveRequest
@@ -313,5 +317,94 @@ class LeaveReallocationService:
             today=today,
         )
 
-        # Phase 2 implementation will follow in next commit
-        raise NotImplementedError("Transactional application will be implemented in next step")
+        # 5. Phase 2: Apply all modifications in ONE database transaction
+        reassigned_out: List[ReassignedTaskOut] = []
+        extended_out: List[ExtendedDeadlineTaskOut] = []
+
+        try:
+            for item in validated_actions:
+                action = item["action"]
+                task = item["task"]
+
+                if action.action_type == TaskReallocationActionType.REASSIGN:
+                    new_assignee = item["new_assignee"]
+                    from_emp_id = task.assigned_to
+
+                    TaskService._apply_reassignment(
+                        db=db,
+                        task=task,
+                        new_assignee=new_assignee,
+                        reason=action.reason,
+                        actor=current_user,
+                        ip=ip_address,
+                        commit=False,
+                        extra_audit_data={
+                            "leave_id": leave_id,
+                            "action_type": "REASSIGN",
+                        },
+                    )
+                    reassigned_out.append(
+                        ReassignedTaskOut(
+                            task_id=task.task_id,
+                            from_emp_id=from_emp_id,
+                            to_emp_id=new_assignee.emp_id,
+                        )
+                    )
+
+                elif action.action_type == TaskReallocationActionType.EXTEND_DEADLINE:
+                    old_due = task.due_date
+                    task.due_date = action.new_due_date
+                    task.overdue_notified_at = None
+                    db.flush()
+
+                    account_id = getattr(current_user, "account_id", None)
+                    write_audit_log(
+                        db=db,
+                        action=AuditAction.UPDATE,
+                        entity_name="TASK",
+                        entity_ref_id=str(task.task_id),
+                        account_id=account_id,
+                        old_value={"due_date": str(old_due)},
+                        new_value={
+                            "due_date": str(action.new_due_date),
+                            "leave_id": leave_id,
+                            "action_type": "EXTEND_DEADLINE",
+                            "reason": action.reason,
+                        },
+                        ip_address=ip_address,
+                        commit=False,
+                    )
+
+                    if task.assigned_to:
+                        current_assignee = TaskRepository.get_employee_by_id(db, emp_id=task.assigned_to)
+                        if current_assignee and current_assignee.account_id:
+                            NotificationService.create_notification(
+                                db=db,
+                                user_id=current_assignee.account_id,
+                                type="TASK_DEADLINE_EXTENDED",
+                                title="Task Deadline Extended",
+                                message=f"Deadline for task #{task.task_id} ('{task.title}') has been extended to {action.new_due_date}.",
+                                link=f"/tasks/{task.task_id}",
+                            )
+
+                    extended_out.append(
+                        ExtendedDeadlineTaskOut(
+                            task_id=task.task_id,
+                            old_due_date=old_due,
+                            new_due_date=action.new_due_date,
+                        )
+                    )
+
+            db.commit()
+
+        except Exception:
+            db.rollback()
+            raise
+
+        return TaskReallocationBatchOut(
+            leave_id=leave_id,
+            reallocated_count=len(reassigned_out) + len(extended_out),
+            reassigned=reassigned_out,
+            extended=extended_out,
+            warnings=warnings,
+        )
