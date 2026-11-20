@@ -41,6 +41,48 @@ class LeaveRepository:
         """Fetch a LeaveType by primary key."""
         return db.scalar(select(LeaveType).where(LeaveType.leave_type_id == leave_type_id))
 
+    # ── US-18 / S4-BE-2 Leave policy queries ─────────────────────────────────
+
+    @staticmethod
+    def get_leave_type_by_name(
+        db: Session, name: str, exclude_id: Optional[int] = None
+    ) -> Optional[LeaveType]:
+        """Case-insensitive name lookup, optionally ignoring one row (for renames)."""
+        stmt = select(LeaveType).where(func.lower(LeaveType.name) == name.strip().lower())
+        if exclude_id is not None:
+            stmt = stmt.where(LeaveType.leave_type_id != exclude_id)
+        return db.scalar(stmt)
+
+    @staticmethod
+    def list_leave_types(db: Session, include_inactive: bool = False) -> Sequence[LeaveType]:
+        """Return leave types ordered by name; active only unless include_inactive."""
+        stmt = select(LeaveType).order_by(LeaveType.name.asc())
+        if not include_inactive:
+            stmt = stmt.where(LeaveType.is_active.is_(True))
+        return list(db.scalars(stmt))
+
+    @staticmethod
+    def create_leave_type(
+        db: Session,
+        name: str,
+        yearly_quota: int,
+        is_paid: bool,
+        description: Optional[str],
+    ) -> LeaveType:
+        """Add a new active leave type and flush to get its ID. The caller commits."""
+        leave_type = LeaveType(
+            name=name,
+            yearly_quota=yearly_quota,
+            is_paid=is_paid,
+            description=description,
+            is_active=True,
+        )
+        db.add(leave_type)
+        db.flush()
+        return leave_type
+
+    # ── S4-BE-1 Leave request queries ────────────────────────────────────────
+
     @staticmethod
     def list_active_leave_types(db: Session) -> Sequence[LeaveType]:
         """Fetch all active leave types ordered by leave_type_id."""
