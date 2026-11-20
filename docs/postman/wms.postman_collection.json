@@ -2325,7 +2325,441 @@
     {
       "name": "05 Leave",
       "description": "Leave requests and approvals (features/leave)",
-      "item": []
+      "item": [
+        {
+          "name": "POST Submit Leave Request (US-16)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Compute relative future dates: upcoming Monday to Wednesday",
+                  "var now = new Date();",
+                  "var day = now.getDay();",
+                  "var daysUntilMon = ((8 - day) % 7) || 7;",
+                  "var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMon);",
+                  "var end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMon + 2);",
+                  "pm.environment.set('rel_leave_start', start.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_leave_end', end.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "if (data && data.leave_id) {",
+                  "    pm.environment.set('leave_request_id', data.leave_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_leave_start}}\",\n  \"end_date\": \"{{rel_leave_end}}\",\n  \"reason\": \"Attending tech conference and personal errands.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests"
+              ]
+            },
+            "description": "Submit a new leave request (US-16). Verifies business days, non-overlapping dates, and available quota using relative future dates."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Leave Request - Exceed Quota (US-16)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Relative broad date range in current year to exceed annual quota",
+                  "var now = new Date();",
+                  "var yr = now.getFullYear();",
+                  "var m = now.getMonth();",
+                  "var exceedStart = new Date(yr, m, 1);",
+                  "var exceedEnd = new Date(yr, m, 28);",
+                  "if (m === 11) {",
+                  "    exceedStart = new Date(yr, 11, 1);",
+                  "    exceedEnd = new Date(yr, 11, 28);",
+                  "}",
+                  "pm.environment.set('rel_exceed_start', exceedStart.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_exceed_end', exceedEnd.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_exceed_start}}\",\n  \"end_date\": \"{{rel_exceed_end}}\",\n  \"reason\": \"Applying for excessive days beyond yearly quota.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests"
+              ]
+            },
+            "description": "Submitting a leave request exceeding yearly quota returns 400 with available balance."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Leave Request - Overlapping (US-16)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 409', function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_leave_start}}\",\n  \"end_date\": \"{{rel_leave_end}}\",\n  \"reason\": \"Duplicate overlapping leave request on same dates.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests"
+              ]
+            },
+            "description": "Attempting to submit overlapping PENDING/APPROVED dates returns 409."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Submit Leave Request - Past Date (US-16)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Relative past dates",
+                  "var now = new Date();",
+                  "var pastStart = new Date(now.getTime() - 14 * 86400000);",
+                  "var pastEnd = new Date(now.getTime() - 10 * 86400000);",
+                  "pm.environment.set('rel_past_start', pastStart.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_past_end', pastEnd.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_past_start}}\",\n  \"end_date\": \"{{rel_past_end}}\",\n  \"reason\": \"Attempting to apply for leave in the past.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests"
+              ]
+            },
+            "description": "Applying for leave in the past returns 400."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Leave History (US-16)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Response is paginated with items and total', function () {",
+                  "    pm.expect(data).to.have.property('items');",
+                  "    pm.expect(data).to.have.property('total');",
+                  "    pm.expect(data).to.have.property('page');",
+                  "    pm.expect(data).to.have.property('limit');",
+                  "    pm.expect(Array.isArray(data.items)).to.be.true;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/my",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "my"
+              ]
+            },
+            "description": "Lists paginated leave history for the authenticated employee."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Leave Balance (US-16)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Response contains employee_id, year, and balances with is_paid', function () {",
+                  "    pm.expect(data).to.have.property('employee_id');",
+                  "    pm.expect(data).to.have.property('year');",
+                  "    pm.expect(data).to.have.property('balances');",
+                  "    pm.expect(Array.isArray(data.balances)).to.be.true;",
+                  "    if (data.balances.length > 0) {",
+                  "        pm.expect(data.balances[0]).to.have.property('is_paid');",
+                  "    }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/balance/me",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "balance",
+                "me"
+              ]
+            },
+            "description": "Fetches year-wise balances wrapped with employee_id and year across all active leave types."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Employee Leave Balance - Unauthorized (US-16)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 403', function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/balance/999",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "balance",
+                "999"
+              ]
+            },
+            "description": "Accessing another employee's leave balance without TL or HR privileges returns 403."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Cancel Pending Leave Request (US-16)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/cancel",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "cancel"
+              ]
+            },
+            "description": "Owner cancels their pending leave request."
+          },
+          "response": []
+        }
+      ]
     },
     {
       "name": "06 Notifications",
