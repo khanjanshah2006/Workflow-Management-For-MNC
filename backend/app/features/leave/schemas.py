@@ -1,9 +1,10 @@
 """Pydantic schemas for the leave feature (US-16, US-40, S4-BE-1)."""
 from datetime import date, datetime
+from enum import Enum
 from typing import List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.enums import LeaveStatus
 
@@ -78,3 +79,79 @@ class EmployeeLeaveBalanceResponse(BaseModel):
     balances: List[LeaveBalanceItem]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+# ==========================================
+# Task Reallocation Schemas (US-14, US-19, S4-BE-5)
+# ==========================================
+
+class TaskReallocationActionType(str, Enum):
+    REASSIGN = "REASSIGN"
+    EXTEND_DEADLINE = "EXTEND_DEADLINE"
+
+
+class TaskReallocationActionIn(BaseModel):
+    task_id: int
+    action_type: TaskReallocationActionType
+    new_assignee_id: Optional[int] = None
+    new_due_date: Optional[date] = None
+    reason: str
+
+    @field_validator("reason")
+    @classmethod
+    def validate_reason(cls, v: str) -> str:
+        if v is None:
+            raise ValueError("Reason is required")
+        stripped = v.strip()
+        if len(stripped) < 10 or len(stripped) > 500:
+            raise ValueError("Reason must be between 10 and 500 characters")
+        return stripped
+
+    @model_validator(mode="after")
+    def validate_action_fields(self):
+        if self.action_type == TaskReallocationActionType.REASSIGN:
+            if self.new_assignee_id is None:
+                raise ValueError("new_assignee_id is required for REASSIGN")
+        elif self.action_type == TaskReallocationActionType.EXTEND_DEADLINE:
+            if self.new_due_date is None:
+                raise ValueError("new_due_date is required for EXTEND_DEADLINE")
+        return self
+
+
+class TaskReallocationBatchIn(BaseModel):
+    actions: List[TaskReallocationActionIn] = Field(..., min_length=1, max_length=50)
+
+    @field_validator("actions")
+    @classmethod
+    def validate_unique_task_ids(cls, v: List[TaskReallocationActionIn]) -> List[TaskReallocationActionIn]:
+        ids = [a.task_id for a in v]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Duplicate task IDs in actions")
+        return v
+
+
+class ReassignedTaskOut(BaseModel):
+    task_id: int
+    from_emp_id: int
+    to_emp_id: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ExtendedDeadlineTaskOut(BaseModel):
+    task_id: int
+    old_due_date: date
+    new_due_date: date
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskReallocationBatchOut(BaseModel):
+    leave_id: int
+    reallocated_count: int
+    reassigned: List[ReassignedTaskOut] = Field(default_factory=list)
+    extended: List[ExtendedDeadlineTaskOut] = Field(default_factory=list)
+    warnings: List[str] = Field(default_factory=list)
+
+    model_config = ConfigDict(from_attributes=True)
+
