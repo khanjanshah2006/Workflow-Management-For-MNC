@@ -25,18 +25,31 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
-  const activeNavigation = isTeamLeadOrManager
-    ? [
-        ...navigation.slice(0, 4),
-        { path: "/team-lead/tasks", label: "Team Tasks", icon: "📋" },
-        ...navigation.slice(4),
-      ]
-    : navigation;
+  const userRole = (role || "").toUpperCase();
+  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes(userRole);
+  const isLeaveTriageRole = ["TEAM_LEAD", "HR", "SYSTEM_ADMIN", "ADMIN"].includes(userRole);
+
+  const extraNavItems = [];
+  if (isTeamLeadOrManager) {
+    extraNavItems.push({ path: "/team-lead/tasks", label: "Team Tasks", icon: "📋" });
+  }
+  if (isLeaveTriageRole) {
+    extraNavItems.push({ path: "/team-lead/leave", label: "Leave Triage", icon: "⚖️" });
+  }
+
+  const activeNavigation = [
+    ...navigation.slice(0, 4),
+    ...extraNavItems,
+    ...navigation.slice(4),
+  ];
 
   const currentPage =
-    navigation.find((item) => item.path === location.pathname)?.label ??
-    (location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team") ? "Team Tasks" : location.pathname.startsWith("/team")
+    activeNavigation.find((item) => item.path === location.pathname)?.label ??
+    (location.pathname.startsWith("/team-lead/leave")
+      ? "Leave Triage"
+      : location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team")
+      ? "Team Tasks"
+      : location.pathname.startsWith("/team")
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
