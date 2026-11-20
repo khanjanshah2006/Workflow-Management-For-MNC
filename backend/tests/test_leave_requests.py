@@ -447,6 +447,8 @@ def test_submission_notifies_team_lead_and_staffing_pm(client, db):
     assert audit_row is not None
     assert audit_row.action == AuditAction.CREATE
     assert audit_row.account_id == u_alice.account_id
+    assert audit_row.new_value is not None
+    assert "PENDING" in str(audit_row.new_value)
 
 
 # -----------------------------------------------------------------------------
@@ -500,7 +502,10 @@ def test_get_my_leave_history_isolation_and_filters(client, db):
     # 1. Total history for User 1
     res = client.get("/api/v1/leave/requests/my")
     assert res.status_code == 200
-    items = res.json()
+    data = res.json()
+    assert "items" in data
+    assert data["total"] == 2
+    items = data["items"]
     assert len(items) == 2
     ids = [i["leave_id"] for i in items]
     assert req_other.leave_id not in ids
@@ -509,7 +514,9 @@ def test_get_my_leave_history_isolation_and_filters(client, db):
     # 2. Filter by status=APPROVED
     res_app = client.get("/api/v1/leave/requests/my?status=APPROVED")
     assert res_app.status_code == 200
-    app_items = res_app.json()
+    app_data = res_app.json()
+    assert app_data["total"] == 1
+    app_items = app_data["items"]
     assert len(app_items) == 1
     assert app_items[0]["leave_id"] == req2.leave_id
     assert app_items[0]["review_remarks"] == "Approved by TL."
@@ -517,16 +524,21 @@ def test_get_my_leave_history_isolation_and_filters(client, db):
     # 3. Filter by year
     res_yr = client.get("/api/v1/leave/requests/my?year=2026")
     assert res_yr.status_code == 200
-    assert len(res_yr.json()) == 2
+    assert res_yr.json()["total"] == 2
+    assert len(res_yr.json()["items"]) == 2
 
     res_future = client.get("/api/v1/leave/requests/my?year=2027")
     assert res_future.status_code == 200
-    assert len(res_future.json()) == 0
+    assert res_future.json()["total"] == 0
+    assert len(res_future.json()["items"]) == 0
 
     # 4. Pagination
     res_p1 = client.get("/api/v1/leave/requests/my?page=1&limit=1")
     assert res_p1.status_code == 200
-    assert len(res_p1.json()) == 1
+    assert res_p1.json()["total"] == 2
+    assert res_p1.json()["page"] == 1
+    assert res_p1.json()["limit"] == 1
+    assert len(res_p1.json()["items"]) == 1
 
 
 # -----------------------------------------------------------------------------
@@ -558,11 +570,17 @@ def test_balance_access_rules_employee_tl_hr(client, db):
     auth_client_as(client, u_emp)
     res_me = client.get("/api/v1/leave/balance/me")
     assert res_me.status_code == 200
-    assert res_me.json()[0]["available_days"] == 15
+    data_me = res_me.json()
+    assert data_me["employee_id"] == emp.emp_id
+    assert data_me["year"] == 2026
+    assert isinstance(data_me["balances"], list)
+    assert data_me["balances"][0]["available_days"] == 15
+    assert data_me["balances"][0]["is_paid"] is True
 
     # 2. Employee checking own balance via ID -> 200
     res_own = client.get(f"/api/v1/leave/balance/{emp.emp_id}")
     assert res_own.status_code == 200
+    assert res_own.json()["employee_id"] == emp.emp_id
 
     # 3. Employee checking another employee's balance -> 403
     res_forbidden = client.get(f"/api/v1/leave/balance/{other_emp.emp_id}")
@@ -572,6 +590,7 @@ def test_balance_access_rules_employee_tl_hr(client, db):
     auth_client_as(client, u_tl)
     res_tl_member = client.get(f"/api/v1/leave/balance/{emp.emp_id}")
     assert res_tl_member.status_code == 200
+    assert res_tl_member.json()["employee_id"] == emp.emp_id
 
     # 5. TL checking outsider employee's balance -> 403
     res_tl_outsider = client.get(f"/api/v1/leave/balance/{other_emp.emp_id}")
@@ -583,7 +602,9 @@ def test_balance_access_rules_employee_tl_hr(client, db):
 
     # 7. HR checking any employee's balance -> 200
     auth_client_as(client, u_hr)
-    assert client.get(f"/api/v1/leave/balance/{emp.emp_id}").status_code == 200
+    res_hr1 = client.get(f"/api/v1/leave/balance/{emp.emp_id}")
+    assert res_hr1.status_code == 200
+    assert res_hr1.json()["employee_id"] == emp.emp_id
     assert client.get(f"/api/v1/leave/balance/{other_emp.emp_id}").status_code == 200
     assert client.get("/api/v1/leave/balance/99999").status_code == 404
 
@@ -639,6 +660,10 @@ def test_cancel_only_pending_and_only_owner(client, db):
         .first()
     )
     assert audit_row is not None
+    assert audit_row.new_value is not None
+    assert "CANCELLED" in str(audit_row.new_value)
+    assert audit_row.old_value is not None
+    assert "PENDING" in str(audit_row.old_value)
 
     # 3. Trying to cancel already CANCELLED request -> 400
     res_again = client.put(f"/api/v1/leave/requests/{req.leave_id}/cancel")
@@ -792,9 +817,10 @@ def test_negative_available_balance_preserved(client, db):
     auth_client_as(client, user)
     res = client.get("/api/v1/leave/balance/me")
     assert res.status_code == 200
-    balance_item = res.json()[0]
+    balance_item = res.json()["balances"][0]
     # available_days must NOT be clamped to zero: 5 - 7 = -2
     assert balance_item["available_days"] == -2
+    assert balance_item["is_paid"] is True
 
 
 def test_submission_multiple_team_leads_and_staffing_pms(client, db):
@@ -887,13 +913,15 @@ def test_cross_year_quota_calculations(client, db):
     # 2026 balance should have 0 used and 10 available
     res_2026 = client.get("/api/v1/leave/balance/me?year=2026")
     assert res_2026.status_code == 200
-    b_2026 = res_2026.json()[0]
+    b_2026 = res_2026.json()["balances"][0]
     assert b_2026["used_days"] == 0
     assert b_2026["available_days"] == 10
+    assert b_2026["is_paid"] is True
 
     # 2025 balance should have 8 used and 2 available
     res_2025 = client.get("/api/v1/leave/balance/me?year=2025")
     assert res_2025.status_code == 200
-    b_2025 = res_2025.json()[0]
+    b_2025 = res_2025.json()["balances"][0]
     assert b_2025["used_days"] == 8
     assert b_2025["available_days"] == 2
+    assert b_2025["is_paid"] is True

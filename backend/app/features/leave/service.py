@@ -10,9 +10,12 @@ from app.core.audit import write_audit_log
 from app.core.notification_types import LEAVE_REQUESTED
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
+    EmployeeLeaveBalanceResponse,
+    LeaveBalanceItem,
     LeaveBalanceOut,
     LeaveRequestCreate,
     LeaveRequestOut,
+    PaginatedLeaveRequestsOut,
 )
 from app.features.notifications.service import NotificationService
 from app.models.employee import Employee
@@ -195,6 +198,16 @@ class LeaveService:
             entity_name="LEAVE_REQUEST",
             entity_ref_id=str(leave_request.leave_id),
             account_id=current_user.account_id,
+            new_value={
+                "leave_id": leave_request.leave_id,
+                "emp_id": leave_request.emp_id,
+                "leave_type_id": leave_request.leave_type_id,
+                "start_date": str(leave_request.start_date),
+                "end_date": str(leave_request.end_date),
+                "total_days": leave_request.total_days,
+                "status": leave_request.status.value if hasattr(leave_request.status, "value") else str(leave_request.status),
+                "reason": leave_request.reason,
+            },
             commit=False,
         )
 
@@ -267,14 +280,21 @@ class LeaveService:
         year: Optional[int] = None,
         page: int = 1,
         limit: int = 20,
-    ) -> List[LeaveRequestOut]:
-        """List leave requests for the authenticated employee with isolation."""
+    ) -> PaginatedLeaveRequestsOut:
+        """List leave requests for the authenticated employee with isolation and pagination."""
         employee = scope.resolve_employee(db, current_user)
         if employee is None:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="No employee profile linked to this account",
             )
+
+        total = LeaveRepository.count_employee_requests(
+            db=db,
+            emp_id=employee.emp_id,
+            status=status_filter,
+            year=year,
+        )
 
         rows = LeaveRepository.list_employee_requests(
             db=db,
@@ -285,7 +305,7 @@ class LeaveService:
             limit=limit,
         )
 
-        return [
+        items = [
             LeaveRequestOut(
                 leave_id=req.leave_id,
                 emp_id=req.emp_id,
@@ -303,6 +323,13 @@ class LeaveService:
             )
             for req, type_name in rows
         ]
+
+        return PaginatedLeaveRequestsOut(
+            items=items,
+            total=total,
+            page=page,
+            limit=limit,
+        )
 
     @staticmethod
     def cancel_leave_request(
@@ -344,13 +371,18 @@ class LeaveService:
                 detail="Only pending requests can be cancelled",
             )
 
+        old_status = leave_request.status.value if hasattr(leave_request.status, "value") else str(leave_request.status)
         leave_request.status = LeaveStatus.CANCELLED
+        new_status = leave_request.status.value if hasattr(leave_request.status, "value") else str(leave_request.status)
+
         write_audit_log(
             db=db,
             action=AuditAction.UPDATE,
             entity_name="LEAVE_REQUEST",
             entity_ref_id=str(leave_request.leave_id),
             account_id=current_user.account_id,
+            old_value={"status": old_status},
+            new_value={"status": new_status},
             commit=False,
         )
         db.commit()
@@ -377,7 +409,7 @@ class LeaveService:
         db: Session,
         emp_id: int,
         year: Optional[int] = None,
-    ) -> List[LeaveBalanceOut]:
+    ) -> EmployeeLeaveBalanceResponse:
         """
         Calculate year-wise leave balances for an employee across all active leave types.
         - used_days = APPROVED requests counted by start_date year.
@@ -389,7 +421,7 @@ class LeaveService:
             year = date.today().year
 
         active_types = LeaveRepository.list_active_leave_types(db)
-        balances: List[LeaveBalanceOut] = []
+        balances: List[LeaveBalanceItem] = []
 
         for lt in active_types:
             used_days = LeaveRepository.get_leave_days_by_status(
@@ -409,14 +441,19 @@ class LeaveService:
             available_days = lt.yearly_quota - used_days - pending_days
 
             balances.append(
-                LeaveBalanceOut(
+                LeaveBalanceItem(
                     leave_type_id=lt.leave_type_id,
                     leave_type_name=lt.name,
                     yearly_quota=lt.yearly_quota,
                     used_days=used_days,
                     pending_days=pending_days,
                     available_days=available_days,
+                    is_paid=lt.is_paid,
                 )
             )
 
-        return balances
+        return EmployeeLeaveBalanceResponse(
+            employee_id=emp_id,
+            year=year,
+            balances=balances,
+        )

@@ -1,6 +1,6 @@
 """Pydantic schemas for the leave feature (US-16, US-40, S4-BE-1)."""
 from datetime import date, datetime
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -45,7 +45,17 @@ class LeaveRequestOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-class LeaveBalanceOut(BaseModel):
+class PaginatedLeaveRequestsOut(BaseModel):
+    """Paginated leave requests history response."""
+    items: List[LeaveRequestOut]
+    total: int
+    page: int
+    limit: int
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class LeaveBalanceItem(BaseModel):
     """Leave balance calculation representation for a single active leave type."""
     leave_type_id: int
     leave_type_name: str
@@ -53,5 +63,18 @@ class LeaveBalanceOut(BaseModel):
     used_days: int
     pending_days: int
     available_days: int
+    is_paid: bool
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+LeaveBalanceOut = LeaveBalanceItem
+
+
+class EmployeeLeaveBalanceResponse(BaseModel):
+    """Wrapped year-wise leave balances response."""
+    employee_id: int
+    year: int
+    balances: List[LeaveBalanceItem]
 
     model_config = ConfigDict(from_attributes=True)

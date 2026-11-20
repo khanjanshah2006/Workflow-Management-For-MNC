@@ -10,9 +10,11 @@ from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.features.leave.schemas import (
+    EmployeeLeaveBalanceResponse,
     LeaveBalanceOut,
     LeaveRequestCreate,
     LeaveRequestOut,
+    PaginatedLeaveRequestsOut,
 )
 from app.features.leave.service import LeaveService
 from app.models.employee import Employee
@@ -55,7 +57,7 @@ def submit_leave_request(
 
 @router.get(
     "/requests/my",
-    response_model=List[LeaveRequestOut],
+    response_model=PaginatedLeaveRequestsOut,
     status_code=status.HTTP_200_OK,
     summary="List leave history for current user (US-16)",
 )
@@ -66,7 +68,7 @@ def get_my_leave_requests(
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
-) -> List[LeaveRequestOut]:
+) -> PaginatedLeaveRequestsOut:
     """
     Retrieve leave history for the authenticated employee.
     Allowed roles: EMPLOYEE, TEAM_LEAD.
@@ -108,7 +110,7 @@ def cancel_leave_request(
 # NOTE: /balance/me MUST be declared BEFORE /balance/{employee_id}
 @router.get(
     "/balance/me",
-    response_model=List[LeaveBalanceOut],
+    response_model=EmployeeLeaveBalanceResponse,
     status_code=status.HTTP_200_OK,
     summary="Get my leave balance (US-16)",
 )
@@ -116,7 +118,7 @@ def get_my_leave_balance(
     year: Optional[int] = Query(None, description="Calendar year (defaults to current year)"),
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
-) -> List[LeaveBalanceOut]:
+) -> EmployeeLeaveBalanceResponse:
     """
     Return year-wise leave balances for the authenticated employee.
     Allowed roles: EMPLOYEE, TEAM_LEAD.
@@ -137,7 +139,7 @@ def get_my_leave_balance(
 
 @router.get(
     "/balance/{employee_id}",
-    response_model=List[LeaveBalanceOut],
+    response_model=EmployeeLeaveBalanceResponse,
     status_code=status.HTTP_200_OK,
     summary="Get leave balance for an employee (US-16)",
 )
@@ -146,7 +148,7 @@ def get_employee_leave_balance(
     year: Optional[int] = Query(None, description="Calendar year (defaults to current year)"),
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(get_current_user),
-) -> List[LeaveBalanceOut]:
+) -> EmployeeLeaveBalanceResponse:
     """
     Return year-wise leave balances for a specific employee.
     Authorization rules:

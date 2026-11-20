@@ -117,6 +117,25 @@ class LeaveRepository:
         return row[0], row[1]
 
     @staticmethod
+    def count_employee_requests(
+        db: Session,
+        emp_id: int,
+        status: Optional[LeaveStatus] = None,
+        year: Optional[int] = None,
+    ) -> int:
+        """Count total leave requests for an employee matching optional status and year filters."""
+        stmt = select(func.count(LeaveRequest.leave_id)).where(LeaveRequest.emp_id == emp_id)
+        if status is not None:
+            stmt = stmt.where(LeaveRequest.status == status)
+        if year is not None:
+            stmt = stmt.where(
+                LeaveRequest.start_date >= date(year, 1, 1),
+                LeaveRequest.start_date <= date(year, 12, 31),
+            )
+        result = db.scalar(stmt)
+        return int(result or 0)
+
+    @staticmethod
     def list_employee_requests(
         db: Session,
         emp_id: int,

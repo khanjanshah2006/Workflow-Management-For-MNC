@@ -2088,6 +2088,22 @@
           "name": "POST Submit Leave Request (US-16)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Compute relative future dates: upcoming Monday to Wednesday",
+                  "var now = new Date();",
+                  "var day = now.getDay();",
+                  "var daysUntilMon = ((8 - day) % 7) || 7;",
+                  "var start = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMon);",
+                  "var end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + daysUntilMon + 2);",
+                  "pm.environment.set('rel_leave_start', start.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_leave_end', end.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -2119,7 +2135,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"2026-11-25\",\n  \"end_date\": \"2026-11-27\",\n  \"reason\": \"Attending tech conference and personal errands.\"\n}"
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_leave_start}}\",\n  \"end_date\": \"{{rel_leave_end}}\",\n  \"reason\": \"Attending tech conference and personal errands.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests",
@@ -2133,13 +2149,33 @@
                 "requests"
               ]
             },
-            "description": "Submit a new leave request (US-16). Verifies business days, non-overlapping dates, and available quota."
+            "description": "Submit a new leave request (US-16). Verifies business days, non-overlapping dates, and available quota using relative future dates."
           },
           "response": []
         },
         {
           "name": "POST Submit Leave Request - Exceed Quota (US-16)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Relative broad date range in current year to exceed annual quota",
+                  "var now = new Date();",
+                  "var yr = now.getFullYear();",
+                  "var m = now.getMonth();",
+                  "var exceedStart = new Date(yr, m, 1);",
+                  "var exceedEnd = new Date(yr, m, 28);",
+                  "if (m === 11) {",
+                  "    exceedStart = new Date(yr, 11, 1);",
+                  "    exceedEnd = new Date(yr, 11, 28);",
+                  "}",
+                  "pm.environment.set('rel_exceed_start', exceedStart.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_exceed_end', exceedEnd.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -2168,7 +2204,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"2026-12-01\",\n  \"end_date\": \"2026-12-31\",\n  \"reason\": \"Applying for excessive days beyond yearly quota.\"\n}"
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_exceed_start}}\",\n  \"end_date\": \"{{rel_exceed_end}}\",\n  \"reason\": \"Applying for excessive days beyond yearly quota.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests",
@@ -2217,7 +2253,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"2026-11-25\",\n  \"end_date\": \"2026-11-27\",\n  \"reason\": \"Duplicate overlapping leave request on same dates.\"\n}"
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_leave_start}}\",\n  \"end_date\": \"{{rel_leave_end}}\",\n  \"reason\": \"Duplicate overlapping leave request on same dates.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests",
@@ -2238,6 +2274,20 @@
         {
           "name": "POST Submit Leave Request - Past Date (US-16)",
           "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Relative past dates",
+                  "var now = new Date();",
+                  "var pastStart = new Date(now.getTime() - 14 * 86400000);",
+                  "var pastEnd = new Date(now.getTime() - 10 * 86400000);",
+                  "pm.environment.set('rel_past_start', pastStart.toISOString().slice(0, 10));",
+                  "pm.environment.set('rel_past_end', pastEnd.toISOString().slice(0, 10));"
+                ],
+                "type": "text/javascript"
+              }
+            },
             {
               "listen": "test",
               "script": {
@@ -2266,7 +2316,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"2024-01-01\",\n  \"end_date\": \"2024-01-05\",\n  \"reason\": \"Attempting to apply for leave in the past.\"\n}"
+              "raw": "{\n  \"leave_type_id\": 1,\n  \"start_date\": \"{{rel_past_start}}\",\n  \"end_date\": \"{{rel_past_end}}\",\n  \"reason\": \"Attempting to apply for leave in the past.\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests",
@@ -2293,6 +2343,14 @@
                 "exec": [
                   "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Response is paginated with items and total', function () {",
+                  "    pm.expect(data).to.have.property('items');",
+                  "    pm.expect(data).to.have.property('total');",
+                  "    pm.expect(data).to.have.property('page');",
+                  "    pm.expect(data).to.have.property('limit');",
+                  "    pm.expect(Array.isArray(data.items)).to.be.true;",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2321,7 +2379,7 @@
                 "my"
               ]
             },
-            "description": "Lists leave history for the authenticated employee."
+            "description": "Lists paginated leave history for the authenticated employee."
           },
           "response": []
         },
@@ -2334,6 +2392,16 @@
                 "exec": [
                   "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test('Response contains employee_id, year, and balances with is_paid', function () {",
+                  "    pm.expect(data).to.have.property('employee_id');",
+                  "    pm.expect(data).to.have.property('year');",
+                  "    pm.expect(data).to.have.property('balances');",
+                  "    pm.expect(Array.isArray(data.balances)).to.be.true;",
+                  "    if (data.balances.length > 0) {",
+                  "        pm.expect(data.balances[0]).to.have.property('is_paid');",
+                  "    }",
                   "});"
                 ],
                 "type": "text/javascript"
@@ -2362,7 +2430,7 @@
                 "me"
               ]
             },
-            "description": "Fetches year-wise balances across all active leave types for authenticated employee."
+            "description": "Fetches year-wise balances wrapped with employee_id and year across all active leave types."
           },
           "response": []
         },
