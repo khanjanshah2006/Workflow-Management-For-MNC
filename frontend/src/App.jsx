@@ -281,7 +281,28 @@ function App() {
                 {/* S4-FE-2 routes (Team Lead Leave Triage & Conflict Calendar: /team-lead/leave) */}
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
+
+                {/* Executive: Guarded & MNC_EXECUTIVE permitted */}
                 {/* S7-FE-1 routes (MNC Executive Dashboard & Export: /executive/console) */}
+                <Route
+                  path="/executive"
+                  element={
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
+                      <Navigate to="/executive/console" replace />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/executive/console"
+                  element={
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
+                      <PagePlaceholder
+                        title="Executive Console"
+                        description="Executive dashboard for enterprise metrics, risk indicators, and delivery health."
+                      />
+                    </ProtectedRoute>
+                  }
+                />
 
                 <Route path="*" element={<NotFound />} />
               </Route>
