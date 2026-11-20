@@ -751,7 +751,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Active Team Members",
+              "name": "200 OK \u2013 Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -764,7 +764,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK – Empty Team",
+              "name": "200 OK \u2013 Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -777,7 +777,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team / Non-Lead",
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -790,7 +790,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found – Team Non-existent",
+              "name": "404 Not Found \u2013 Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -832,7 +832,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Tasks Stub",
+              "name": "200 OK \u2013 Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -845,7 +845,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team",
+              "name": "403 Forbidden \u2013 Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -1708,7 +1708,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2756,6 +2756,279 @@
               ]
             },
             "description": "Owner cancels their pending leave request."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Batch Reallocate Tasks (US-14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Reallocated count is 2\", function () {",
+                  "    pm.expect(data.reallocated_count).to.eql(2);",
+                  "    pm.expect(data.reassigned).to.be.an(\"array\").with.lengthOf(1);",
+                  "    pm.expect(data.extended).to.be.an(\"array\").with.lengthOf(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"REASSIGN\",\n      \"new_assignee_id\": {{eligible_assignee_id}},\n      \"reason\": \"Reassigned for sprint coverage during approved leave.\"\n    },\n    {\n      \"task_id\": {{task_id_2}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Deadline extended to accommodate approved leave.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "reallocate-tasks"
+              ]
+            },
+            "description": "Batch reassignment and deadline extension for an approved/pending leave applicant tasks (US-14, US-19)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Batch Reallocate Tasks - Assignee Not in Team (US-14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Assignee not in team error message\", function () {",
+                  "    pm.expect(data.detail).to.include(\"Assignee not in team\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"REASSIGN\",\n      \"new_assignee_id\": 9999,\n      \"reason\": \"Attempting to reassign task to non-team member.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "reallocate-tasks"
+              ]
+            },
+            "description": "Reassigning task to an employee outside the team returns 400 Assignee not in team (US-14)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Batch Reallocate Tasks - Earlier Deadline (US-14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"New due date must be after current due date\", function () {",
+                  "    pm.expect(data.detail).to.include(\"New due date must be after current due date\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2020-01-01\",\n      \"reason\": \"Attempting to extend to an earlier deadline date.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "reallocate-tasks"
+              ]
+            },
+            "description": "Extending deadline to a date earlier than or equal to current due date returns 400 (US-14)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Batch Reallocate Tasks - Employee Role Forbidden (US-14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Standard employee attempting to reallocate tasks.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "reallocate-tasks"
+              ]
+            },
+            "description": "Standard EMPLOYEE role without team lead privileges is rejected with 403 (US-14)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Batch Reallocate Tasks - Inactive/Rejected Leave (US-14)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 400\", function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "var data = pm.response.json();",
+                  "pm.test(\"Leave request is not active\", function () {",
+                  "    pm.expect(data.detail).to.eql(\"Leave request is not active\");",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Attempting reallocation on an inactive leave request.\"\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{rejected_leave_request_id}}/reallocate-tasks",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{rejected_leave_request_id}}",
+                "reallocate-tasks"
+              ]
+            },
+            "description": "Batch reallocation on a REJECTED leave request returns 400 Leave request is not active (US-14)."
           },
           "response": []
         }
