@@ -53,6 +53,7 @@ app.add_middleware(
     allow_credentials=True,                # Required for browsers to transmit HttpOnly cookies
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=["Content-Disposition"],
 )
 
 # Register feature routers

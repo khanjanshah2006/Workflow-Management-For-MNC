@@ -2,24 +2,17 @@ import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import { DEMO_USERS } from "../../api/authApi";
-import { normalizeRole } from "../../auth/session";
+import { getHomeRouteForRole } from "../../auth/session";
 import "./LoginPage.css";
+
+export { getHomeRouteForRole };
 
 /**
  * Maps authenticated user to their role-based destination.
- * Acceptance criteria:
- * SYSTEM_ADMIN → /admin, PROJECT_MANAGER → /projects, default → /dashboard
+ * Reuses the central getHomeRouteForRole helper.
  */
 export function getRoleDefaultRedirect(user) {
-  if (!user) return "/dashboard";
-  const r = normalizeRole(user.user_type || user.role || "");
-  if (r === "SYSTEM_ADMIN" || r === "ADMIN") {
-    return "/admin";
-  }
-  if (r === "PROJECT_MANAGER" || r === "PM") {
-    return "/projects";
-  }
-  return "/dashboard";
+  return getHomeRouteForRole(user);
 }
 
 export const LoginPage = () => {
@@ -95,7 +88,23 @@ export const LoginPage = () => {
     const demo = DEMO_USERS[demoEmail];
     if (demo) {
       setEmail(demo.email);
-      setPassword("password123");
+      const isWave3 = demo.email.endsWith("@company.com") || demo.email === "client@acme.com";
+      const isDev = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
+
+      if (isWave3) {
+        // In development only, allow pre-filling the configurable seed password
+        if (Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV)) {
+          const devSeedPassword =
+            (typeof import.meta !== "undefined" && import.meta.env?.VITE_SEED_PASSWORD) ||
+            "Password@123";
+          setPassword(devSeedPassword);
+        } else {
+          setPassword("");
+        }
+      } else {
+        // Preserve non-Wave-3 demo credential behaviour
+        setPassword("password123");
+      }
       setFieldErrors({});
       setServerError(null);
     }
