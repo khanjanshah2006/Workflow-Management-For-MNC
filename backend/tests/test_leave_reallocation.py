@@ -40,6 +40,7 @@ from app.features.leave.reallocation_router import get_today
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.client import Client
+from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.employee import Employee
 from app.models.enums import (
     AuditAction,
@@ -1024,3 +1025,46 @@ def test_failure_during_application_phase_rolls_back_entire_batch(client, db, mo
     # Verify no notifications persisted
     notes = db.query(Notification).all()
     assert len(notes) == 0
+
+
+def test_elevated_pm_grant_without_pm_row_returns_403(client, db):
+    """
+    Test: Employee with elevated PM grant but no ProjectManager row.
+    Even if a project has pm_id == employee.emp_id, resolve_pm returns None,
+    and authorize_actor must return 403 Forbidden (not fall back to employee.emp_id).
+    """
+    w = setup_world(db)
+    emp_u = make_user(db, UserType.EMPLOYEE, "elevated_pm@example.com")
+    emp = make_employee(db, emp_u, "Elevated PM Employee")
+
+    # Give active elevated PM grant
+    grant = ElevatedAccessGrant(
+        user_id=emp_u.account_id,
+        granted_role="PM",
+        reason="Coverage during PM absence",
+        granted_by=w["admin_u"].account_id,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=2),
+    )
+    db.add(grant)
+
+    # Set project 1 pm_id to equal emp.emp_id so an incorrect fallback would pass
+    w["prj1"].pm_id = emp.emp_id
+    db.flush()
+
+    app.dependency_overrides[get_current_user] = lambda: emp_u
+
+    payload = {
+        "actions": [
+            {
+                "task_id": w["task1"].task_id,
+                "action_type": "EXTEND_DEADLINE",
+                "new_due_date": "2026-12-15",
+                "reason": "Elevated employee trying to reallocate PM task.",
+            }
+        ]
+    }
+
+    res = client.post(f"/api/v1/leave/requests/{w['leave_req'].leave_id}/reallocate-tasks", json=payload)
+    assert res.status_code == 403
+    assert "No PM profile found for current user" in res.json()["detail"]
+

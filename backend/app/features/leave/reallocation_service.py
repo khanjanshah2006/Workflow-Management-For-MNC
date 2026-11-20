@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core import scope
 from app.core.audit import write_audit_log
+from app.core.notification_types import TASK_DEADLINE_EXTENDED
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
     ExtendedDeadlineTaskOut,
@@ -107,17 +108,13 @@ class LeaveReallocationService:
 
         # PM check
         pm = scope.resolve_pm(db, current_user)
-        pm_id = pm.pm_id if pm else None
-        if pm_id is None and current_emp:
-            pm_id = current_emp.emp_id
-
-        if pm_id is None:
+        if not pm:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access forbidden: No PM profile found for current user",
             )
 
-        return "PM", pm_id
+        return "PM", pm.pm_id
 
     @classmethod
     def validate_batch(
@@ -381,7 +378,7 @@ class LeaveReallocationService:
                             NotificationService.create_notification(
                                 db=db,
                                 user_id=current_assignee.account_id,
-                                type="TASK_DEADLINE_EXTENDED",
+                                type=TASK_DEADLINE_EXTENDED,
                                 title="Task Deadline Extended",
                                 message=f"Deadline for task #{task.task_id} ('{task.title}') has been extended to {action.new_due_date}.",
                                 link=f"/tasks/{task.task_id}",

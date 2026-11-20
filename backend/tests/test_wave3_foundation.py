@@ -185,9 +185,9 @@ def test_seed_wave3_demo_is_idempotent(db):
     # A later run moves the relative dates instead of creating new rows.
     seed_wave3_demo(db, today=date(2026, 11, 25), password="Seed@123")
     assert counts() == first
-    assert first["user_account"] == 8
-    assert first["task"] == 8
-    assert first["leave_request"] == 2
+    assert first["user_account"] == 9
+    assert first["task"] == 10
+    assert first["leave_request"] == 3
     assert first["audit_log"] == 3
     emails = set(db.scalars(select(UserAccount.email)))
     assert {"john.teamlead@company.com", "executive@company.com", "client@acme.com"} <= emails

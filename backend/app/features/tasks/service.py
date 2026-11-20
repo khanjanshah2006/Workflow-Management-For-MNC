@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
+from app.core.notification_types import TASK_ASSIGNED, TASK_REASSIGNED
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
@@ -194,7 +195,7 @@ class TaskService:
             NotificationService.create_notification(
                 db=db,
                 user_id=assignee.account_id,
-                type="TASK_ASSIGNED",
+                type=TASK_ASSIGNED,
                 title="New Task Assigned",
                 message=f"You have been assigned to task #{task.task_id}: '{task.title}'",
                 link=f"/tasks/{task.task_id}",
@@ -311,7 +312,7 @@ class TaskService:
             NotificationService.create_notification(
                 db=db,
                 user_id=new_assignee.account_id,
-                type="TASK_ASSIGNED",
+                type=TASK_ASSIGNED,
                 title="New Task Assigned",
                 message=f"You have been assigned to task #{task.task_id}: '{task.title}'",
                 link=f"/tasks/{task.task_id}",
@@ -322,7 +323,7 @@ class TaskService:
             NotificationService.create_notification(
                 db=db,
                 user_id=previous_assignee.account_id,
-                type="TASK_REASSIGNED",
+                type=TASK_REASSIGNED,
                 title="Task Reassigned",
                 message=f"Task #{task.task_id} ('{task.title}') has been reassigned to another team member. Reason: {reason}",
                 link=f"/tasks/{task.task_id}",

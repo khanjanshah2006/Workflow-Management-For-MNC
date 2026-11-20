@@ -65,6 +65,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    pm.environment.set(\"pm_access_token\", jsonData.access_token);",
                   "    console.log(\"PM access token set:\", jsonData.access_token);",
                   "}"
                 ],
@@ -160,6 +161,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    pm.environment.set(\"employee_access_token\", jsonData.access_token);",
                   "    console.log(\"Employee access token set:\", jsonData.access_token);",
                   "}"
                 ],
@@ -205,6 +207,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    pm.environment.set(\"team_lead_access_token\", jsonData.access_token);",
                   "    console.log(\"Team Lead access token set:\", jsonData.access_token);",
                   "}"
                 ],
@@ -3184,6 +3187,38 @@
           "name": "POST Batch Reallocate Tasks (US-14)",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.environment.get(\"leave_request_id\")) {",
+                  "    pm.environment.set(\"leave_request_id\", 1);",
+                  "}",
+                  "if (!pm.environment.get(\"rejected_leave_request_id\")) {",
+                  "    pm.environment.set(\"rejected_leave_request_id\", 3);",
+                  "}",
+                  "if (!pm.environment.get(\"task_id_1\")) {",
+                  "    pm.environment.set(\"task_id_1\", 1);",
+                  "}",
+                  "if (!pm.environment.get(\"task_id_2\")) {",
+                  "    pm.environment.set(\"task_id_2\", 4);",
+                  "}",
+                  "if (!pm.environment.get(\"task_id_3\")) {",
+                  "    pm.environment.set(\"task_id_3\", 9);",
+                  "}",
+                  "if (!pm.environment.get(\"task_id_4\")) {",
+                  "    pm.environment.set(\"task_id_4\", 10);",
+                  "}",
+                  "if (!pm.environment.get(\"eligible_assignee_id\")) {",
+                  "    pm.environment.set(\"eligible_assignee_id\", 3);",
+                  "}",
+                  "if (!pm.environment.get(\"outsider_assignee_id\")) {",
+                  "    pm.environment.set(\"outsider_assignee_id\", 5);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -3272,7 +3307,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"REASSIGN\",\n      \"new_assignee_id\": 9999,\n      \"reason\": \"Attempting to reassign task to non-team member.\"\n    }\n  ]\n}"
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_3}},\n      \"action_type\": \"REASSIGN\",\n      \"new_assignee_id\": {{outsider_assignee_id}},\n      \"reason\": \"Attempting to reassign task to non-team member.\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
@@ -3327,7 +3362,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2020-01-01\",\n      \"reason\": \"Attempting to extend to an earlier deadline date.\"\n    }\n  ]\n}"
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_4}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2020-01-01\",\n      \"reason\": \"Attempting to extend to an earlier deadline date.\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
@@ -3378,7 +3413,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Standard employee attempting to reallocate tasks.\"\n    }\n  ]\n}"
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_3}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Standard employee attempting to reallocate tasks.\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/reallocate-tasks",
@@ -3433,7 +3468,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_1}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Attempting reallocation on an inactive leave request.\"\n    }\n  ]\n}"
+              "raw": "{\n  \"actions\": [\n    {\n      \"task_id\": {{task_id_3}},\n      \"action_type\": \"EXTEND_DEADLINE\",\n      \"new_due_date\": \"2026-12-14\",\n      \"reason\": \"Attempting reallocation on an inactive leave request.\"\n    }\n  ]\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/leave/requests/{{rejected_leave_request_id}}/reallocate-tasks",

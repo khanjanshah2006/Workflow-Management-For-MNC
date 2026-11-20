@@ -97,13 +97,14 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
     engineering = _get_or_create(db, Department, {"name": "Engineering"}, description="Product engineering")
     delivery = _get_or_create(db, Department, {"name": "Delivery"}, description="Project delivery and client services")
 
-    # Employees (Team Lead + 3 members)
+    # Employees (Team Lead + 3 members + 1 employee outside team)
     people = {}
     for key, email, name, code, user_type, designation in (
         ("john", "john.teamlead@company.com", "John Doe", "W3-EMP-001", UserType.TEAM_LEAD, "Team Lead"),
         ("sarah", "sarah.connor@company.com", "Sarah Connor", "W3-EMP-002", UserType.EMPLOYEE, "Software Engineer"),
         ("matrix", "john.matrix@company.com", "John Matrix", "W3-EMP-003", UserType.EMPLOYEE, "Software Engineer"),
         ("kyle", "kyle.reese@company.com", "Kyle Reese", "W3-EMP-004", UserType.EMPLOYEE, "QA Engineer"),
+        ("employee", "employee@company.com", "Standard Employee", "W3-EMP-005", UserType.EMPLOYEE, "Software Engineer"),
     ):
         account = _account(db, email, user_type, pw_hash)
         people[key] = _get_or_create(
@@ -185,6 +186,14 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
         total_days=2, status=LeaveStatus.APPROVED,
         reviewed_by_account_id=john.account_id, reviewed_at=now, review_remarks="Approved. Enjoy your break.",
     )
+    _get_or_create(
+        db, LeaveRequest, {"emp_id": sarah.emp_id, "reason": "Attending annual tech conference."},
+        leave_type_id=annual.leave_type_id, start_date=leave_start - timedelta(days=20),
+        end_date=leave_start - timedelta(days=18),
+        total_days=3, status=LeaveStatus.REJECTED,
+        reviewed_by_account_id=john.account_id, reviewed_at=now - timedelta(days=25),
+        review_remarks="Rejected due to conflicting sprint milestone deadlines.",
+    )
 
     # Tasks
     def task(title: str, assignee: Employee, **values) -> Task:
@@ -207,7 +216,7 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
     task("Write API Integration Tests", kyle, priority=PriorityLevel.MEDIUM,
          status=TaskStatus.TODO, progress_pct=0, due_date=today - timedelta(days=3))
     task("Update Deployment Runbook", sarah, priority=PriorityLevel.LOW,
-         status=TaskStatus.TODO, progress_pct=0, due_date=today - timedelta(days=1))
+         status=TaskStatus.TODO, progress_pct=0, due_date=leave_start + timedelta(days=2))
     feedback = [
         "Report totals do not match the ledger export.",
         "Currency rounding is still off for EUR invoices.",
@@ -225,6 +234,10 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
     task("Database Schema Baseline", matrix, priority=PriorityLevel.MEDIUM, status=TaskStatus.DONE,
          progress_pct=100, milestone_id=sprint1.id, due_date=today - timedelta(days=18),
          completed_at=now - timedelta(days=19))
+    task("Audit Logging Integration", sarah, priority=PriorityLevel.MEDIUM,
+         status=TaskStatus.TODO, progress_pct=0, due_date=leave_start + timedelta(days=3))
+    task("API Documentation Review", sarah, priority=PriorityLevel.LOW,
+         status=TaskStatus.TODO, progress_pct=0, due_date=leave_start + timedelta(days=4))
 
     # Rejection history lives in audit_log, in the same shape TaskService writes.
     has_history = (
