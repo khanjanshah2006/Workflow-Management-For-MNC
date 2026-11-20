@@ -1,8 +1,7 @@
 import json
-import os
 import unittest
 import uuid
-from datetime import date, datetime, timezone
+
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -13,7 +12,7 @@ from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
 from app.models.audit_log import AuditLog
-from app.models.enums import AuditAction, LeaveStatus, UserType
+from app.models.enums import AuditAction, UserType
 from app.models.leave import LeaveRequest, LeaveType
 from app.models.user_account import UserAccount
 
@@ -170,7 +169,7 @@ class TestLeavePolicies(unittest.TestCase):
     # 2. Create Policy Tests
     # ─────────────────────────────────────────────────────────────
 
-    def test_create_policy_success(self):
+    def test_create_policy_hr_admin_success(self):
         """HR creates a valid leave policy; returns 201 with persisted data and audit log."""
         payload = {
             "name": "Sick Leave",
@@ -206,7 +205,7 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertEqual(resp.status_code, 201)
         self.assertEqual(resp.json()["name"], "Maternity Leave")
 
-    def test_create_policy_forbidden_for_employee_and_pm(self):
+    def test_create_policy_employee_forbidden(self):
         """Employees and PMs receive 403 Forbidden when creating policies."""
         payload = {"name": "Hacking Leave", "yearly_quota": 10, "is_paid": True}
         resp_emp = self.client.post("/api/v1/leave/policies", json=payload, headers=self.headers(self.employee))
@@ -215,7 +214,7 @@ class TestLeavePolicies(unittest.TestCase):
         resp_pm = self.client.post("/api/v1/leave/policies", json=payload, headers=self.headers(self.pm_user))
         self.assertEqual(resp_pm.status_code, 403)
 
-    def test_create_policy_duplicate_name_rejected(self):
+    def test_duplicate_policy_name_case_insensitive_returns_409(self):
         """Creating a policy with duplicate name (case-insensitive) returns 409 Conflict."""
         existing = LeaveType(name="Casual Leave", yearly_quota=10, is_paid=True)
         self.db.add(existing)
@@ -226,7 +225,7 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertEqual(resp.status_code, 409)
         self.assertIn("already exists", resp.json()["detail"].lower())
 
-    def test_create_policy_validation_invalid_quota(self):
+    def test_negative_quota_validation_returns_422(self):
         """Negative quota or exceeding 366 returns 422 Unprocessable Entity."""
         payload_neg = {"name": "Bad Leave", "yearly_quota": -5, "is_paid": True}
         resp = self.client.post("/api/v1/leave/policies", json=payload_neg, headers=self.headers(self.hr_user))
@@ -266,7 +265,7 @@ class TestLeavePolicies(unittest.TestCase):
     # 4. Update Policy Tests
     # ─────────────────────────────────────────────────────────────
 
-    def test_update_policy_quota_and_description(self):
+    def test_update_policy_writes_audit_with_old_and_new(self):
         """HR updates yearly_quota and description via PUT; returns 200 with updated fields."""
         lt = LeaveType(name="Bereavement Leave", yearly_quota=3, is_paid=True, is_active=True)
         self.db.add(lt)
@@ -366,6 +365,27 @@ class TestLeavePolicies(unittest.TestCase):
         )
         self.assertEqual(resp.status_code, 200)
         self.assertTrue(resp.json()["is_active"])
+
+    def test_deactivate_policy_via_put_hides_it_from_employees(self):
+        """PUT is_active=false retires a policy (there is no DELETE); employees stop seeing it."""
+        lt = LeaveType(name="Volunteering Day", yearly_quota=2, is_paid=True, is_active=True)
+        self.db.add(lt)
+        self.db.commit()
+
+        resp = self.client.put(
+            f"/api/v1/leave/policies/{lt.leave_type_id}",
+            json={"is_active": False},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertFalse(resp.json()["is_active"])
+
+        listed = self.client.get("/api/v1/leave/policies", headers=self.headers(self.employee))
+        self.assertEqual(listed.json(), [])
+        deleted = self.client.delete(
+            f"/api/v1/leave/policies/{lt.leave_type_id}", headers=self.headers(self.hr_user)
+        )
+        self.assertEqual(deleted.status_code, 405)
 
     def test_update_policy_forbidden_for_employee(self):
         """Employee cannot update leave policies (403 Forbidden)."""
