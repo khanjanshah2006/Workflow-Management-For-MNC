@@ -445,3 +445,171 @@ def test_already_processed_request_returns_400(leave_api, status_value, decision
 
     assert response.status_code == 400
     assert response.json()["detail"] == "Request already processed"
+
+
+@pytest.mark.parametrize(
+    "payload",
+    [None, {}, {"review_remarks": ""}, {"review_remarks": "   "}, {"review_remarks": "123456789"}],
+)
+def test_rejection_requires_at_least_ten_nonblank_characters(leave_api, payload):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/reject", json=payload)
+
+    assert response.status_code == 422
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+    assert db.query(Notification).count() == 0
+
+
+def test_rejection_trims_remarks_notifies_applicant_and_audits(leave_api):
+    client, db, _, users, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    remarks = "Critical release needs coverage."
+
+    response = client.put(
+        f"/api/v1/leave/requests/{request.leave_id}/reject",
+        json={"review_remarks": f"  {remarks}  "},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "REJECTED"
+    assert response.json()["review_remarks"] == remarks
+    notification = db.query(Notification).one()
+    assert notification.account_id == users["applicant"].account_id
+    assert notification.type == "LEAVE_REJECTED"
+    assert remarks in notification.message
+    audit = db.query(AuditLog).filter_by(entity_name="LEAVE_REQUEST", entity_ref_id=str(request.leave_id)).one()
+    assert audit.action == AuditAction.UPDATE
+    assert json.loads(audit.new_value) == {"status": "REJECTED", "review_remarks": remarks}
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_missing_request_returns_404_before_scope_checks(leave_api, decision):
+    client, _, actor, users, _, _ = leave_api
+    actor["user"] = users["employee"]
+    payload = {"review_remarks": "Cannot approve this request."} if decision == "reject" else {}
+
+    response = client.put(f"/api/v1/leave/requests/9999/{decision}", json=payload)
+
+    assert response.status_code == 404
+
+
+def test_invalid_status_filter_is_422(leave_api):
+    client, _, _, _, _, _ = leave_api
+
+    response = client.get("/api/v1/leave/requests/pending?status=NOT_A_STATUS")
+
+    assert response.status_code == 422
+    assert "status must be one of" in response.json()["detail"]
+
+
+def test_sql_injection_in_status_filter_is_rejected_without_exposing_other_rows(leave_api):
+    client, db, actor, users, _, leave_type = leave_api
+    visible = add_request(db, leave_type, emp_id=1)
+    hidden = add_request(db, leave_type, emp_id=2)
+    actor["user"] = users["hr"]
+
+    response = client.get("/api/v1/leave/requests/pending?status=PENDING%27%20OR%201%3D1--")
+
+    assert response.status_code == 422
+    assert visible.status == hidden.status == LeaveStatus.PENDING
+
+
+@pytest.mark.parametrize("decision", ["approve", "reject"])
+def test_sql_injection_in_leave_id_is_rejected_without_mutation(leave_api, decision):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    payload = {"review_remarks": "Reject reason for this leave."} if decision == "reject" else {}
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}%20OR%201=1/{decision}", json=payload)
+
+    assert response.status_code == 422
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+def test_review_remarks_too_long_are_rejected(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+
+    response = client.put(
+        f"/api/v1/leave/requests/{request.leave_id}/approve",
+        json={"review_remarks": "x" * 2001},
+    )
+
+    assert response.status_code == 422
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+def test_sql_like_rejection_text_is_stored_as_plain_text(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    remarks = "'; DROP TABLE leave_request;--"
+
+    response = client.put(
+        f"/api/v1/leave/requests/{request.leave_id}/reject",
+        json={"review_remarks": remarks},
+    )
+
+    assert response.status_code == 200
+    assert response.json()["review_remarks"] == remarks
+    assert db.query(LeaveRequest).count() == 1
+
+
+def test_employee_role_cannot_view_or_decide(leave_api):
+    client, db, actor, users, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    actor["user"] = users["employee"]
+
+    queue = client.get("/api/v1/leave/requests/pending")
+    decision = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert queue.status_code == decision.status_code == 403
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+def test_approval_ignores_overlapping_rejected_request(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    request = add_request(db, leave_type)
+    add_request(db, leave_type, start=date(2026, 12, 8), end=date(2026, 12, 10), days=3, status=LeaveStatus.REJECTED)
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "APPROVED"
+
+
+def test_hr_cannot_approve_own_leave_request(leave_api):
+    client, db, actor, users, _, leave_type = leave_api
+    hr_employee = Employee(
+        emp_id=6,
+        account_id=users["hr"].account_id,
+        dept_id=1,
+        emp_code="EMP-6",
+        full_name="Harper HR",
+        email=users["hr"].email,
+        designation="HR Manager",
+        date_of_joining=date(2020, 1, 1),
+        status=CommonStatus.ACTIVE,
+    )
+    db.add(hr_employee)
+    db.commit()
+    request = add_request(db, leave_type, emp_id=6)
+    actor["user"] = users["hr"]
+
+    response = client.put(f"/api/v1/leave/requests/{request.leave_id}/approve", json={})
+
+    assert response.status_code == 403
+    assert db.get(LeaveRequest, request.leave_id).status == LeaveStatus.PENDING
+
+
+def test_grouped_conflict_count_covers_each_visible_request(leave_api):
+    client, db, _, _, _, leave_type = leave_api
+    first = add_request(db, leave_type, start=date(2026, 12, 7), end=date(2026, 12, 8), days=2)
+    second = add_request(db, leave_type, start=date(2026, 12, 8), end=date(2026, 12, 9), days=2)
+
+    response = client.get("/api/v1/leave/requests/pending")
+
+    items = {item["leave_id"]: item for item in response.json()["items"]}
+    assert items[first.leave_id]["conflicting_task_count"] == 1
+    assert items[second.leave_id]["conflicting_task_count"] == 1
