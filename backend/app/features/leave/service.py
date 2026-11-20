@@ -595,9 +595,12 @@ class LeaveService:
             availability_threshold=threshold,
         )
 
-# ────────────────────────────────────────────────────────────────────
-# Custom exceptions (router catches these → raises HTTPException)
-# ────────────────────────────────────────────────────────────────────
+
+# ── US-18 / S4-BE-2 Leave Policies ───────────────────────────────────────────
+
+LEAVE_POLICY_ENTITY = "LEAVE_POLICY"
+DUPLICATE_POLICY_NAME = "Leave policy with this name already exists"
+
 
 class LeavePolicyNotFoundError(Exception):
     pass
@@ -607,34 +610,13 @@ class DuplicateLeavePolicyNameError(Exception):
     pass
 
 
-# ────────────────────────────────────────────────────────────────────
-# S4-BE-2 — Leave Policy / Leave Type Service
-# ────────────────────────────────────────────────────────────────────
-
 class LeavePolicyService:
-    """Service layer for leave type (policy) CRUD operations — S4-BE-2."""
+    """Create, list and update leave policies (leave types)."""
 
     @staticmethod
-    def list_policies(
-        db: Session,
-        include_inactive: bool = False,
-    ) -> List[LeavePolicyResponse]:
-        """
-        Return all leave types.
-
-        HR / SYSTEM_ADMIN may pass include_inactive=True to see deactivated
-        policies.  Employees/Team Leads/PMs always see only active ones.
-        """
+    def list_policies(db: Session, include_inactive: bool = False) -> List[LeavePolicyResponse]:
         rows = LeaveRepository.list_leave_types(db, include_inactive=include_inactive)
         return [LeavePolicyResponse.model_validate(r) for r in rows]
-
-    @staticmethod
-    def get_policy(db: Session, leave_type_id: int) -> LeavePolicyResponse:
-        """Fetch a single policy by ID (raises LeavePolicyNotFoundError if missing)."""
-        lt = LeaveRepository.get_leave_type(db, leave_type_id)
-        if not lt:
-            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
-        return LeavePolicyResponse.model_validate(lt)
 
     @staticmethod
     def create_policy(
@@ -643,43 +625,23 @@ class LeavePolicyService:
         actor: UserAccount,
         ip_address: Optional[str] = None,
     ) -> LeavePolicyResponse:
-        """
-        Create a new leave type / policy.
+        if LeaveRepository.get_leave_type_by_name(db, payload.name):
+            raise DuplicateLeavePolicyNameError(DUPLICATE_POLICY_NAME)
 
-        Rules:
-        - Name must be unique (case-insensitive).
-        - yearly_quota ≥ 0 (0 = managed externally).
-        """
-        # Duplicate name guard
-        existing = LeaveRepository.get_leave_type_by_name(db, payload.name)
-        if existing:
-            raise DuplicateLeavePolicyNameError(
-                f"A leave policy named '{payload.name}' already exists."
-            )
-
-        lt = LeaveRepository.create_leave_type(
-            db=db,
-            name=payload.name,
-            yearly_quota=payload.yearly_quota,
-            is_paid=payload.is_paid,
-            description=payload.description,
-        )
-
+        leave_type = LeaveRepository.create_leave_type(db, **payload.model_dump())
         write_audit_log(
             db=db,
             action=AuditAction.CREATE,
-            entity_name="LEAVE_TYPE",
-            entity_ref_id=str(lt.leave_type_id),
+            entity_name=LEAVE_POLICY_ENTITY,
+            entity_ref_id=leave_type.leave_type_id,
             account_id=actor.account_id,
-            new_value={
-                "name": lt.name,
-                "yearly_quota": lt.yearly_quota,
-                "is_paid": lt.is_paid,
-            },
+            new_value=payload.model_dump(),
             ip_address=ip_address,
+            commit=False,
         )
-
-        return LeavePolicyResponse.model_validate(lt)
+        db.commit()
+        db.refresh(leave_type)
+        return LeavePolicyResponse.model_validate(leave_type)
 
     @staticmethod
     def update_policy(
@@ -689,49 +651,37 @@ class LeavePolicyService:
         actor: UserAccount,
         ip_address: Optional[str] = None,
     ) -> LeavePolicyResponse:
-        """
-        Partial-update a leave policy.
+        """Partial update. Only fields whose value actually changes are written and audited."""
+        leave_type = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not leave_type:
+            raise LeavePolicyNotFoundError(f"Leave policy {leave_type_id} not found")
 
-        Rules:
-        - Policy must exist.
-        - Only HR / SYSTEM_ADMIN may update (enforced at router layer).
-        - If is_active is set to True we allow it even if currently inactive
-          (reactivation).
-        """
-        lt = LeaveRepository.get_leave_type(db, leave_type_id)
-        if not lt:
-            raise LeavePolicyNotFoundError(f"Leave policy #{leave_type_id} not found.")
-
-        old_snapshot = {
-            "yearly_quota": lt.yearly_quota,
-            "is_paid": lt.is_paid,
-            "description": lt.description,
-            "is_active": lt.is_active,
+        changes = {
+            field: value
+            for field, value in payload.model_dump(exclude_unset=True).items()
+            if getattr(leave_type, field) != value
         }
+        if "name" in changes and LeaveRepository.get_leave_type_by_name(
+            db, changes["name"], exclude_id=leave_type_id
+        ):
+            raise DuplicateLeavePolicyNameError(DUPLICATE_POLICY_NAME)
 
-        updated = LeaveRepository.update_leave_type(
-            db=db,
-            leave_type=lt,
-            yearly_quota=payload.yearly_quota,
-            is_paid=payload.is_paid,
-            description=payload.description,
-            is_active=payload.is_active,
-        )
+        if changes:
+            old_value = {field: getattr(leave_type, field) for field in changes}
+            for field, value in changes.items():
+                setattr(leave_type, field, value)
+            write_audit_log(
+                db=db,
+                action=AuditAction.UPDATE,
+                entity_name=LEAVE_POLICY_ENTITY,
+                entity_ref_id=leave_type_id,
+                account_id=actor.account_id,
+                old_value=old_value,
+                new_value=changes,
+                ip_address=ip_address,
+                commit=False,
+            )
+            db.commit()
+            db.refresh(leave_type)
 
-        write_audit_log(
-            db=db,
-            action=AuditAction.UPDATE,
-            entity_name="LEAVE_TYPE",
-            entity_ref_id=str(leave_type_id),
-            account_id=actor.account_id,
-            old_value=old_snapshot,
-            new_value={
-                "yearly_quota": updated.yearly_quota,
-                "is_paid": updated.is_paid,
-                "description": updated.description,
-                "is_active": updated.is_active,
-            },
-            ip_address=ip_address,
-        )
-
-        return LeavePolicyResponse.model_validate(updated)
+        return LeavePolicyResponse.model_validate(leave_type)

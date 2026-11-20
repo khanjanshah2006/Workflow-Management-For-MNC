@@ -1,3 +1,4 @@
+import json
 import os
 import unittest
 import uuid
@@ -187,7 +188,7 @@ class TestLeavePolicies(unittest.TestCase):
         self.assertIn("leave_type_id", data)
 
         # Verify audit log was recorded
-        audit = self.db.query(AuditLog).filter(AuditLog.entity_name == "LEAVE_TYPE").first()
+        audit = self.db.query(AuditLog).filter(AuditLog.entity_name == "LEAVE_POLICY").first()
         self.assertIsNotNone(audit)
         self.assertEqual(audit.action, AuditAction.CREATE)
         self.assertEqual(audit.account_id, self.hr_user.account_id)
@@ -285,13 +286,72 @@ class TestLeavePolicies(unittest.TestCase):
 
         # Verify audit log recorded old and new values
         audit = self.db.query(AuditLog).filter(
-            AuditLog.entity_name == "LEAVE_TYPE",
+            AuditLog.entity_name == "LEAVE_POLICY",
             AuditLog.entity_ref_id == str(lt.leave_type_id),
             AuditLog.action == AuditAction.UPDATE,
         ).first()
         self.assertIsNotNone(audit)
         self.assertIn('"yearly_quota": 3', audit.old_value)
         self.assertIn('"yearly_quota": 5', audit.new_value)
+
+    def test_update_policy_rename(self):
+        """PUT can rename a policy; changing only the case of its own name is allowed."""
+        lt = LeaveType(name="Casual Leave", yearly_quota=10, is_paid=True)
+        self.db.add(lt)
+        self.db.commit()
+
+        resp = self.client.put(
+            f"/api/v1/leave/policies/{lt.leave_type_id}",
+            json={"name": "  CASUAL leave "},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["name"], "CASUAL leave")
+
+    def test_update_policy_rename_collision_returns_409(self):
+        """Renaming onto another policy's name (any case) returns 409."""
+        self.db.add(LeaveType(name="Sick Leave", yearly_quota=10, is_paid=True))
+        lt = LeaveType(name="Casual Leave", yearly_quota=10, is_paid=True)
+        self.db.add(lt)
+        self.db.commit()
+
+        resp = self.client.put(
+            f"/api/v1/leave/policies/{lt.leave_type_id}",
+            json={"name": "sick leave"},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 409)
+        self.assertEqual(resp.json()["detail"], "Leave policy with this name already exists")
+
+    def test_update_policy_audits_only_changed_fields(self):
+        """old_value/new_value hold only the changed fields; a no-op update writes no audit row."""
+        lt = LeaveType(name="Study Leave", yearly_quota=10, is_paid=False)
+        self.db.add(lt)
+        self.db.commit()
+        url = f"/api/v1/leave/policies/{lt.leave_type_id}"
+
+        resp = self.client.put(url, json={"yearly_quota": 12, "is_paid": False}, headers=self.headers(self.hr_user))
+        self.assertEqual(resp.status_code, 200)
+        audits = self.db.query(AuditLog).filter(AuditLog.entity_name == "LEAVE_POLICY").all()
+        self.assertEqual(len(audits), 1)
+        self.assertEqual(json.loads(audits[0].old_value), {"yearly_quota": 10})
+        self.assertEqual(json.loads(audits[0].new_value), {"yearly_quota": 12})
+
+        resp = self.client.put(url, json={"yearly_quota": 12}, headers=self.headers(self.hr_user))
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(self.db.query(AuditLog).filter(AuditLog.entity_name == "LEAVE_POLICY").count(), 1)
+
+    def test_update_policy_null_for_required_field_returns_422(self):
+        """Explicit null for a non-nullable field is rejected instead of hitting the database."""
+        lt = LeaveType(name="Annual Leave", yearly_quota=20, is_paid=True)
+        self.db.add(lt)
+        self.db.commit()
+        resp = self.client.put(
+            f"/api/v1/leave/policies/{lt.leave_type_id}",
+            json={"yearly_quota": None},
+            headers=self.headers(self.hr_user),
+        )
+        self.assertEqual(resp.status_code, 422)
 
     def test_update_policy_reactivate(self):
         """HR can reactivate an inactive policy by passing is_active=True in PUT."""

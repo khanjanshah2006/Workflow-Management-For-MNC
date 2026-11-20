@@ -38,15 +38,20 @@ class LeaveRepository:
 
     @staticmethod
     def get_leave_type(db: Session, leave_type_id: int) -> Optional[LeaveType]:
-        """Fetch a LeaveType by primary key (active or inactive)."""
+        """Fetch a LeaveType by primary key."""
         return db.scalar(select(LeaveType).where(LeaveType.leave_type_id == leave_type_id))
 
+    # ── US-18 / S4-BE-2 Leave policy queries ─────────────────────────────────
+
     @staticmethod
-    def get_leave_type_by_name(db: Session, name: str) -> Optional[LeaveType]:
-        """Case-insensitive lookup by name (used for duplicate-name checks)."""
-        return db.scalar(
-            select(LeaveType).where(func.lower(LeaveType.name) == name.strip().lower())
-        )
+    def get_leave_type_by_name(
+        db: Session, name: str, exclude_id: Optional[int] = None
+    ) -> Optional[LeaveType]:
+        """Case-insensitive name lookup, optionally ignoring one row (for renames)."""
+        stmt = select(LeaveType).where(func.lower(LeaveType.name) == name.strip().lower())
+        if exclude_id is not None:
+            stmt = stmt.where(LeaveType.leave_type_id != exclude_id)
+        return db.scalar(stmt)
 
     @staticmethod
     def list_leave_types(db: Session, include_inactive: bool = False) -> Sequence[LeaveType]:
@@ -64,45 +69,19 @@ class LeaveRepository:
         is_paid: bool,
         description: Optional[str],
     ) -> LeaveType:
-        """Insert a new leave type row and return the persisted record."""
-        lt = LeaveType(
-            name=name.strip(),
+        """Add a new active leave type and flush to get its ID. The caller commits."""
+        leave_type = LeaveType(
+            name=name,
             yearly_quota=yearly_quota,
             is_paid=is_paid,
             description=description,
             is_active=True,
         )
-        db.add(lt)
-        db.commit()
-        db.refresh(lt)
-        return lt
-
-    @staticmethod
-    def update_leave_type(
-        db: Session,
-        leave_type: LeaveType,
-        *,
-        yearly_quota: Optional[int] = None,
-        is_paid: Optional[bool] = None,
-        description: Optional[str] = None,
-        is_active: Optional[bool] = None,
-    ) -> LeaveType:
-        """Apply partial updates to a leave type row."""
-        if yearly_quota is not None:
-            leave_type.yearly_quota = yearly_quota
-        if is_paid is not None:
-            leave_type.is_paid = is_paid
-        if description is not None:
-            leave_type.description = description
-        if is_active is not None:
-            leave_type.is_active = is_active
-        db.commit()
-        db.refresh(leave_type)
+        db.add(leave_type)
+        db.flush()
         return leave_type
 
-    # ──────────────────────────────────────────────
-    # S4-BE-1  Leave Request operations
-    # ──────────────────────────────────────────────
+    # ── S4-BE-1 Leave request queries ────────────────────────────────────────
 
     @staticmethod
     def list_active_leave_types(db: Session) -> Sequence[LeaveType]:
