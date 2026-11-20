@@ -78,3 +78,47 @@ class EmployeeLeaveBalanceResponse(BaseModel):
     balances: List[LeaveBalanceItem]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class PendingLeaveQueueItem(BaseModel):
+    leave_id: int
+    employee_id: int
+    employee_name: str
+    leave_type_name: str
+    start_date: date
+    end_date: date
+    total_days: int
+    reason: str
+    status: LeaveStatus
+    applied_at: datetime
+    conflicting_task_count: int
+
+
+class PendingLeaveQueueResponse(BaseModel):
+    items: List[PendingLeaveQueueItem]
+    total: int
+    page: int
+    limit: int
+
+
+class LeaveApprovalPayload(BaseModel):
+    review_remarks: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("review_remarks")
+    @classmethod
+    def trim_optional_remarks(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class LeaveRejectionPayload(BaseModel):
+    review_remarks: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("review_remarks")
+    @classmethod
+    def require_meaningful_remarks(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Review remarks must contain at least 10 non-whitespace characters.")
+        return value
