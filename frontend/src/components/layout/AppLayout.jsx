@@ -8,6 +8,7 @@ const navigation = [
   { path: "/projects", label: "Projects", icon: "◇" },
   { path: "/team", label: "Team Roster", icon: "👥" },
   { path: "/tasks", label: "Tasks", icon: "✓" },
+  { path: "/leave", label: "Leave", icon: "🗓️" },
   { path: "/support", label: "IT Support", icon: "🛠" },
   { path: "/profile", label: "My Profile", icon: "○" },
   { path: "/admin/users", label: "User Admin", icon: "👤" },
@@ -40,6 +41,8 @@ export default function AppLayout() {
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
+      : location.pathname.startsWith("/leave")
+      ? "Leave Management"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
       : location.pathname.startsWith("/admin")

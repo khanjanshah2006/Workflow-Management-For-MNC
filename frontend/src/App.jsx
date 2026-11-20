@@ -21,6 +21,7 @@ import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
+import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -120,6 +121,14 @@ function App() {
                 element={
                   <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
                     <TeamLeadTaskWorkspace />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/leave"
+                element={
+                  <ProtectedRoute allowedRoles={["EMPLOYEE", "TEAM_LEAD"]}>
+                    <LeaveDashboardPage />
                   </ProtectedRoute>
                 }
               />
