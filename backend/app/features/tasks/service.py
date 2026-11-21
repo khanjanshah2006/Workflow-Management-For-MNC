@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
+from app.core.notification_types import TASK_ASSIGNED, TASK_REASSIGNED
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
@@ -194,7 +195,7 @@ class TaskService:
             NotificationService.create_notification(
                 db=db,
                 user_id=assignee.account_id,
-                type="TASK_ASSIGNED",
+                type=TASK_ASSIGNED,
                 title="New Task Assigned",
                 message=f"You have been assigned to task #{task.task_id}: '{task.title}'",
                 link=f"/tasks/{task.task_id}",
@@ -244,6 +245,35 @@ class TaskService:
                 f"Employee with ID {payload.new_assignee_id} is not an active member of the task team."
             )
 
+        # 7-9. Persist reassignment, audit, and notify
+        updated_task = TaskService._apply_reassignment(
+            db=db,
+            task=task,
+            new_assignee=new_assignee,
+            reason=clean_reason,
+            actor=current_user,
+            ip=ip_address,
+            commit=True,
+        )
+
+        return TaskResponse.model_validate(updated_task)
+
+    @staticmethod
+    def _apply_reassignment(
+        db: Session,
+        task: Task,
+        new_assignee: Employee,
+        reason: str,
+        actor: Any,
+        ip: Optional[str] = None,
+        *,
+        commit: bool = False,
+        extra_audit_data: Optional[dict] = None,
+    ) -> Task:
+        """
+        Reusable helper to apply a task reassignment, write audit log, and send notifications (US-14).
+        When commit=False, caller owns the single enclosing transaction.
+        """
         previous_assignee_id = task.assigned_to
         previous_assignee = (
             TaskRepository.get_employee_by_id(db, emp_id=previous_assignee_id)
@@ -251,30 +281,38 @@ class TaskService:
             else None
         )
 
-        # 7. Persist reassignment
-        updated_task = TaskRepository.reassign_task(
-            db, task=task, new_assignee_id=new_assignee.emp_id
-        )
+        # Update assignee on task
+        task.assigned_to = new_assignee.emp_id
+        db.flush()
 
-        # 8. Record structured audit log entry
+        # Record structured audit log entry
+        new_value: dict[str, Any] = {
+            "assigned_to": new_assignee.emp_id,
+            "reason": reason,
+        }
+        if extra_audit_data:
+            new_value.update(extra_audit_data)
+
+        account_id = getattr(actor, "account_id", None)
         write_audit_log(
             db=db,
             action=AuditAction.UPDATE,
             entity_name="TASK",
             entity_ref_id=str(task.task_id),
-            account_id=current_user.account_id,
+            account_id=account_id,
             old_value={"assigned_to": previous_assignee_id},
-            new_value={"assigned_to": new_assignee.emp_id, "reason": clean_reason},
-            ip_address=ip_address,
+            new_value=new_value,
+            ip_address=ip,
+            commit=commit,
         )
 
-        # 9. Dual notification hooks
+        # Dual notification hooks
         # A. Notification for the new assignee
         if new_assignee.account_id:
             NotificationService.create_notification(
                 db=db,
                 user_id=new_assignee.account_id,
-                type="TASK_ASSIGNED",
+                type=TASK_ASSIGNED,
                 title="New Task Assigned",
                 message=f"You have been assigned to task #{task.task_id}: '{task.title}'",
                 link=f"/tasks/{task.task_id}",
@@ -285,14 +323,17 @@ class TaskService:
             NotificationService.create_notification(
                 db=db,
                 user_id=previous_assignee.account_id,
-                type="TASK_REASSIGNED",
+                type=TASK_REASSIGNED,
                 title="Task Reassigned",
-                message=f"Task #{task.task_id} ('{task.title}') has been reassigned to another team member. Reason: {clean_reason}",
+                message=f"Task #{task.task_id} ('{task.title}') has been reassigned to another team member. Reason: {reason}",
                 link=f"/tasks/{task.task_id}",
             )
 
-        db.commit()
-        return TaskResponse.model_validate(updated_task)
+        if commit:
+            db.commit()
+            db.refresh(task)
+
+        return task
 
     # ── US-13 Review Queue & Resubmission Helpers ────────────────────────
 

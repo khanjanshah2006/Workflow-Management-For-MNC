@@ -167,6 +167,17 @@ def test_leave_and_executive_routers_registered():
     assert executive_router.prefix == "/api/v1/executive"
 
 
+def test_cors_middleware_exposes_content_disposition():
+    from app.main import app
+    from starlette.middleware.cors import CORSMiddleware
+
+    cors_middleware = next(
+        (m for m in app.user_middleware if m.cls is CORSMiddleware), None
+    )
+    assert cors_middleware is not None
+    assert "Content-Disposition" in cors_middleware.kwargs.get("expose_headers", [])
+
+
 def test_seed_wave3_demo_is_idempotent(db):
     today = date(2026, 11, 18)
 
@@ -185,9 +196,9 @@ def test_seed_wave3_demo_is_idempotent(db):
     # A later run moves the relative dates instead of creating new rows.
     seed_wave3_demo(db, today=date(2026, 11, 25), password="Seed@123")
     assert counts() == first
-    assert first["user_account"] == 8
-    assert first["task"] == 8
-    assert first["leave_request"] == 2
+    assert first["user_account"] == 9
+    assert first["task"] == 10
+    assert first["leave_request"] == 3
     assert first["audit_log"] == 3
     emails = set(db.scalars(select(UserAccount.email)))
     assert {"john.teamlead@company.com", "executive@company.com", "client@acme.com"} <= emails
