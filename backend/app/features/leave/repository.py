@@ -2,7 +2,7 @@
 from datetime import date
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
-from sqlalchemy import case, func, or_, select
+from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
 from app.core.scope import (
@@ -123,6 +123,7 @@ class LeaveRepository:
         leave_type_id: int,
         year: int,
         status: LeaveStatus,
+        exclude_leave_id: Optional[int] = None,
     ) -> int:
         """
         Calculate total days of leaves for an employee, leave type, status, and calendar year.
@@ -135,6 +136,8 @@ class LeaveRepository:
             LeaveRequest.start_date >= date(year, 1, 1),
             LeaveRequest.start_date <= date(year, 12, 31),
         )
+        if exclude_leave_id is not None:
+            stmt = stmt.where(LeaveRequest.leave_id != exclude_leave_id)
         result = db.scalar(stmt)
         return int(result or 0)
 
@@ -167,6 +170,78 @@ class LeaveRepository:
     def get_leave_request_by_id(db: Session, leave_id: int) -> Optional[LeaveRequest]:
         """Fetch a LeaveRequest by primary key."""
         return db.scalar(select(LeaveRequest).where(LeaveRequest.leave_id == leave_id))
+
+    @staticmethod
+    def get_leave_request_for_update(db: Session, leave_id: int) -> Optional[LeaveRequest]:
+        """Load and lock a leave row before performing a review decision."""
+        stmt = select(LeaveRequest).where(LeaveRequest.leave_id == leave_id).with_for_update()
+        return db.scalar(stmt)
+
+    @staticmethod
+    def count_review_queue(
+        db: Session,
+        team_lead_emp_id: Optional[int],
+        status: Optional[LeaveStatus],
+    ) -> int:
+        stmt = select(func.count(LeaveRequest.leave_id))
+        if team_lead_emp_id is not None:
+            member_ids = (
+                select(TeamMember.emp_id)
+                .join(Team, Team.team_id == TeamMember.team_id)
+                .where(Team.lead_emp_id == team_lead_emp_id, Team.status == TeamStatus.ACTIVE)
+            )
+            stmt = stmt.where(LeaveRequest.emp_id.in_(member_ids), LeaveRequest.emp_id != team_lead_emp_id)
+        if status is not None:
+            stmt = stmt.where(LeaveRequest.status == status)
+        return int(db.scalar(stmt) or 0)
+
+    @staticmethod
+    def list_review_queue(
+        db: Session,
+        team_lead_emp_id: Optional[int],
+        status: Optional[LeaveStatus],
+        page: int,
+        limit: int,
+    ):
+        stmt = (
+            select(LeaveRequest, Employee.full_name, LeaveType.name)
+            .join(Employee, Employee.emp_id == LeaveRequest.emp_id)
+            .join(LeaveType, LeaveType.leave_type_id == LeaveRequest.leave_type_id)
+        )
+        if team_lead_emp_id is not None:
+            member_ids = (
+                select(TeamMember.emp_id)
+                .join(Team, Team.team_id == TeamMember.team_id)
+                .where(Team.lead_emp_id == team_lead_emp_id, Team.status == TeamStatus.ACTIVE)
+            )
+            stmt = stmt.where(LeaveRequest.emp_id.in_(member_ids), LeaveRequest.emp_id != team_lead_emp_id)
+        if status is not None:
+            stmt = stmt.where(LeaveRequest.status == status)
+        stmt = stmt.order_by(LeaveRequest.start_date.asc(), LeaveRequest.leave_id.asc())
+        stmt = stmt.offset((page - 1) * limit).limit(limit)
+        return list(db.execute(stmt).all())
+
+    @staticmethod
+    def count_conflicting_tasks_for_requests(db: Session, leave_ids: list[int]) -> dict[int, int]:
+        """Count unfinished tasks due during each leave in one grouped query."""
+        if not leave_ids:
+            return {}
+        stmt = (
+            select(LeaveRequest.leave_id, func.count(Task.task_id))
+            .select_from(LeaveRequest)
+            .outerjoin(
+                Task,
+                and_(
+                    Task.assigned_to == LeaveRequest.emp_id,
+                    Task.due_date >= LeaveRequest.start_date,
+                    Task.due_date <= LeaveRequest.end_date,
+                    Task.status != TaskStatus.DONE,
+                ),
+            )
+            .where(LeaveRequest.leave_id.in_(leave_ids))
+            .group_by(LeaveRequest.leave_id)
+        )
+        return {leave_id: int(count) for leave_id, count in db.execute(stmt).all()}
 
     @staticmethod
     def get_leave_request_with_type(
