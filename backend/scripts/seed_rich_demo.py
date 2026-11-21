@@ -29,10 +29,13 @@ from sqlalchemy.orm import Session
 import app.models  # noqa: F401  Register all models on metadata
 from app.core import scope
 from app.core.security import hash_password
+from app.features.executive.reports import ExecutiveReportService
+from app.features.executive.schemas import ExecutiveReportCreateRequest
 from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.department import Department
+from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.employee import Employee
 from app.models.enums import (
     AuditAction,
@@ -42,11 +45,13 @@ from app.models.enums import (
     MilestoneStatus,
     PriorityLevel,
     ProjectStatus,
+    ReportFormat,
     SkillProficiency,
     TaskStatus,
     TeamStatus,
     UserType,
 )
+from app.models.executive_report import ExecutiveReport
 from app.models.leave import LeaveRequest, LeaveType
 from app.models.milestone import ProjectMilestone
 from app.models.notification import Notification
@@ -54,6 +59,7 @@ from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.skill import EmployeeSkill, Skill
 from app.models.support import SupportTicket, TicketActivity
+from app.models.system_backup_log import SystemBackupLog
 from app.models.system_parameter import SystemParameter
 from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.team import Team, TeamMember
@@ -79,6 +85,7 @@ PROJECT_MANAGERS = (
     # key, email, name, emp_code, dept key, date_of_joining
     ("daniel", "daniel.okafor@company.com", "Daniel Okafor", "RD-PM-001", "engineering", date(2021, 9, 6)),
     ("mei", "mei.lin@company.com", "Mei Lin", "RD-PM-002", "data", date(2022, 4, 18)),
+    ("sofia", "sofia.alvarez@company.com", "Sofia Alvarez", "RD-PM-003", "qe", date(2022, 9, 12)),
 )
 
 EMPLOYEES = (
@@ -103,13 +110,13 @@ EMPLOYEES = (
      "QA Engineer", date(2023, 1, 9)),
     ("lucas", "lucas.silva@company.com", "Lucas Silva", "RD-EMP-010", UserType.EMPLOYEE, "engineering",
      "Backend Developer", date(2023, 3, 6)),
-    ("hannah", "hannah.wright@company.com", "Hannah Wright", "RD-EMP-011", UserType.EMPLOYEE, "engineering",
+    ("hannah", "hannah.wright@company.com", "Hannah Wright", "RD-EMP-011", UserType.EMPLOYEE, "delivery",
      "UI/UX Designer", date(2023, 4, 24)),
     ("yuki", "yuki.tanaka@company.com", "Yuki Tanaka", "RD-EMP-012", UserType.EMPLOYEE, "data",
      "Data Analyst", date(2023, 6, 12)),
-    ("carlos", "carlos.mendes@company.com", "Carlos Mendes", "RD-EMP-013", UserType.EMPLOYEE, "engineering",
+    ("carlos", "carlos.mendes@company.com", "Carlos Mendes", "RD-EMP-013", UserType.EMPLOYEE, "delivery",
      "Software Engineer", date(2023, 8, 21)),
-    ("fatima", "fatima.zahra@company.com", "Fatima Zahra", "RD-EMP-014", UserType.EMPLOYEE, "engineering",
+    ("fatima", "fatima.zahra@company.com", "Fatima Zahra", "RD-EMP-014", UserType.EMPLOYEE, "delivery",
      "Frontend Developer", date(2023, 10, 2)),
     ("noah", "noah.fischer@company.com", "Noah Fischer", "RD-EMP-015", UserType.EMPLOYEE, "engineering",
      "DevOps Engineer", date(2024, 1, 8)),
@@ -133,6 +140,8 @@ EMPLOYEES = (
      "Systems Administrator", date(2021, 2, 1)),
     ("admin", "admin@company.com", "Alex Morgan", "RD-EMP-025", UserType.ADMIN, "itops",
      "Platform Administrator", date(2021, 1, 11)),
+    ("rachel", "rachel.green@company.com", "Rachel Green", "RD-EMP-026", UserType.EMPLOYEE, "hr",
+     "HR Coordinator", date(2025, 6, 2)),
 )
 
 CLIENTS = (
@@ -357,7 +366,7 @@ def _seed_projects(db: Session, today: date, ctx: dict) -> dict:
          PriorityLevel.HIGH, ProjectStatus.ACTIVE, True, "Customer-facing mobile app for Globex."),
         ("atlas", "ATLAS-DWH", "Atlas Data Warehouse", "mei", "initech", -120, 90,
          PriorityLevel.HIGH, ProjectStatus.ACTIVE, True, "Consolidate Initech reporting into one warehouse."),
-        ("orion", "ORION-QA", "Orion Test Automation", "daniel", "stark", -60, 75,
+        ("orion", "ORION-QA", "Orion Test Automation", "sofia", "stark", -60, 75,
          PriorityLevel.MEDIUM, ProjectStatus.ACTIVE, False, "Automated regression suite for Stark's TMS."),
         ("helios", "HELIOS-CLOUD", "Helios Cloud Migration", "daniel", "umbrella", -150, 120,
          PriorityLevel.MEDIUM, ProjectStatus.ON_HOLD, False, "Move Umbrella Health workloads to the cloud."),
@@ -643,22 +652,25 @@ COMMENTS = (
 )
 
 
-def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=None) -> AuditLog:
+def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=None,
+                refresh=False) -> AuditLog:
     """Insert the audit row if missing (keyed by entity, ref, action, new_value), then backdate it.
 
-    Plain strings are stored as-is, like write_audit_log does."""
+    Plain strings are stored as-is, like write_audit_log does. With refresh=True the key is
+    (entity, ref, action) only and old/new are rewritten, for values that embed moving dates."""
     new_json = new if new is None or isinstance(new, str) else json.dumps(new)
-    row = (
-        db.query(AuditLog)
-        .filter_by(entity_name=entity, entity_ref_id=str(ref), action=action, new_value=new_json)
-        .first()
-    )
+    old_json = json.dumps(old) if old is not None else None
+    lookup = {"entity_name": entity, "entity_ref_id": str(ref), "action": action}
+    if not refresh:
+        lookup["new_value"] = new_json
+    row = db.query(AuditLog).filter_by(**lookup).first()
     if row is None:
         row = AuditLog(
             account_id=account_id, action=action, entity_name=entity, entity_ref_id=str(ref),
-            old_value=json.dumps(old) if old is not None else None, new_value=new_json, ip_address=ip,
+            old_value=old_json, new_value=new_json, ip_address=ip,
         )
         db.add(row)
+    row.old_value, row.new_value = old_json, new_json
     row.created_at = created_at
     db.flush()
     return row
@@ -842,6 +854,8 @@ LEAVE_REQUESTS = (
      "Concert trip, may not be able to go."),
     ("priya", "casual", -21, -21, LeaveStatus.CANCELLED, None, None,
      "Home repair appointment, later rescheduled."),
+    ("rachel", "casual", 9, 9, LeaveStatus.PENDING, None, None,
+     "Attending my graduation ceremony."),
 )
 
 
@@ -1251,6 +1265,207 @@ def _seed_notifications(db: Session, today: date, ctx: dict) -> None:
             row.message = message
 
 
+LOGINS = (
+    # email, ip address, hours ago
+    ("john.teamlead@company.com", "10.20.1.14", 1),
+    ("sarah.connor@company.com", "10.20.1.22", 2),
+    ("ravi.kumar@company.com", "10.20.3.41", 3),
+    ("pm@company.com", "10.20.2.7", 4),
+    ("hr@company.com", "10.20.4.3", 5),
+    ("executive@company.com", "10.20.9.2", 6),
+    ("admin@company.com", "10.20.8.1", 7),
+    ("sysadmin@company.com", "10.20.8.5", 8),
+    ("it.support@company.com", "10.20.8.9", 9),
+    ("ana.lopez@company.com", "10.20.1.30", 10),
+    ("mei.lin@company.com", "10.20.2.12", 11),
+    ("client.globex@company.com", "198.51.100.23", 12),
+)
+
+# One IP tries 6 accounts within minutes: more than FAILED_LOGIN_THRESHOLD (5) inside the
+# 15-minute window, so the anomaly detector raises FAILED_LOGIN_BURST right after seeding.
+BURST_IP = "203.0.113.45"
+BURST_EMAILS = (
+    "admin@company.com", "sysadmin@company.com", "root@company.com",
+    "administrator@company.com", "it.support@company.com", "test@company.com",
+)
+
+BACKUPS = (
+    # file_path (None for the failed run), backup_type, status, hours ago, size in MB
+    ("backups/wms_scheduled_backup_d4.sql", "SCHEDULED", "COMPLETED", 102, 41),
+    ("backups/wms_scheduled_backup_d3.sql", "SCHEDULED", "COMPLETED", 78, 42),
+    ("backups/wms_scheduled_backup_d2.sql", "SCHEDULED", "COMPLETED", 54, 42),
+    ("backups/wms_scheduled_backup_d1.sql", "SCHEDULED", "COMPLETED", 30, 43),
+    (None, "SCHEDULED", "FAILED", 6, None),
+    ("backups/wms_on_demand_backup.sql", "ON_DEMAND", "COMPLETED", 2, 43),
+)
+
+GRANTS = (
+    # user email, role, reason, granted / expires / revoked as hours from now (None = not revoked)
+    ("it.support@company.com", "SYSTEM_ADMIN", "On-call backup admin", -2, 48, None),
+    ("it.helpdesk@company.com", "ADMIN", "Temporary access for the quarterly user audit", -240, -168, None),
+    ("ana.lopez@company.com", "PM", "Covering Phoenix PM duties during a planned absence", -120, 48, -72),
+)
+
+REPORTS = (
+    # title, format, period start (callable on today), department breakdown
+    ("Monthly Delivery Review", "PDF", lambda t: t - timedelta(days=30), False),
+    ("Quarterly Portfolio KPIs", "CSV", lambda t: t - timedelta(days=90), False),
+    ("Year-to-Date Executive Summary", "PDF", lambda t: date(t.year, 1, 1), True),
+)
+
+
+def _seed_admin_ops(db: Session, ctx: dict) -> None:
+    """Project/team/staffing audit trail, logins, a failed-login burst, backup logs and elevated grants."""
+    projects, teams, milestones, people = ctx["projects"], ctx["teams"], ctx["milestones"], ctx["people"]
+    pm_accounts = {pm.pm_id: pm.account_id for pm in ctx["pms"].values()}
+    now = datetime.now(timezone.utc)
+    latest = now - timedelta(hours=1)
+
+    def at(day: date, hour: int = 9) -> datetime:
+        return min(datetime.combine(day, time(hour, 0), tzinfo=timezone.utc), latest)
+
+    def account(email: str) -> UserAccount:
+        return db.query(UserAccount).filter_by(email=email).one()
+
+    # Projects and teams, in the shapes ProjectService writes.
+    for key, project in projects.items():
+        if key == "alpha":
+            continue
+        pm = pm_accounts[project.pm_id]
+        _audit_once(
+            db, pm, AuditAction.CREATE, "PROJECT", project.project_id, None,
+            {"project_code": project.project_code, "name": project.name,
+             "pm_id": project.pm_id, "client_id": project.client_id},
+            at(project.start_date - timedelta(days=7)),
+        )
+        if project.status in (ProjectStatus.ON_HOLD, ProjectStatus.COMPLETED, ProjectStatus.CANCELLED):
+            changed = project.end_date if project.status != ProjectStatus.ON_HOLD else now.date() - timedelta(days=20)
+            _audit_once(
+                db, pm, AuditAction.UPDATE, "PROJECT", project.project_id, {"status": "ACTIVE"},
+                {"status": project.status.value}, at(changed, 16),
+            )
+        if key in teams:
+            team = teams[key]
+            _audit_once(
+                db, pm, AuditAction.CREATE, "TEAM", team.team_id, None,
+                {"name": team.name, "project_id": project.project_id, "lead_emp_id": team.lead_emp_id},
+                at(project.start_date, 11),
+            )
+            if team.status == TeamStatus.DISBANDED:  # no service writes this; same shape as a status change
+                _audit_once(
+                    db, pm, AuditAction.UPDATE, "TEAM", team.team_id, {"status": "ACTIVE"},
+                    {"status": "DISBANDED"}, at(project.end_date + timedelta(days=1), 10),
+                )
+
+    # A few staffing rows: Nova's planned staffing and the two releases.
+    for project_key, person in (("nova", "ravi"), ("nova", "hannah"), ("nova", "lucas"), ("nova", "fatima"),
+                                ("vega", "zoe"), ("lyra", "hannah")):
+        project = projects[project_key]
+        assignment = db.query(ProjectAssignment).filter_by(
+            project_id=project.project_id, emp_id=people[person].emp_id).one()
+        pm = pm_accounts[project.pm_id]
+        _audit_once(
+            db, pm, AuditAction.CREATE, "PROJECT_ASSIGNMENT", assignment.assignment_id, None,
+            {"project_id": project.project_id, "emp_id": assignment.emp_id,
+             "role_in_project": assignment.role_in_project},
+            at(assignment.assigned_on, 12),
+        )
+        if assignment.released_on:  # no service writes releases; the date moves with today
+            _audit_once(
+                db, pm, AuditAction.UPDATE, "PROJECT_ASSIGNMENT", assignment.assignment_id,
+                {"released_on": None}, {"released_on": str(assignment.released_on)},
+                at(assignment.released_on, 17), refresh=True,
+            )
+
+    # Milestones: a few creations and completions (values embed dates, so refresh).
+    def milestone_value(milestone):
+        return {
+            "project_id": milestone.project_id, "title": milestone.title, "description": milestone.description,
+            "target_date": str(milestone.target_date), "status": milestone.status.value,
+            "completed_at": str(milestone.completed_at) if milestone.completed_at else None,
+        }
+
+    for key in ("phoenix_beta", "zephyr_pentest", "atlas_reports", "phoenix_alpha", "vega_golive"):
+        milestone = milestones[key]
+        project = db.get(Project, milestone.project_id)
+        pm = pm_accounts[project.pm_id]
+        created = milestone_value(milestone) | {"status": "pending", "completed_at": None}
+        _audit_once(db, pm, AuditAction.CREATE, "PROJECT_MILESTONE", milestone.id, None, created,
+                    at(project.start_date + timedelta(days=1)), refresh=True)
+        if milestone.status == MilestoneStatus.COMPLETED:
+            _audit_once(db, pm, AuditAction.UPDATE, "PROJECT_MILESTONE", milestone.id, created,
+                        milestone_value(milestone), at(milestone.target_date, 18), refresh=True)
+
+    # Successful logins (AuthService.login) and a fresh failed-login burst.
+    for email, ip, hours_ago in LOGINS:
+        user = account(email)
+        _audit_once(
+            db, user.account_id, AuditAction.LOGIN, "USER_ACCOUNT", user.account_id, None,
+            {"email": user.email, "user_type": user.user_type.value, "mfa_verified": False},
+            now - timedelta(hours=hours_ago), ip=ip,
+        )
+    for minutes_ago, email in zip(range(6, 0, -1), BURST_EMAILS):
+        user = db.query(UserAccount).filter_by(email=email).first()
+        _audit_once(
+            db, user.account_id if user else None, AuditAction.LOGIN, "USER_ACCOUNT",
+            user.account_id if user else "UNKNOWN", None, {"status": "FAILED", "attempted_email": email},
+            now - timedelta(minutes=minutes_ago), ip=BURST_IP,
+        )
+
+    # Backups: the latest scheduled run failed, then an admin re-ran it on demand.
+    sysadmin = ctx["accounts"]["sysadmin"].account_id
+    for file_path, backup_type, status, hours_ago, size_mb in BACKUPS:
+        lookup = {"file_path": file_path} if file_path else {"file_path": None, "status": "FAILED"}
+        backup = _get_or_create(
+            db, SystemBackupLog, lookup,
+            backup_type=backup_type, status=status, created_at=now - timedelta(hours=hours_ago),
+            file_size_bytes=size_mb * 1024 * 1024 if size_mb else None,
+            triggered_by_account_id=sysadmin if backup_type == "ON_DEMAND" else None,
+        )
+        if backup_type == "ON_DEMAND":
+            _audit_once(
+                db, sysadmin, AuditAction.CREATE, "SYSTEM_BACKUP", backup.backup_id, None,
+                {"status": status, "backup_name": file_path.rsplit("/", 1)[-1],
+                 "file_size_bytes": backup.file_size_bytes},
+                backup.created_at,
+            )
+
+    # Elevated access grants: one active, one expired, one revoked.
+    admin = ctx["accounts"]["admin"].account_id
+    for email, role, reason, granted, expires, revoked in GRANTS:
+        _get_or_create(
+            db, ElevatedAccessGrant, {"user_id": account(email).account_id, "granted_role": role, "reason": reason},
+            granted_by=admin, granted_at=now + timedelta(hours=granted), expires_at=now + timedelta(hours=expires),
+            revoked_at=now + timedelta(hours=revoked) if revoked is not None else None,
+        )
+
+
+def _seed_executive_reports(db: Session) -> None:
+    """Generate the executive reports through ExecutiveReportService, as executive@company.com.
+
+    generate_report commits, so this runs after everything else is committed. A report is
+    skipped when its row and file exist; a row whose file is gone is removed and regenerated.
+    """
+    executive = db.query(UserAccount).filter_by(email="executive@company.com").one()
+    today = date.today()  # generate_report validates periods against the real date
+    for title, report_format, period_start, breakdown in REPORTS:
+        existing = db.query(ExecutiveReport).filter_by(report_title=title).first()
+        if existing is not None:
+            if Path(existing.file_path).is_file():
+                continue
+            db.query(AuditLog).filter_by(entity_name="EXECUTIVE_REPORT", entity_ref_id=str(existing.report_id)).delete()
+            db.delete(existing)
+            db.commit()
+        ExecutiveReportService.generate_report(
+            db,
+            ExecutiveReportCreateRequest(
+                report_title=title, period_start=period_start(today), period_end=today,
+                format=ReportFormat(report_format), include_department_breakdown=breakdown,
+            ),
+            executive,
+        )
+
+
 def seed_rich_demo(db: Session, today: date | None = None, password: str | None = None) -> None:
     today = today or date.today()
     password = password or os.getenv("SEED_PASSWORD", DEFAULT_PASSWORD)
@@ -1266,8 +1481,10 @@ def seed_rich_demo(db: Session, today: date | None = None, password: str | None 
     ctx.update(_seed_support(db, ctx))
     ctx.update(_seed_deliverables(db, ctx))
     _seed_notifications(db, today, ctx)
+    _seed_admin_ops(db, ctx)
 
     db.commit()
+    _seed_executive_reports(db)  # last: generate_report commits on its own
 
 
 def main() -> None:
