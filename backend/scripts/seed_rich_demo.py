@@ -10,10 +10,12 @@ Usage (from backend/):
 
 All accounts share the password in env SEED_PASSWORD (default: Password@123).
 """
+import json
 import os
 import random
+import re
 import sys
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
 if "DATABASE_URL" not in os.environ:
@@ -26,14 +28,17 @@ from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  Register all models on metadata
 from app.core.security import hash_password
+from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.enums import (
+    AuditAction,
     MilestoneStatus,
     PriorityLevel,
     ProjectStatus,
     SkillProficiency,
+    TaskStatus,
     TeamStatus,
     UserType,
 )
@@ -42,6 +47,7 @@ from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.skill import EmployeeSkill, Skill
 from app.models.system_parameter import SystemParameter
+from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
 from scripts.seed_wave3_demo import (  # noqa: F401  later phases use the rest
@@ -431,16 +437,371 @@ def _seed_projects(db: Session, today: date, ctx: dict) -> dict:
     return {"projects": projects, "milestones": milestones, "teams": teams}
 
 
+TODO, IP, REV, DONE, BLK, REJ = (
+    TaskStatus.TODO, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW,
+    TaskStatus.DONE, TaskStatus.BLOCKED, TaskStatus.REJECTED,
+)
+
+
+def T(title, status, due, ms=None, who=None, rej=0, nw=False):
+    """One task row. `due` is days from today, or from next Monday when nw=True.
+    `who` fixes the assignee (else rng picks a team member). `rej` is the rejection
+    count; an IN_REVIEW task with rej > 0 was resubmitted after its last rejection."""
+    return title, status, due, ms, who, rej, nw
+
+
+TASKS = {
+    "alpha": (
+        T("Vendor Master Data Migration", REV, -1, who="carlos"),
+        T("Purchase Order Approval Workflow", REV, 4, who="fatima", rej=1),
+        T("GL Account Mapping Script", REV, 6),
+        T("Inventory Valuation Report", IP, 9),
+        T("Role-Based Menu Permissions", IP, -10),
+        T("Tax Code Configuration", REJ, 3, rej=2),
+    ),
+    "phoenix": (
+        T("Onboarding Screen Designs", DONE, -45, ms="phoenix_design", who="hannah"),
+        T("Design System Tokens", DONE, -42, ms="phoenix_design"),
+        T("User Login Flow", DONE, -20, ms="phoenix_alpha"),
+        T("Push Notification Service", DONE, -15, ms="phoenix_alpha"),
+        T("Alpha Build Pipeline", DONE, -13, ms="phoenix_alpha"),
+        T("Beta Tester Invite Emails", DONE, -2, ms="phoenix_beta"),
+        T("Crash Reporting Integration", IP, 1, ms="phoenix_beta"),
+        T("Beta Feedback Form", IP, 2, ms="phoenix_beta"),
+        T("In-App Purchase Sandbox Tests", REV, 2, ms="phoenix_beta"),
+        T("Accessibility Audit Fixes", IP, -4),
+        T("Dark Mode Support", TODO, -2),
+        T("Profile Photo Upload", REJ, -1, rej=2),
+        T("Deep Link Routing", BLK, -3),
+        # Phase 4: Ravi's approved leave covers the week after next.
+        T("Offline Data Sync", TODO, 8, who="ravi", nw=True),
+        T("Payment Gateway SDK Upgrade", IP, 9, who="ravi", nw=True),
+        T("Order History API", TODO, 10, who="ravi", nw=True),
+        T("App Store Screenshots", TODO, 30, ms="phoenix_launch"),
+        T("Release Notes Draft", TODO, 33, ms="phoenix_launch"),
+        T("Performance Profiling", IP, 10),
+        T("Analytics Event Tracking", REV, 5, rej=1),
+        T("Biometric Login", REJ, 8, rej=1),
+        T("Localization (ES, FR)", BLK, 12),
+    ),
+    "atlas": (
+        T("Star Schema Design", DONE, -55, ms="atlas_model"),
+        T("Source System Inventory", DONE, -52, ms="atlas_model"),
+        T("Data Dictionary", DONE, -48, ms="atlas_model"),
+        T("CRM Source Connector", DONE, -20, ms="atlas_ingest"),
+        T("ERP Extract Jobs", IP, -8, ms="atlas_ingest"),
+        T("Incremental Load Logic", BLK, -7, ms="atlas_ingest"),
+        T("Data Quality Rules", REJ, -5, ms="atlas_ingest", rej=3),
+        T("Finance Feed Ingestion", IP, -3, ms="atlas_ingest"),
+        # Phase 4: Elena's pending leave covers next week.
+        T("Sales Dashboard Dataset", IP, 1, ms="atlas_reports", who="elena", nw=True),
+        T("Revenue KPI Definitions", TODO, 3, who="elena", nw=True),
+        T("Executive Report Layouts", REV, 2, ms="atlas_reports", who="zoe", nw=True),
+        T("Row-Level Security", TODO, 15),
+        T("Warehouse Cost Monitoring", TODO, 25),
+        T("Cutover Runbook", TODO, 50, ms="atlas_cutover"),
+        T("Historical Backfill", IP, 20),
+        T("Reconciliation Queries", REV, 4),
+        T("Data Lineage Docs", IP, -10),
+        T("Partitioning Strategy", REJ, 7, rej=1),
+    ),
+    "orion": (
+        T("Test Strategy Document", DONE, -32, ms="orion_strategy"),
+        T("Test Environment Setup", DONE, -31, ms="orion_strategy"),
+        T("Smoke Test Suite", IP, -12),
+        T("Shipment Booking Regression Tests", IP, 5, ms="orion_regression"),
+        T("Carrier API Contract Tests", IP, 4, ms="orion_regression"),
+        T("Invoice Module Regression Tests", REV, 3, ms="orion_regression", rej=2),
+        T("Flaky Test Triage", BLK, -2),
+        T("Test Data Generator", IP, -5),
+        T("CI Test Parallelisation", REJ, -1, rej=1),
+        T("Load Test Scripts", TODO, 15, ms="orion_perf"),
+        T("Performance Baseline Report", TODO, 19, ms="orion_perf"),
+        T("UAT Test Cases", TODO, 40, ms="orion_uat"),
+        T("Defect Triage Dashboard", REV, 2),
+        T("Mobile Device Matrix", TODO, -3),
+        T("Accessibility Test Pack", IP, 9),
+        T("Test Coverage Report", DONE, -8),
+    ),
+    "helios": (
+        T("Application Portfolio Assessment", DONE, -72, ms="helios_assessment"),
+        T("Network Topology Design", BLK, -18, ms="helios_landing"),
+        T("IAM Baseline Policies", BLK, -16, ms="helios_landing"),
+        T("VPC and Subnet Provisioning", IP, -15, ms="helios_landing"),
+        T("Logging and Monitoring Stack", TODO, -10),
+        T("Backup Policy Definition", REJ, -8, rej=2),
+        T("Cost Estimation Model", REV, -6),
+        T("Database Migration Plan", TODO, 30, ms="helios_wave1"),
+        T("Wave 1 App Inventory", TODO, 35, ms="helios_wave1"),
+        T("DR Runbook", IP, -4),
+        T("Container Registry Setup", IP, 10),
+        T("Cloud Governance Charter", TODO, 20),
+    ),
+    "zephyr": (
+        T("Asset Inventory and Scoping", DONE, -27, ms="zephyr_kickoff"),
+        T("Threat Model Workshop", DONE, -26, ms="zephyr_kickoff"),
+        T("Web App Vulnerability Scan", DONE, -3, ms="zephyr_pentest"),
+        T("External Pen Test", IP, 1, ms="zephyr_pentest"),
+        T("Pen Test Findings Report", REV, 1, ms="zephyr_pentest"),
+        T("Patch Critical CVEs", IP, 10, ms="zephyr_remediation"),
+        T("Rotate Service Credentials", TODO, 11, ms="zephyr_remediation"),
+        T("WAF Rule Tuning", BLK, 8, ms="zephyr_remediation"),
+        T("MFA Enforcement Rollout", REJ, -2, rej=2),
+        T("SIEM Alert Rules", IP, -6),
+        T("Secrets Vault Migration", REJ, 5, rej=1),
+        T("Security Awareness Training", TODO, 20),
+        T("ISO 27001 Evidence Pack", TODO, 40, ms="zephyr_compliance"),
+        T("Firewall Rule Review", IP, -1),
+        T("Endpoint Hardening Baseline", REV, 3),
+        T("Incident Response Playbook", BLK, -4),
+    ),
+    "vega": (
+        T("Portal Wireframes", DONE, -210, ms="vega_design"),
+        T("Customer Login Integration", DONE, -150, ms="vega_golive"),
+        T("Account Dashboard", DONE, -130, ms="vega_golive"),
+        T("Invoice Download Feature", DONE, -120, ms="vega_golive"),
+        T("Support Ticket Widget", DONE, -110, ms="vega_golive"),
+        T("Portal Analytics Setup", DONE, -100, ms="vega_golive"),
+        T("Go-Live Checklist", DONE, -92, ms="vega_golive"),
+        T("Hypercare Fixes", DONE, -60, ms="vega_handover"),
+        T("Knowledge Base Articles", DONE, -45, ms="vega_handover"),
+        T("Support Handover Session", DONE, -36, ms="vega_handover"),
+    ),
+    # Stopped when the project was cancelled (today-120); CANCELLED projects never count as overdue.
+    "lyra": (
+        T("HR Discovery Interviews", DONE, -175, ms="lyra_discovery"),
+        T("Current-State Process Maps", DONE, -172, ms="lyra_discovery"),
+        T("Employee Data Model", DONE, -150),
+        T("Leave Module Prototype", DONE, -135),
+        T("Payroll Integration Spike", IP, -125),
+        T("Org Chart Viewer", IP, -115),
+        T("Benefits Enrollment Screens", TODO, -105),
+        T("HRIS Vendor Data Export", BLK, -122),
+    ),
+}
+
+BLOCKER_REASONS = (
+    "Waiting on the client to provide API credentials.",
+    "Blocked by an open infrastructure ticket with IT Operations.",
+    "Upstream dependency has not been merged yet.",
+    "Awaiting security sign-off before proceeding.",
+    "Shared test environment is down; waiting on a fix.",
+    "Waiting on a vendor licence renewal.",
+)
+
+REJECTION_FEEDBACK = (
+    "Edge cases from the acceptance criteria are not covered.",
+    "Unit tests are missing for the new error paths.",
+    "Output does not match the agreed specification.",
+    "Naming and structure need cleanup before this can merge.",
+    "Performance regresses noticeably on the large dataset.",
+    "Documentation for the change is incomplete.",
+    "Validation messages are inconsistent with the style guide.",
+    "Please address the open review comments first.",
+)
+
+COMMENTS = (
+    # task title, author ("lead" | "assignee" | "pm"), content
+    ("Vendor Master Data Migration", "assignee", "Migrated 12k vendor rows; 40 duplicates flagged for review."),
+    ("Vendor Master Data Migration", "lead", "Thanks, reviewing the duplicate list today."),
+    ("Purchase Order Approval Workflow", "lead", "Second approval tier is still skipped for amounts over 50k."),
+    ("Purchase Order Approval Workflow", "assignee", "Fixed the threshold check and added tests, resubmitted."),
+    ("Tax Code Configuration", "pm", "Acme finance needs this before the UAT window, please prioritise."),
+    ("Crash Reporting Integration", "assignee", "SDK is wired in; symbol upload still failing on CI."),
+    ("Crash Reporting Integration", "lead", "Ping Noah about the CI secret, he set up the pipeline."),
+    ("Beta Feedback Form", "pm", "Globex wants a screenshot attachment option on the form."),
+    ("In-App Purchase Sandbox Tests", "assignee", "All sandbox purchase flows pass on iOS and Android."),
+    ("Profile Photo Upload", "lead", "Large images still crash the cropper, see the attached log."),
+    ("Profile Photo Upload", "assignee", "Looking into downscaling before the cropper opens."),
+    ("Deep Link Routing", "assignee", "Blocked until Globex confirms the universal link domain."),
+    ("Offline Data Sync", "lead", "Ravi, please hand over notes before your leave."),
+    ("Analytics Event Tracking", "lead", "Event names now match the tracking plan, thanks."),
+    ("ERP Extract Jobs", "assignee", "Extract runs but takes 3h; tuning the batch size."),
+    ("Data Quality Rules", "lead", "Null checks still miss the legacy region codes."),
+    ("Data Quality Rules", "pm", "Initech flagged this as a go-live blocker."),
+    ("Sales Dashboard Dataset", "assignee", "Dataset is 70% done; will brief Yuki before my leave."),
+    ("Executive Report Layouts", "pm", "Layouts look good, waiting on the final colour palette."),
+    ("Invoice Module Regression Tests", "lead", "Second pass is close; two assertions still use stale fixtures."),
+    ("Flaky Test Triage", "assignee", "Five flaky tests traced to the shared staging database."),
+    ("Defect Triage Dashboard", "pm", "Stark would like this view shared with their QA lead."),
+    ("Network Topology Design", "assignee", "On hold until Umbrella approves the address ranges."),
+    ("Backup Policy Definition", "lead", "Retention periods must match the HIPAA requirements."),
+    ("Cost Estimation Model", "pm", "Client paused the project; keep this ready for the restart."),
+    ("External Pen Test", "assignee", "External scan complete; manual testing starts tomorrow."),
+    ("Pen Test Findings Report", "lead", "Please add CVSS scores to every finding."),
+    ("MFA Enforcement Rollout", "pm", "Umbrella needs MFA for all admins before the audit."),
+    ("MFA Enforcement Rollout", "assignee", "Reworking the rollout plan to include service accounts."),
+    ("Incident Response Playbook", "assignee", "Waiting on Umbrella's legal team for the escalation contacts."),
+)
+
+
+def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=None) -> AuditLog:
+    """Insert the audit row if missing (keyed by entity, ref, action, new_value), then backdate it."""
+    new_json = json.dumps(new) if new is not None else None
+    row = (
+        db.query(AuditLog)
+        .filter_by(entity_name=entity, entity_ref_id=str(ref), action=action, new_value=new_json)
+        .first()
+    )
+    if row is None:
+        row = AuditLog(
+            account_id=account_id, action=action, entity_name=entity, entity_ref_id=str(ref),
+            old_value=json.dumps(old) if old is not None else None, new_value=new_json, ip_address=ip,
+        )
+        db.add(row)
+    row.created_at = created_at
+    db.flush()
+    return row
+
+
+def _slug(text: str) -> str:
+    return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-")
+
+
+def _seed_tasks(db: Session, today: date, ctx: dict, rng: random.Random) -> dict:
+    """Tasks in every status with submissions, comments and TaskService-shaped audit history.
+
+    Returns {"tasks": {title: Task}} for the tasks created here (wave3 tasks are not included).
+    """
+    projects, milestones, teams, pms = ctx["projects"], ctx["milestones"], ctx["teams"], ctx["pms"]
+    people = ctx["people"]
+    employees = {e.emp_id: e for e in people.values()}
+    pm_by_id = {pm.pm_id: pm for pm in pms.values()}
+    now = datetime.now(timezone.utc)
+    latest = now - timedelta(hours=1)
+    next_monday = today + timedelta(days=7 - today.weekday())
+    priorities = (PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL)
+
+    tasks = {}
+    for project_key, rows in TASKS.items():
+        project, team = projects[project_key], teams[project_key]
+        lead = employees[team.lead_emp_id]
+        pool = [
+            employees[m.emp_id]
+            for m in db.query(TeamMember).filter_by(team_id=team.team_id).order_by(TeamMember.team_member_id)
+        ]
+        for title, status, due, ms, who, rej, nw in rows:
+            # Same number of draws per row, so every row sees the same random stream on every run.
+            picked = rng.choice(pool)
+            priority = rng.choices(priorities, weights=(2, 4, 3, 1))[0]
+            duration = rng.randint(3, 14)
+            progress = rng.choice((20, 30, 40, 50, 60, 70, 80))
+            blocker = rng.choice(BLOCKER_REASONS)
+            feedback = rng.sample(REJECTION_FEEDBACK, 3)
+
+            assignee = people[who] if who else picked
+            due_date = (next_monday if nw else today) + timedelta(days=due)
+            start_date = due_date - timedelta(days=duration)
+            if status != TODO:
+                start_date = min(start_date, today - timedelta(days=1))
+
+            # Timeline: create, then one step per day from the start date, capped before now.
+            steps = 1
+            if status == BLK:
+                steps += 1
+            elif status in (REV, REJ):
+                steps += 2 * rej + (1 if status == REV else 0)
+            elif status == DONE:
+                steps += 2
+            first = datetime.combine(start_date, time(9, 0), tzinfo=timezone.utc)
+            first -= max(timedelta(0), first + timedelta(days=steps - 1) - latest)
+            stamps = iter(first + timedelta(days=i) for i in range(steps))
+
+            task = _get_or_create(
+                db, Task, {"project_id": project.project_id, "title": title},
+                team_id=team.team_id, assigned_to=assignee.emp_id, created_by=lead.emp_id,
+                milestone_id=milestones[ms].id if ms else None, priority=priority, status=status,
+                progress_pct={TODO: 0, IP: progress, BLK: progress, REV: 90, REJ: 90, DONE: 100}[status],
+                blocker_reason=blocker if status == BLK else None,
+                rejection_count=rej, rejection_feedback=feedback[rej - 1] if rej else None,
+                start_date=start_date, due_date=due_date, completed_at=None,
+                description=f"{title} for {project.name}.",
+            )
+            tasks[title] = task
+            ref = task.task_id
+
+            created_at = next(stamps)
+            task.created_at = created_at
+            _audit_once(
+                db, lead.account_id, AuditAction.CREATE, "TASK", ref, None,
+                {"title": title, "project_id": project.project_id, "team_id": team.team_id,
+                 "assigned_to": assignee.emp_id, "status": "TODO"},
+                created_at,
+            )
+
+            def submit(version: int) -> None:
+                remarks = "Ready for review." if version == 1 else f"Revision {version - 1}: addressed the review feedback."
+                file_name = f"{_slug(title)}-v{version}.pdf"
+                file_url = f"/uploads/task_submissions/{file_name}"
+                at = next(stamps)
+                submission = _get_or_create(
+                    db, TaskSubmission, {"task_id": ref, "remarks": remarks},
+                    submitted_by=assignee.emp_id, file_url=file_url, file_name=file_name,
+                    file_size_bytes=180_000 + 7_000 * version, submitted_at=at,
+                )
+                if version == 1:
+                    old, new = {"status": "IN_PROGRESS"}, {
+                        "status": "IN_REVIEW", "submission_id": submission.submission_id, "file_name": file_name,
+                    }
+                else:
+                    old, new = {"status": "REJECTED"}, {
+                        "status": "IN_REVIEW", "submission_id": submission.submission_id,
+                        "revised_remarks": remarks, "new_file_url": file_url,
+                    }
+                _audit_once(db, assignee.account_id, AuditAction.UPDATE, "TASK", ref, old, new, at)
+
+            if status == BLK:
+                _audit_once(
+                    db, assignee.account_id, AuditAction.UPDATE, "TASK", ref,
+                    {"status": "IN_PROGRESS", "progress_pct": progress, "blocker_reason": None},
+                    {"status": "BLOCKED", "progress_pct": progress, "blocker_reason": blocker},
+                    next(stamps),
+                )
+            for count in range(1, rej + 1):
+                submit(count)
+                _audit_once(
+                    db, lead.account_id, AuditAction.UPDATE, "TASK", ref, {"status": "IN_REVIEW"},
+                    {"status": "REJECTED", "rejection_feedback": feedback[count - 1], "rejection_count": count},
+                    next(stamps),
+                )
+            if status == REV:
+                submit(rej + 1)
+            if status == DONE:
+                submit(1)
+                task.completed_at = next(stamps)
+                _audit_once(
+                    db, lead.account_id, AuditAction.APPROVE, "TASK", ref, {"status": "IN_REVIEW"},
+                    {"status": "DONE", "progress_pct": 100}, task.completed_at,
+                )
+
+    for i, (title, author, content) in enumerate(COMMENTS):
+        task = tasks[title]
+        if author == "pm":
+            pm = pm_by_id[db.get(Project, task.project_id).pm_id]
+            values = {"author_emp_id": None, "author_name": pm.full_name, "author_role": "PM"}
+        else:
+            emp_id = task.assigned_to if author == "assignee" else task.created_by
+            role = "EMPLOYEE" if author == "assignee" else "TEAM_LEAD"
+            values = {"author_emp_id": emp_id, "author_name": employees[emp_id].full_name, "author_role": role}
+        _get_or_create(
+            db, TaskComment, {"task_id": task.task_id, "content": content},
+            created_at=now - timedelta(hours=2 * (len(COMMENTS) - i)), **values,
+        )
+
+    return {"tasks": tasks}
+
+
 def seed_rich_demo(db: Session, today: date | None = None, password: str | None = None) -> None:
     today = today or date.today()
     password = password or os.getenv("SEED_PASSWORD", DEFAULT_PASSWORD)
     seed_wave3_demo(db, today, password)
 
     pw_hash = hash_password(password)  # bcrypt is slow: hash once, reuse for every account
-    rng = random.Random(42)  # noqa: F841  later phases draw from it
+    rng = random.Random(42)
 
     ctx = _seed_people(db, pw_hash)
     ctx.update(_seed_projects(db, today, ctx))
+    ctx.update(_seed_tasks(db, today, ctx, rng))
 
     db.commit()
 
