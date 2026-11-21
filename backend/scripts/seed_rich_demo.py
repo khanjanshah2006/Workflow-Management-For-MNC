@@ -64,7 +64,7 @@ from app.models.system_parameter import SystemParameter
 from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
-from scripts.seed_wave3_demo import (  # noqa: F401  later phases use the rest
+from scripts.seed_wave3_demo import (
     DEFAULT_PASSWORD,
     PROJECT_CODE,
     _account,
@@ -289,6 +289,9 @@ def _seed_people(db: Session, pw_hash: str) -> dict:
     return {"depts": depts, "accounts": accounts, "people": people, "pms": pms, "clients": clients}
 
 
+# Alpha Core Team members in join order: wave3's three, then the two added below.
+ALPHA_MEMBERS = ("sarah", "matrix", "kyle", "carlos", "fatima")
+
 TEAMS = (
     # key, name, project key, lead key, status, members. Each lead's ACTIVE team is created
     # before any DISBANDED team they lead: TaskRepository.get_team_for_employee takes the first one.
@@ -471,10 +474,10 @@ TASKS = {
     "alpha": (
         T("Vendor Master Data Migration", REV, -1, who="carlos"),
         T("Purchase Order Approval Workflow", REV, 4, who="fatima", rej=1),
-        T("GL Account Mapping Script", REV, 6),
+        T("GL Account Mapping Script", REV, 6, who="fatima"),
         T("Inventory Valuation Report", IP, 9),
         T("Role-Based Menu Permissions", IP, -10),
-        T("Tax Code Configuration", REJ, 3, rej=2),
+        T("Tax Code Configuration", REJ, 3, who="matrix", rej=2),  # not Kyle: his leave is next Mon-Tue
     ),
     "phoenix": (
         T("Onboarding Screen Designs", DONE, -45, ms="phoenix_design", who="hannah"),
@@ -496,10 +499,10 @@ TASKS = {
         T("Order History API", TODO, 10, who="ravi", nw=True),
         T("App Store Screenshots", TODO, 30, ms="phoenix_launch"),
         T("Release Notes Draft", TODO, 33, ms="phoenix_launch"),
-        T("Performance Profiling", IP, 10),
+        T("Performance Profiling", IP, 10, who="hannah"),  # Ravi keeps exactly 3 tasks in his leave
         T("Analytics Event Tracking", REV, 5, rej=1),
-        T("Biometric Login", REJ, 8, rej=1),
-        T("Localization (ES, FR)", BLK, 12),
+        T("Biometric Login", REJ, 8, who="hannah", rej=1),
+        T("Localization (ES, FR)", BLK, 12, who="tom"),
     ),
     "atlas": (
         T("Star Schema Design", DONE, -55, ms="atlas_model"),
@@ -518,9 +521,9 @@ TASKS = {
         T("Warehouse Cost Monitoring", TODO, 25),
         T("Cutover Runbook", TODO, 50, ms="atlas_cutover"),
         T("Historical Backfill", IP, 20),
-        T("Reconciliation Queries", REV, 4),
+        T("Reconciliation Queries", REV, 4, who="yuki"),  # Elena keeps exactly 2 tasks in her leave
         T("Data Lineage Docs", IP, -10),
-        T("Partitioning Strategy", REJ, 7, rej=1),
+        T("Partitioning Strategy", REJ, 7, who="zoe", rej=1),
     ),
     "orion": (
         T("Test Strategy Document", DONE, -32, ms="orion_strategy"),
@@ -652,15 +655,21 @@ COMMENTS = (
 )
 
 
-def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=None,
-                refresh=False) -> AuditLog:
-    """Insert the audit row if missing (keyed by entity, ref, action, new_value), then backdate it.
+# Seed audit rows carry RFC 5737 documentation addresses, which never appear in real traffic.
+# That marks them without touching the JSON the services parse, and keeps _audit_once from ever
+# matching (and rewriting) a row the app itself wrote.
+SEED_IP = "198.51.100.10"
 
-    Plain strings are stored as-is, like write_audit_log does. With refresh=True the key is
-    (entity, ref, action) only and old/new are rewritten, for values that embed moving dates."""
+
+def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=SEED_IP,
+                refresh=False) -> AuditLog:
+    """Insert the seed audit row if missing (keyed by entity, ref, action, ip, new_value), then backdate it.
+
+    `ip` must be a documentation address. Plain strings are stored as-is, like write_audit_log does.
+    With refresh=True new_value leaves the key and old/new are rewritten, for values with moving dates."""
     new_json = new if new is None or isinstance(new, str) else json.dumps(new)
     old_json = json.dumps(old) if old is not None else None
-    lookup = {"entity_name": entity, "entity_ref_id": str(ref), "action": action}
+    lookup = {"entity_name": entity, "entity_ref_id": str(ref), "action": action, "ip_address": ip}
     if not refresh:
         lookup["new_value"] = new_json
     row = db.query(AuditLog).filter_by(**lookup).first()
@@ -694,14 +703,13 @@ def _seed_tasks(db: Session, today: date, ctx: dict, rng: random.Random) -> dict
     next_monday = today + timedelta(days=7 - today.weekday())
     priorities = (PriorityLevel.LOW, PriorityLevel.MEDIUM, PriorityLevel.HIGH, PriorityLevel.CRITICAL)
 
+    # Fixed member order (not a DB query), so members added through the app never reshuffle the picks.
+    pools = {key: members for key, _, _, _, _, members in TEAMS} | {"alpha": ALPHA_MEMBERS}
     tasks = {}
     for project_key, rows in TASKS.items():
         project, team = projects[project_key], teams[project_key]
         lead = employees[team.lead_emp_id]
-        pool = [
-            employees[m.emp_id]
-            for m in db.query(TeamMember).filter_by(team_id=team.team_id).order_by(TeamMember.team_member_id)
-        ]
+        pool = [people[key] for key in pools[project_key]]
         for title, status, due, ms, who, rej, nw in rows:
             # Same number of draws per row, so every row sees the same random stream on every run.
             picked = rng.choice(pool)
@@ -1217,6 +1225,8 @@ def _seed_notifications(db: Session, today: date, ctx: dict) -> None:
         task = task_by_title(title)
         days = (today - task.due_date).days
         link = f"/tasks/{task.task_id}"
+        if task.overdue_notified_at is None:  # these notifications count as sent; the sweep skips the task
+            task.overdue_notified_at = now
         items.append((lead_of(task).account_id, "TASK_OVERDUE", "Task Overdue",
                       f"Task #{task.task_id} '{task.title}' is {days} day(s) overdue "
                       f"(due {task.due_date.isoformat()}).", link))
@@ -1267,17 +1277,17 @@ def _seed_notifications(db: Session, today: date, ctx: dict) -> None:
 
 LOGINS = (
     # email, ip address, hours ago
-    ("john.teamlead@company.com", "10.20.1.14", 1),
-    ("sarah.connor@company.com", "10.20.1.22", 2),
-    ("ravi.kumar@company.com", "10.20.3.41", 3),
-    ("pm@company.com", "10.20.2.7", 4),
-    ("hr@company.com", "10.20.4.3", 5),
-    ("executive@company.com", "10.20.9.2", 6),
-    ("admin@company.com", "10.20.8.1", 7),
-    ("sysadmin@company.com", "10.20.8.5", 8),
-    ("it.support@company.com", "10.20.8.9", 9),
-    ("ana.lopez@company.com", "10.20.1.30", 10),
-    ("mei.lin@company.com", "10.20.2.12", 11),
+    ("john.teamlead@company.com", "198.51.100.11", 1),
+    ("sarah.connor@company.com", "198.51.100.12", 2),
+    ("ravi.kumar@company.com", "198.51.100.13", 3),
+    ("pm@company.com", "198.51.100.14", 4),
+    ("hr@company.com", "198.51.100.15", 5),
+    ("executive@company.com", "198.51.100.16", 6),
+    ("admin@company.com", "198.51.100.17", 7),
+    ("sysadmin@company.com", "198.51.100.18", 8),
+    ("it.support@company.com", "198.51.100.19", 9),
+    ("ana.lopez@company.com", "198.51.100.20", 10),
+    ("mei.lin@company.com", "198.51.100.21", 11),
     ("client.globex@company.com", "198.51.100.23", 12),
 )
 
@@ -1488,6 +1498,13 @@ def seed_rich_demo(db: Session, today: date | None = None, password: str | None 
 
 
 def main() -> None:
+    url = os.environ["DATABASE_URL"]
+    if not url.startswith("sqlite") and os.getenv("SEED_ALLOW_NON_SQLITE") != "1":
+        sys.exit(
+            f"Refusing to seed {url.split('@')[-1]}: DATABASE_URL is not SQLite. "
+            "Set SEED_ALLOW_NON_SQLITE=1 to seed it deliberately."
+        )
+
     from app.db.base import Base
     from app.db.session import SessionLocal, engine
 

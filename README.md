@@ -54,17 +54,16 @@ A larger, idempotent demo that fills every dashboard. It runs the Wave 3 seed fi
 
 ```bash
 export DATABASE_URL=sqlite:///wms_dev.db   # set it deliberately: an exported URL is used as-is
-export REPORTS_DIR=uploads/reports         # optional; executive report files (this is the default)
 python scripts/seed_rich_demo.py
 ```
 
-If `DATABASE_URL` is unset the script uses `sqlite:///wms_dev.db` (it ignores the URL in `backend/.env`, which may point at the shared database) and creates the tables itself. Check your shell before running: an exported `DATABASE_URL` is seeded as-is. On PostgreSQL run `alembic upgrade head` first. Re-running it refreshes the data (dates move with the day you seed) instead of duplicating it. All accounts use `SEED_PASSWORD` (default `Password@123`).
+If `DATABASE_URL` is unset the script uses `sqlite:///wms_dev.db` (it ignores the URL in `backend/.env`, which may point at the shared database) and creates the tables itself. It refuses any non-SQLite URL unless you opt in with `SEED_ALLOW_NON_SQLITE=1`; for a PostgreSQL database you mean to seed, run `alembic upgrade head` first. Executive report files go to `REPORTS_DIR`, default `backend/uploads/reports`; set a custom value as an absolute path. Re-running it refreshes the data (dates move with the day you seed) instead of duplicating it. All accounts use `SEED_PASSWORD` (default `Password@123`).
 
 | Login | Role | What to look at |
 |---|---|---|
 | `admin@company.com` | Admin | User accounts, audit log, system parameters |
 | `sysadmin@company.com` | System Admin | Anomaly alerts (failed-login burst, backup failure), backup status, escalated tickets |
-| `it.support@company.com` | IT Support | Ticket queue; active 48h System Admin grant |
+| `it.support@company.com` | IT Support | Ticket queue; active 48h System Admin grant, which also opens System Admin routes and global scope for leave conflict checks |
 | `it.helpdesk@company.com` | IT Support | Assigned tickets; expired Admin grant |
 | `executive@company.com` | MNC Executive | Department breakdown, 3 generated reports |
 | `hr@company.com` | HR | Leave review queue, leave policies (Sabbatical inactive) |
@@ -93,5 +92,6 @@ Notes:
 - The failed-login anomaly only shows for 15 minutes after a seed run (the detector's window). Re-run the seed to bring it back.
 - Leave, task and milestone dates are relative to the day you seed.
 - Task submission and deliverable file URLs are placeholders; the files do not exist.
+- Re-running resets seeded rows (task, leave and ticket status, assignees, dates) but keeps what the app wrote meanwhile, such as audit rows and notifications. Seeded audit rows use `198.51.100.x` / `203.0.113.45` addresses, so they are easy to filter.
 
 Data summary (Wave 3 rows included): 42 accounts across all 9 roles, 6 departments, 31 employees, 4 PMs, 5 clients, 9 projects in every status, 28 milestones, 8 teams, 43 project assignments, 118 tasks in every status with 62 submissions and 30 comments, 7 leave types, 18 leave requests in every status, 18 support tickets with 57 activities, 10 deliverables with 6 client feedback entries, 52 notifications, 6 backup logs, 3 elevated access grants, 3 executive reports and about 325 audit log rows.
