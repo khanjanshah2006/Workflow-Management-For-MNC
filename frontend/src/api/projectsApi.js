@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient } from "./client.js";
 
 /**
  * List projects scoped to user role (returns raw project array).
@@ -149,6 +149,49 @@ export async function updateProjectStatus(projectId, status) {
   return apiClient.put(`/api/v1/projects/${projectId}/status`, { status });
 }
 
+/**
+ * Fetch project manager dashboard aggregates (US-23 / S5).
+ * GET /api/v1/projects/{id}/dashboard
+ *
+ * @param {number|string} projectId
+ * @returns {Promise<Object>} ProjectDashboardResponse
+ */
+export async function getProjectDashboard(projectId) {
+  if (!projectId) throw new Error("Project ID is required.");
+  return apiClient.get(`/api/v1/projects/${projectId}/dashboard`);
+}
+
+/**
+ * Fetch project risk assessment, repeatedly rejected tasks and blocked tasks (US-38 / S5).
+ * GET /api/v1/projects/{id}/risks
+ *
+ * @param {number|string} projectId
+ * @param {Object} [options]
+ * @param {number|string} [options.assignee_id] Filter by assigned employee
+ * @param {boolean} [options.include_done] Whether to include DONE tasks
+ * @returns {Promise<Object>} ProjectRisksResponse
+ */
+export async function getProjectRisks(projectId, { assignee_id, include_done } = {}) {
+  if (!projectId) throw new Error("Project ID is required.");
+  const query = new URLSearchParams();
+  if (assignee_id) query.append("assignee_id", String(assignee_id));
+  if (include_done) query.append("include_done", "true");
+  const qs = query.toString();
+  return apiClient.get(`/api/v1/projects/${projectId}/risks${qs ? `?${qs}` : ""}`);
+}
+
+/**
+ * Fetch cross-project team workload for project staff (US-39 / S5).
+ * GET /api/v1/projects/{id}/team-workload
+ *
+ * @param {number|string} projectId
+ * @returns {Promise<Array<Object>>} List of TeamWorkloadItem
+ */
+export async function getProjectTeamWorkload(projectId) {
+  if (!projectId) throw new Error("Project ID is required.");
+  return apiClient.get(`/api/v1/projects/${projectId}/team-workload`);
+}
+
 export const projectsApi = {
   getProjects,
   listProjects,
@@ -160,6 +203,9 @@ export const projectsApi = {
   getMilestones,
   createMilestone,
   updateProjectStatus,
+  getProjectDashboard,
+  getProjectRisks,
+  getProjectTeamWorkload,
 };
 
 export default projectsApi;
