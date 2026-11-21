@@ -24,6 +24,8 @@ export default function AppLayout() {
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
+      : location.pathname.startsWith("/leave")
+      ? "Leave Management"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
       : location.pathname.startsWith("/admin")
