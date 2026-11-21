@@ -13,7 +13,7 @@ All accounts share the password in env SEED_PASSWORD (default: Password@123).
 import os
 import random
 import sys
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
 if "DATABASE_URL" not in os.environ:
@@ -29,13 +29,24 @@ from app.core.security import hash_password
 from app.models.client import Client
 from app.models.department import Department
 from app.models.employee import Employee
-from app.models.enums import SkillProficiency, UserType
+from app.models.enums import (
+    MilestoneStatus,
+    PriorityLevel,
+    ProjectStatus,
+    SkillProficiency,
+    TeamStatus,
+    UserType,
+)
+from app.models.milestone import ProjectMilestone
+from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.skill import EmployeeSkill, Skill
 from app.models.system_parameter import SystemParameter
+from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
 from scripts.seed_wave3_demo import (  # noqa: F401  later phases use the rest
     DEFAULT_PASSWORD,
+    PROJECT_CODE,
     _account,
     _business_days,
     _get_or_create,
@@ -255,6 +266,171 @@ def _seed_people(db: Session, pw_hash: str) -> dict:
     return {"depts": depts, "accounts": accounts, "people": people, "pms": pms, "clients": clients}
 
 
+TEAMS = (
+    # key, name, project key, lead key, status, members. Each lead's ACTIVE team is created
+    # before any DISBANDED team they lead: TaskRepository.get_team_for_employee takes the first one.
+    ("phoenix", "Phoenix Squad", "phoenix", "ana", TeamStatus.ACTIVE, ("tom", "hannah", "ethan", "ravi")),
+    ("atlas", "Atlas Data Team", "atlas", "marcus", TeamStatus.ACTIVE, ("elena", "yuki", "zoe")),
+    ("orion", "Orion QA Team", "orion", "grace", TeamStatus.ACTIVE, ("aisha", "priya", "olivia")),
+    ("helios", "Helios Cloud Team", "helios", "omar", TeamStatus.ACTIVE, ("noah", "samir")),
+    ("zephyr", "Zephyr Security Team", "zephyr", "leo", TeamStatus.ACTIVE, ("ben", "lucas")),
+    ("vega", "Vega Portal Team", "vega", "marcus", TeamStatus.DISBANDED, ("zoe", "yuki")),
+    ("lyra", "Lyra HR Team", "lyra", "ana", TeamStatus.DISBANDED, ("hannah", "ethan")),
+)
+
+ASSIGNMENTS = (
+    # project key, person key, role, released_on offset from today (None = still staffed)
+    ("alpha", "carlos", "Developer", None),
+    ("alpha", "fatima", "Developer", None),
+    ("alpha", "ravi", "Integration Consultant", None),
+    ("alpha", "priya", "Test Automation", None),
+    ("phoenix", "ana", "Team Lead", None),
+    ("phoenix", "tom", "Mobile Developer", None),
+    ("phoenix", "hannah", "UI/UX Designer", None),
+    ("phoenix", "ethan", "Developer", None),
+    ("phoenix", "ravi", "Backend Developer", None),
+    ("phoenix", "noah", "DevOps Engineer", None),
+    ("phoenix", "aisha", "QA Engineer", None),
+    ("atlas", "marcus", "Team Lead", None),
+    ("atlas", "elena", "Data Engineer", None),
+    ("atlas", "yuki", "Data Analyst", None),
+    ("atlas", "zoe", "BI Developer", None),
+    ("atlas", "ravi", "Data Integration", None),
+    ("atlas", "olivia", "Data QA", None),
+    ("orion", "grace", "Team Lead", None),
+    ("orion", "aisha", "QA Engineer", None),
+    ("orion", "priya", "Test Automation", None),
+    ("orion", "olivia", "QA Analyst", None),
+    ("helios", "omar", "Team Lead", None),
+    ("helios", "noah", "DevOps Engineer", None),
+    ("helios", "samir", "Cloud Engineer", None),
+    ("zephyr", "leo", "Team Lead", None),
+    ("zephyr", "ben", "Security Engineer", None),
+    ("zephyr", "lucas", "Backend Developer", None),
+    ("zephyr", "ravi", "Backend Developer", None),
+    ("zephyr", "omar", "Cloud Security Advisor", None),
+    ("nova", "ravi", "Solution Architect", None),
+    ("nova", "hannah", "UI/UX Designer", None),
+    ("nova", "lucas", "Backend Developer", None),
+    ("nova", "fatima", "Frontend Developer", None),
+    ("vega", "marcus", "Team Lead", None),
+    ("vega", "yuki", "Data Analyst", None),
+    ("vega", "zoe", "BI Developer", -90),
+    ("lyra", "ana", "Team Lead", None),
+    ("lyra", "ethan", "Developer", None),
+    ("lyra", "hannah", "UI/UX Designer", -120),
+)
+
+
+def _seed_projects(db: Session, today: date, ctx: dict) -> dict:
+    """Projects in every status, milestones, teams and staffing.
+
+    Returns {"projects", "milestones", "teams"} keyed by short name, including the
+    wave3 rows: projects["alpha"], teams["alpha"] and milestones alpha_sprint1,
+    alpha_sprint2, alpha_uat.
+    """
+    people, pms, clients = ctx["people"], ctx["pms"], ctx["clients"]
+    now = datetime.now(timezone.utc)
+    next_monday = today + timedelta(days=7 - today.weekday())
+
+    def day(offset: int) -> date:
+        return today + timedelta(days=offset)
+
+    alpha = db.query(Project).filter_by(project_code=PROJECT_CODE).one()
+    projects = {"alpha": alpha}
+    for key, code, name, pm, client, start, end, priority, status, visible, description in (
+        ("phoenix", "PHOENIX-MOB", "Phoenix Mobile App", "priya", "globex", -90, 60,
+         PriorityLevel.HIGH, ProjectStatus.ACTIVE, True, "Customer-facing mobile app for Globex."),
+        ("atlas", "ATLAS-DWH", "Atlas Data Warehouse", "mei", "initech", -120, 90,
+         PriorityLevel.HIGH, ProjectStatus.ACTIVE, True, "Consolidate Initech reporting into one warehouse."),
+        ("orion", "ORION-QA", "Orion Test Automation", "daniel", "stark", -60, 75,
+         PriorityLevel.MEDIUM, ProjectStatus.ACTIVE, False, "Automated regression suite for Stark's TMS."),
+        ("helios", "HELIOS-CLOUD", "Helios Cloud Migration", "daniel", "umbrella", -150, 120,
+         PriorityLevel.MEDIUM, ProjectStatus.ON_HOLD, False, "Move Umbrella Health workloads to the cloud."),
+        ("zephyr", "ZEPHYR-SEC", "Zephyr Security Hardening", "daniel", "umbrella", -45, 50,
+         PriorityLevel.CRITICAL, ProjectStatus.ACTIVE, False, "Security audit and remediation programme."),
+        ("nova", "NOVA-CRM", "Nova CRM Rollout", "priya", "initech", 21, 200,
+         PriorityLevel.MEDIUM, ProjectStatus.PLANNED, False, "CRM rollout for Initech's sales teams."),
+        ("vega", "VEGA-PORTAL", "Vega Customer Portal", "mei", "globex", -300, -30,
+         PriorityLevel.MEDIUM, ProjectStatus.COMPLETED, True, "Self-service customer portal for Globex."),
+        ("lyra", "LYRA-HR", "Lyra HR Suite", "priya", "stark", -200, -120,
+         PriorityLevel.LOW, ProjectStatus.CANCELLED, False, "HR suite for Stark Logistics, cancelled by the client."),
+    ):
+        projects[key] = _get_or_create(
+            db, Project, {"project_code": code},
+            client_id=clients[client].client_id, pm_id=pms[pm].pm_id, name=name, description=description,
+            start_date=day(start), end_date=day(end), priority=priority, status=status,
+            is_team_visible_to_client=visible,
+        )
+
+    milestones = {
+        key: db.query(ProjectMilestone).filter_by(project_id=alpha.project_id, title=title).one()
+        for key, title in (
+            ("alpha_sprint1", "Sprint 1 Deliverables"),
+            ("alpha_sprint2", "Sprint 2 Deliverables"),
+            ("alpha_uat", "UAT Sign-off"),
+        )
+    }
+    # At-risk (pending, due today..today+3) once Phase 3 attaches open tasks:
+    # phoenix_beta and zephyr_pentest. atlas_reports falls inside next week (Elena's leave).
+    done, pending = MilestoneStatus.COMPLETED, MilestoneStatus.PENDING
+    for key, project, title, target, status in (
+        ("phoenix_design", "phoenix", "UX Design Sign-off", day(-40), done),
+        ("phoenix_alpha", "phoenix", "Alpha Build", day(-12), done),
+        ("phoenix_beta", "phoenix", "Beta Release", day(2), pending),
+        ("phoenix_launch", "phoenix", "App Store Launch", day(35), pending),
+        ("atlas_model", "atlas", "Data Model Approved", day(-50), done),
+        ("atlas_ingest", "atlas", "Source Ingestion Complete", day(-6), pending),
+        ("atlas_reports", "atlas", "Executive Reports Live", next_monday + timedelta(days=2), pending),
+        ("atlas_cutover", "atlas", "Production Cutover", day(60), pending),
+        ("orion_strategy", "orion", "Test Strategy Approved", day(-30), done),
+        ("orion_regression", "orion", "Regression Suite Automated", day(6), pending),
+        ("orion_perf", "orion", "Performance Baseline", day(20), pending),
+        ("orion_uat", "orion", "UAT Support Complete", day(50), pending),
+        ("helios_assessment", "helios", "Cloud Readiness Assessment", day(-70), done),
+        ("helios_landing", "helios", "Landing Zone Ready", day(-15), pending),
+        ("helios_wave1", "helios", "Wave 1 Migration", day(40), pending),
+        ("zephyr_kickoff", "zephyr", "Security Audit Kickoff", day(-25), done),
+        ("zephyr_pentest", "zephyr", "Penetration Test Report", day(1), pending),
+        ("zephyr_remediation", "zephyr", "Critical Findings Remediated", day(12), pending),
+        ("zephyr_compliance", "zephyr", "Compliance Certification", day(45), pending),
+        ("nova_kickoff", "nova", "Project Kickoff", day(21), pending),
+        ("nova_requirements", "nova", "Requirements Baseline", day(45), pending),
+        ("vega_design", "vega", "Portal Design Approved", day(-200), done),
+        ("vega_golive", "vega", "Portal Go-Live", day(-90), done),
+        ("vega_handover", "vega", "Support Handover", day(-35), done),
+        ("lyra_discovery", "lyra", "Discovery Workshop", day(-170), done),
+    ):
+        milestones[key] = _get_or_create(
+            db, ProjectMilestone, {"project_id": projects[project].project_id, "title": title},
+            target_date=target, status=status, is_deleted=False,
+            completed_at=now - (today - target) if status is done else None,
+        )
+
+    alpha_team = db.query(Team).filter_by(name="Alpha Core Team").one()
+    teams = {"alpha": alpha_team}
+    for member in ("carlos", "fatima"):
+        _get_or_create(db, TeamMember, {"team_id": alpha_team.team_id, "emp_id": people[member].emp_id})
+    for key, name, project, lead, status, members in TEAMS:
+        teams[key] = _get_or_create(
+            db, Team, {"name": name},
+            project_id=projects[project].project_id, lead_emp_id=people[lead].emp_id, status=status,
+            description=f"Delivery team for {projects[project].name}.",
+        )
+        for member in members:
+            _get_or_create(db, TeamMember, {"team_id": teams[key].team_id, "emp_id": people[member].emp_id})
+
+    # assigned_on is set explicitly so released_on >= assigned_on holds on every run.
+    for project, person, role, released in ASSIGNMENTS:
+        _get_or_create(
+            db, ProjectAssignment, {"project_id": projects[project].project_id, "emp_id": people[person].emp_id},
+            role_in_project=role, assigned_on=projects[project].start_date,
+            released_on=None if released is None else day(released),
+        )
+
+    return {"projects": projects, "milestones": milestones, "teams": teams}
+
+
 def seed_rich_demo(db: Session, today: date | None = None, password: str | None = None) -> None:
     today = today or date.today()
     password = password or os.getenv("SEED_PASSWORD", DEFAULT_PASSWORD)
@@ -263,7 +439,8 @@ def seed_rich_demo(db: Session, today: date | None = None, password: str | None 
     pw_hash = hash_password(password)  # bcrypt is slow: hash once, reuse for every account
     rng = random.Random(42)  # noqa: F841  later phases draw from it
 
-    _seed_people(db, pw_hash)
+    ctx = _seed_people(db, pw_hash)
+    ctx.update(_seed_projects(db, today, ctx))
 
     db.commit()
 
