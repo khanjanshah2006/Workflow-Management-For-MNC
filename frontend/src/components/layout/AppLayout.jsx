@@ -2,17 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import NotificationBell from "../common/NotificationBell";
 import { useAuth } from "../../context/AuthContext";
-
-const navigation = [
-  { path: "/dashboard", label: "Dashboard", icon: "▦" },
-  { path: "/projects", label: "Projects", icon: "◇" },
-  { path: "/team", label: "Team Roster", icon: "👥" },
-  { path: "/tasks", label: "Tasks", icon: "✓" },
-  { path: "/leave", label: "Leave", icon: "🗓️" },
-  { path: "/support", label: "IT Support", icon: "🛠" },
-  { path: "/profile", label: "My Profile", icon: "○" },
-  { path: "/admin/users", label: "User Admin", icon: "👤" },
-];
+import { navConfig, filterNavForRole } from "./navConfig";
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -26,18 +16,11 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
-  const activeNavigation = isTeamLeadOrManager
-    ? [
-        ...navigation.slice(0, 4),
-        { path: "/team-lead/tasks", label: "Team Tasks", icon: "📋" },
-        ...navigation.slice(4),
-      ]
-    : navigation;
+  const activeNavigation = filterNavForRole(navConfig, role);
 
   const currentPage =
-    navigation.find((item) => item.path === location.pathname)?.label ??
-    (location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team") ? "Team Tasks" : location.pathname.startsWith("/team")
+    activeNavigation.find((item) => item.path === location.pathname)?.label ??
+    (location.pathname.startsWith("/pm") ? "Risk Dashboard" : location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team") ? "Team Tasks" : location.pathname.startsWith("/team")
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"

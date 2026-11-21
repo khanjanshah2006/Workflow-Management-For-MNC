@@ -35,6 +35,12 @@ export const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     const currentNorm = normalizeRole(role || user?.user_type || user?.role || "");
     const isAuthorized = allowedRoles.some((allowed) => {
       const allowedNorm = normalizeRole(allowed);
+      if (
+        (allowedNorm === "PM" || allowedNorm === "PROJECT_MANAGER") &&
+        (currentNorm === "PM" || currentNorm === "PROJECT_MANAGER")
+      ) {
+        return true;
+      }
       return allowedNorm === currentNorm;
     });
 

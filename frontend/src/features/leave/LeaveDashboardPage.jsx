@@ -71,13 +71,12 @@ export default function LeaveDashboardPage() {
   const balances = balancesData?.balances || (Array.isArray(balancesData) ? balancesData : []);
 
   // Determine if user has an active employee profile
-  // Check if profile has emp_id or if user metadata has employee profile
+  // Check if profile or user session has emp_id / employee_id
   const hasEmployeeProfile = Boolean(
     profile?.emp_id ||
     profile?.employee_id ||
     user?.emp_id ||
-    user?.employee_id ||
-    !isProfileError
+    user?.employee_id
   );
 
   const handleApplySuccess = (_createdRequest) => {
