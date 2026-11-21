@@ -27,13 +27,17 @@ sys.path.insert(0, str(BACKEND_DIR))
 from sqlalchemy.orm import Session
 
 import app.models  # noqa: F401  Register all models on metadata
+from app.core import scope
 from app.core.security import hash_password
 from app.models.audit_log import AuditLog
 from app.models.client import Client
+from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.department import Department
 from app.models.employee import Employee
 from app.models.enums import (
     AuditAction,
+    DeliverableStatus,
+    FeedbackDecision,
     LeaveStatus,
     MilestoneStatus,
     PriorityLevel,
@@ -45,9 +49,11 @@ from app.models.enums import (
 )
 from app.models.leave import LeaveRequest, LeaveType
 from app.models.milestone import ProjectMilestone
+from app.models.notification import Notification
 from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.skill import EmployeeSkill, Skill
+from app.models.support import SupportTicket, TicketActivity
 from app.models.system_parameter import SystemParameter
 from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.team import Team, TeamMember
@@ -638,8 +644,10 @@ COMMENTS = (
 
 
 def _audit_once(db: Session, account_id, action, entity, ref, old, new, created_at, ip=None) -> AuditLog:
-    """Insert the audit row if missing (keyed by entity, ref, action, new_value), then backdate it."""
-    new_json = json.dumps(new) if new is not None else None
+    """Insert the audit row if missing (keyed by entity, ref, action, new_value), then backdate it.
+
+    Plain strings are stored as-is, like write_audit_log does."""
+    new_json = new if new is None or isinstance(new, str) else json.dumps(new)
     row = (
         db.query(AuditLog)
         .filter_by(entity_name=entity, entity_ref_id=str(ref), action=action, new_value=new_json)
@@ -891,6 +899,358 @@ def _seed_leave(db: Session, today: date, ctx: dict) -> dict:
     return {"leave_types": leave_types, "leaves": leaves}
 
 
+TICKETS = (
+    # subject, category, priority, status, reporter email, assignee key (ivan/nina), hours ago, escalation reason
+    ("VPN drops every 20 minutes", "network", "HIGH", "open",
+     "ravi.kumar@company.com", "ivan", 6, None),
+    ("Request access to Supabase staging", "access", "MEDIUM", "open",
+     "elena.petrova@company.com", None, 3, None),
+    ("Laptop battery is swelling", "hardware", "HIGH", "open",
+     "tom.becker@company.com", None, 20, None),
+    ("Outlook calendar not syncing on mobile", "software", "LOW", "open",
+     "hr@company.com", "nina", 28, None),
+    ("Need a Figma editor licence", "access", "LOW", "open",
+     "hannah.wright@company.com", None, 10, None),
+    ("Docker Desktop fails to start after update", "software", "MEDIUM", "in_progress",
+     "lucas.silva@company.com", "ivan", 30, None),
+    ("Second monitor keeps flickering", "hardware", "LOW", "in_progress",
+     "yuki.tanaka@company.com", "nina", 52, None),
+    ("Cannot connect to office Wi-Fi on floor 3", "network", "MEDIUM", "in_progress",
+     "pm@company.com", "nina", 26, None),
+    ("Jira SSO login loop", "access", "HIGH", "in_progress",
+     "marcus.chen@company.com", "ivan", 40, None),
+    ("Production database credentials expired", "access", "CRITICAL", "escalated",
+     "omar.haddad@company.com", "ivan", 36,
+     "Rotating production credentials needs System Administrator access."),
+    ("Suspicious login alerts on my account", "other", "HIGH", "escalated",
+     "ben.carter@company.com", "nina", 22,
+     "Possible account compromise; needs a security review by a System Administrator."),
+    ("Build server out of disk space", "software", "CRITICAL", "escalated",
+     "noah.fischer@company.com", "ivan", 14,
+     "Expanding the build host disk needs System Administrator access."),
+    ("Printer on floor 2 jams constantly", "hardware", "LOW", "resolved",
+     "aisha.khan@company.com", "nina", 120, None),
+    ("Password reset for QA test account", "access", "MEDIUM", "resolved",
+     "priya.nair@company.com", "ivan", 80, None),
+    ("Slow file share access from home", "network", "MEDIUM", "resolved",
+     "daniel.okafor@company.com", "ivan", 200, None),
+    ("Install Power BI Desktop", "software", "LOW", "resolved",
+     "zoe.martin@company.com", "nina", 150, None),
+    ("Keyboard keys sticking", "hardware", "LOW", "closed",
+     "sarah.connor@company.com", "nina", 400, None),
+    ("Email signature template request", "other", "LOW", "closed",
+     "mei.lin@company.com", "nina", 330, None),
+)
+
+# Status steps each ticket went through after creation.
+TICKET_PATHS = {
+    "open": (),
+    "in_progress": ("in_progress",),
+    "escalated": ("in_progress", "escalated"),
+    "resolved": ("in_progress", "resolved"),
+    "closed": ("in_progress", "resolved", "closed"),
+}
+
+DELIVERABLES = (
+    # project, title, milestone, status, days ago submitted, feedback (rating, comments) or None
+    ("phoenix", "UX Design Package", "phoenix_design", DeliverableStatus.ACCEPTED, 38,
+     (5, "Beautiful work, the onboarding flow is exactly what we wanted.")),
+    ("phoenix", "Alpha Build Release Notes", "phoenix_alpha", DeliverableStatus.CHANGES_REQUESTED, 11,
+     (3, "Please list the known issues and the supported OS versions.")),
+    ("phoenix", "Beta Build v0.9", "phoenix_beta", DeliverableStatus.SUBMITTED, 1, None),
+    ("vega", "Portal Go-Live Package", "vega_golive", DeliverableStatus.ACCEPTED, 88,
+     (4, "Smooth launch. A few minor styling issues remain.")),
+    ("vega", "Support Handover Pack", "vega_handover", DeliverableStatus.ACCEPTED, 34,
+     (5, "Very thorough handover, our support team is confident.")),
+    ("atlas", "Data Model Specification", "atlas_model", DeliverableStatus.ACCEPTED, 49,
+     (4, "Clear model. Please keep the data dictionary up to date.")),
+    ("orion", "Test Strategy Document", "orion_strategy", DeliverableStatus.CHANGES_REQUESTED, 29,
+     (2, "Coverage targets for the carrier integrations are missing.")),
+    ("helios", "Cloud Readiness Report", "helios_assessment", DeliverableStatus.SUBMITTED, 69, None),
+    ("zephyr", "Security Audit Scope", "zephyr_kickoff", DeliverableStatus.SUBMITTED, 24, None),
+)
+
+# These accounts keep every seeded notification unread, so each has several to show.
+ALWAYS_UNREAD = (
+    "sarah.connor@company.com", "ravi.kumar@company.com", "john.teamlead@company.com",
+    "pm@company.com", "hr@company.com",
+)
+
+
+def _seed_support(db: Session, ctx: dict) -> dict:
+    """Support tickets in every status with activity trails and SUPPORT_TICKET audit rows.
+
+    Returns {"tickets": {subject: SupportTicket}}.
+    """
+    accounts = ctx["accounts"]
+    now = datetime.now(timezone.utc)
+    taken = {number for (number,) in db.query(SupportTicket.ticket_number)}
+    next_number = 1
+
+    tickets = {}
+    for subject, category, priority, status, reporter_email, assignee, hours_ago, reason in TICKETS:
+        reporter = db.query(UserAccount).filter_by(email=reporter_email).one()
+        it_account = accounts[assignee].account_id if assignee else None
+        it_name = ctx["people"][assignee].full_name if assignee else None
+        created_at = now - timedelta(hours=hours_ago)
+        stamps = [created_at + timedelta(hours=3 * i) for i in range(len(TICKET_PATHS[status]) + 2)]
+
+        ticket = db.query(SupportTicket).filter_by(subject=subject).first()
+        if ticket is None:
+            while f"TKT-{next_number:03d}" in taken:
+                next_number += 1
+            ticket = SupportTicket(subject=subject, ticket_number=f"TKT-{next_number:03d}")
+            taken.add(ticket.ticket_number)
+            db.add(ticket)
+        ticket.description = f"{subject}. Reported through the IT service desk."
+        ticket.category, ticket.priority, ticket.status = category, priority, status
+        ticket.escalation_reason = reason
+        ticket.reporter_id, ticket.assigned_to = reporter.account_id, it_account
+        ticket.created_at = created_at
+        ticket.updated_at = stamps[-1] if TICKET_PATHS[status] else created_at
+        ticket.resolved_at = None
+        db.flush()
+        tickets[subject] = ticket
+
+        def activity(action, note, actor, at, old=None, new=None):
+            _get_or_create(
+                db, TicketActivity, {"ticket_id": ticket.id, "action": action, "note": note},
+                actor_id=actor, old_status=old, new_status=new, created_at=at,
+            )
+
+        activity("CREATED", f"Ticket {ticket.ticket_number} created by employee", reporter.account_id, created_at)
+        _audit_once(
+            db, reporter.account_id, AuditAction.CREATE, "SUPPORT_TICKET", ticket.id, None,
+            f"Created ticket {ticket.ticket_number}: {subject}", created_at,
+        )
+        if it_account:
+            activity("ASSIGNED", f"Assigned to {it_name}", it_account, stamps[1])
+        previous = "open"
+        for step, at in zip(TICKET_PATHS[status], stamps[2:]):
+            if step == "escalated":
+                activity("ESCALATED", reason, it_account, at)
+                _audit_once(
+                    db, it_account, AuditAction.UPDATE, "SUPPORT_TICKET", ticket.id, {"status": previous},
+                    {"status": "escalated", "escalation_reason": reason}, at,
+                )
+            else:
+                activity("STATUS_CHANGED", f"Status changed from {previous} to {step}", it_account, at, previous, step)
+            if step == "resolved":
+                ticket.resolved_at = at
+            previous = step
+
+    return {"tickets": tickets}
+
+
+def _seed_deliverables(db: Session, ctx: dict) -> dict:
+    """Client deliverables in every status, with client feedback rows and DELIVERABLE audit rows.
+
+    Returns {"deliverables": {title: Deliverable}}.
+    """
+    projects, milestones, teams = ctx["projects"], ctx["milestones"], ctx["teams"]
+    clients = {c.client_id: c for c in ctx["clients"].values()}
+    now = datetime.now(timezone.utc)
+
+    deliverables = {}
+    for project_key, title, milestone, status, days_ago, feedback in DELIVERABLES:
+        project = projects[project_key]
+        submitted_at = now - timedelta(days=days_ago)
+        deliverable = deliverables[title] = _get_or_create(
+            db, Deliverable, {"project_id": project.project_id, "title": title},
+            milestone_id=milestones[milestone].id, submitted_by=teams[project_key].lead_emp_id,
+            description=f"{title} for {project.name}.", version=1, status=status, submitted_at=submitted_at,
+            file_url=f"/uploads/deliverables/{project.project_code.lower()}-{_slug(title)}-v1.pdf",
+        )
+        if feedback is None:
+            continue
+        rating, comments = feedback
+        client = clients[project.client_id]
+        decision = FeedbackDecision(status.value)
+        given_at = submitted_at + timedelta(days=1)
+        _get_or_create(
+            db, DeliverableFeedback,
+            {"deliverable_id": deliverable.deliverable_id, "given_by_client_id": client.client_id},
+            decision=decision, comments=comments, rating=rating, given_at=given_at,
+        )
+        _audit_once(
+            db, client.account_id,
+            AuditAction.APPROVE if decision == FeedbackDecision.ACCEPTED else AuditAction.UPDATE,
+            "DELIVERABLE", deliverable.deliverable_id, {"status": "SUBMITTED"},
+            {"status": status.value, "decision": decision.value, "rating": rating, "comments": comments},
+            given_at,
+        )
+
+    return {"deliverables": deliverables}
+
+
+def _seed_notifications(db: Session, today: date, ctx: dict) -> None:
+    """Notifications in the exact type/title/message/link shapes the services write.
+
+    Keyed by (account_id, type, title, link): some messages embed dates that move with `today`,
+    so the message is refreshed instead. Rows are only ever inserted once, so is_read survives.
+    """
+    people, tasks, leaves = ctx["people"], ctx["tasks"], ctx["leaves"]
+    employees = {e.emp_id: e for e in people.values()}
+    now = datetime.now(timezone.utc)
+    items = []  # (account_id, type, title, message, link)
+
+    def by_email(account_ids):
+        return [
+            a.account_id
+            for a in db.query(UserAccount).filter(UserAccount.account_id.in_(account_ids)).order_by(UserAccount.email)
+        ]
+
+    # Leave (LeaveService._send_submission_notifications and LeaveReviewService).
+    sarah_pending = db.query(LeaveRequest).filter_by(
+        emp_id=people["sarah"].emp_id, status=LeaveStatus.PENDING).first()
+    sarah_rejected = db.query(LeaveRequest).filter_by(
+        emp_id=people["sarah"].emp_id, status=LeaveStatus.REJECTED).first()
+    for request in [leaves[k] for k in ("elena", "tom", "ben")] + [sarah_pending]:
+        employee = employees[request.emp_id]
+        recipients = set(scope.team_lead_account_ids_for(db, employee.emp_id))
+        recipients |= set(scope.staffing_pm_account_ids_for(db, employee.emp_id))
+        recipients.discard(employee.account_id)
+        projects_str = ", ".join(p.name for p in scope.staffing_projects_for(db, employee.emp_id)) or "None"
+        for account_id in by_email(recipients):
+            items.append((
+                account_id, "LEAVE_REQUESTED", f"Leave Request: {employee.full_name}",
+                f"{employee.full_name} has requested {request.total_days} day(s) of leave "
+                f"from {request.start_date} to {request.end_date}. Affected projects: {projects_str}.",
+                f"/team-lead/leave?request={request.leave_id}",
+            ))
+    for key in ("ravi", "carlos", "yuki"):
+        request, employee = leaves[key], people[key]
+        link = f"/leave/requests/{request.leave_id}"
+        items.append((employee.account_id, "LEAVE_APPROVED", "Leave request approved",
+                      f"Your leave request #{request.leave_id} was approved.", link))
+        if request.start_date < today:
+            continue  # past leave: staffing PMs were told long ago, keep the feed short
+        team_message = f"Leave request #{request.leave_id} was approved for {employee.full_name}."
+        for account_id in by_email(scope.staffing_pm_account_ids_for(db, employee.emp_id)):
+            items.append((account_id, "STAFF_LEAVE_APPROVED", "Team member leave approved", team_message, link))
+        if request.reviewed_by_account_id == ctx["accounts"]["hr"].account_id:
+            for account_id in by_email(scope.team_lead_account_ids_for(db, employee.emp_id)):
+                items.append((account_id, "LEAVE_APPROVED", "Team member leave approved", team_message, link))
+    for request in (leaves["zoe"], leaves["noah"], sarah_rejected):
+        items.append((
+            employees[request.emp_id].account_id, "LEAVE_REJECTED", "Leave request rejected",
+            f"Your leave request #{request.leave_id} was rejected. Reviewer remarks: {request.review_remarks}",
+            f"/leave/requests/{request.leave_id}",
+        ))
+    # HR is not a recipient in code; these copies give the HR inbox something to show.
+    for key in ("elena", "tom", "ben"):
+        request, employee = leaves[key], people[key]
+        projects_str = ", ".join(p.name for p in scope.staffing_projects_for(db, employee.emp_id)) or "None"
+        items.append((
+            ctx["accounts"]["hr"].account_id, "LEAVE_REQUESTED", f"Leave Request: {employee.full_name}",
+            f"{employee.full_name} has requested {request.total_days} day(s) of leave "
+            f"from {request.start_date} to {request.end_date}. Affected projects: {projects_str}.",
+            f"/team-lead/leave?request={request.leave_id}",
+        ))
+
+    # Tasks (TaskService, TaskCommentService, OverdueService).
+    def task_by_title(title):
+        return tasks.get(title) or db.query(Task).filter_by(title=title).one()
+
+    def lead_of(task):
+        return employees[task.created_by]
+
+    for title in ("Implement JWT Refresh Token Flow", "Audit Logging Integration", "API Documentation Review",
+                  "Offline Data Sync"):
+        task = task_by_title(title)
+        items.append((employees[task.assigned_to].account_id, "TASK_ASSIGNED", "New Task Assigned",
+                      f"You have been assigned to task #{task.task_id}: '{task.title}'", f"/tasks/{task.task_id}"))
+    for title in ("Vendor Master Data Migration", "In-App Purchase Sandbox Tests", "Pen Test Findings Report"):
+        task = task_by_title(title)
+        items.append((
+            lead_of(task).account_id, "TASK_SUBMITTED", "Task Submitted for Review",
+            f"Task #{task.task_id} '{task.title}' has been submitted for review by "
+            f"{employees[task.assigned_to].full_name}.",
+            f"/api/v1/tasks/{task.task_id}/submissions",
+        ))
+    for title in ("Purchase Order Approval Workflow",):
+        task = task_by_title(title)
+        items.append((lead_of(task).account_id, "TASK_RESUBMITTED", "Task Resubmitted",
+                      f"Task #{task.task_id} '{task.title}' has been resubmitted for review.",
+                      f"/api/v1/tasks/{task.task_id}"))
+    for title in ("Profile Photo Upload", "Data Quality Rules", "MFA Enforcement Rollout"):
+        task = task_by_title(title)
+        items.append((employees[task.assigned_to].account_id, "TASK_REJECTED", "Task Rejected - Revision Requested",
+                      f"Task #{task.task_id} '{task.title}' was rejected. Feedback: {task.rejection_feedback}",
+                      f"/tasks/{task.task_id}"))
+    for title in ("Beta Tester Invite Emails", "Web App Vulnerability Scan"):
+        task = task_by_title(title)
+        items.append((employees[task.assigned_to].account_id, "TASK_APPROVED", "Task Approved",
+                      f"Task #{task.task_id} '{task.title}' has been approved.", f"/tasks/{task.task_id}"))
+    for title in ("Deep Link Routing", "Network Topology Design", "Incident Response Playbook"):
+        task = task_by_title(title)
+        items.append((
+            lead_of(task).account_id, "TASK_BLOCKED", "Task Flagged as Blocked",
+            f"Task #{task.task_id} '{task.title}' has been flagged as BLOCKED. Reason: {task.blocker_reason}",
+            f"/tasks/{task.task_id}",
+        ))
+    for title, author, recipient in (
+        ("Offline Data Sync", "lead", "assignee"),
+        ("Flaky Test Triage", "assignee", "lead"),
+        ("Vendor Master Data Migration", "assignee", "lead"),
+    ):
+        task = task_by_title(title)
+        author_name = (lead_of(task) if author == "lead" else employees[task.assigned_to]).full_name
+        to = lead_of(task) if recipient == "lead" else employees[task.assigned_to]
+        items.append((to.account_id, "TASK_COMMENT", "New task comment",
+                      f"{author_name} commented on task #{task.task_id} '{task.title}'.", f"/tasks/{task.task_id}"))
+    for title in ("Role-Based Menu Permissions",):
+        task = task_by_title(title)
+        days = (today - task.due_date).days
+        link = f"/tasks/{task.task_id}"
+        items.append((lead_of(task).account_id, "TASK_OVERDUE", "Task Overdue",
+                      f"Task #{task.task_id} '{task.title}' is {days} day(s) overdue "
+                      f"(due {task.due_date.isoformat()}).", link))
+        items.append((employees[task.assigned_to].account_id, "TASK_DEADLINE_MISSED", "Deadline Missed",
+                      f"You missed the deadline for task #{task.task_id} '{task.title}' "
+                      f"(due {task.due_date.isoformat()}).", link))
+
+    # Escalated tickets notify every active System Administrator (SupportTicketService).
+    sysadmin = ctx["accounts"]["sysadmin"].account_id
+    for ticket in ctx["tickets"].values():
+        if ticket.status == "escalated":
+            items.append((
+                sysadmin, "TICKET_ESCALATED", f"Support Ticket {ticket.ticket_number} Escalated",
+                f"Support ticket '{ticket.ticket_number}' ({ticket.subject}) has been escalated "
+                f"to System Administrator. Reason: {ticket.escalation_reason}",
+                None,
+            ))
+
+    # Client feedback notifies the project's PM (ClientPortalService.submit_deliverable_feedback).
+    pm_accounts = {pm.pm_id: pm.account_id for pm in ctx["pms"].values()}
+    clients = {c.client_id: c for c in ctx["clients"].values()}
+    for deliverable in ctx["deliverables"].values():
+        if deliverable.status == DeliverableStatus.SUBMITTED:
+            continue
+        project = db.get(Project, deliverable.project_id)
+        label = "accepted" if deliverable.status == DeliverableStatus.ACCEPTED else "requested changes on"
+        items.append((
+            pm_accounts[project.pm_id], "DELIVERABLE_FEEDBACK",
+            f"Deliverable {deliverable.status.value}: {deliverable.title}",
+            f"{clients[project.client_id].company_name} {label} deliverable "
+            f"'{deliverable.title}' (v{deliverable.version}) for project {project.project_code}.",
+            f"/projects/{project.project_id}/deliverables",
+        ))
+
+    always_unread = {a.account_id for a in db.query(UserAccount).filter(UserAccount.email.in_(ALWAYS_UNREAD))}
+    for i, (account_id, type_, title, message, link) in enumerate(items):
+        row = db.query(Notification).filter_by(account_id=account_id, type=type_, title=title, link=link).first()
+        if row is None:
+            db.add(Notification(
+                account_id=account_id, type=type_, title=title, message=message, link=link,
+                is_read=account_id not in always_unread and i % 3 != 0,
+                created_at=now - timedelta(hours=2 * (len(items) - i)),
+            ))
+            db.flush()
+        else:
+            row.message = message
+
+
 def seed_rich_demo(db: Session, today: date | None = None, password: str | None = None) -> None:
     today = today or date.today()
     password = password or os.getenv("SEED_PASSWORD", DEFAULT_PASSWORD)
@@ -903,6 +1263,9 @@ def seed_rich_demo(db: Session, today: date | None = None, password: str | None 
     ctx.update(_seed_projects(db, today, ctx))
     ctx.update(_seed_tasks(db, today, ctx, rng))
     ctx.update(_seed_leave(db, today, ctx))
+    ctx.update(_seed_support(db, ctx))
+    ctx.update(_seed_deliverables(db, ctx))
+    _seed_notifications(db, today, ctx)
 
     db.commit()
 
