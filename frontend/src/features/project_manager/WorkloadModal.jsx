@@ -85,14 +85,9 @@ export default function WorkloadModal({ isOpen = false, projectId = null, onClos
 
                     {/* "Open here / open everywhere" counts */}
                     <div className="pm-workload-metrics-row">
-                      <div className="pm-workload-stat">
-                        <span className="pm-stat-count">{member.open_tasks_in_project}</span>
-                        <span className="pm-stat-label">open here</span>
-                      </div>
-                      <span className="pm-stat-divider">/</span>
-                      <div className="pm-workload-stat">
-                        <span className="pm-stat-count">{member.open_tasks_all_projects}</span>
-                        <span className="pm-stat-label">open everywhere</span>
+                      <div className="pm-workload-counts-summary">
+                        <span className="pm-stat-count">{member.open_tasks_in_project}</span> open here /{" "}
+                        <span className="pm-stat-count">{member.open_tasks_all_projects}</span> open everywhere
                       </div>
                       <span className="pm-stat-divider">·</span>
                       <div className="pm-workload-stat">

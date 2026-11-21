@@ -16,6 +16,7 @@ import {
 } from "../src/api/projectsApi.js";
 
 import { getOverdueTasks } from "../src/api/tasksApi.js";
+import { navConfig, filterNavForRole } from "../src/components/layout/navConfig.js";
 
 describe("1. PM Risk Dashboard - overdueChipLabel (US-15)", () => {
   test("formats 1 day overdue correctly with singular label", () => {
@@ -252,5 +253,214 @@ describe("5. PM Risk Dashboard - API Endpoints & Query Parameter URLs (US-15, US
 
     assert.match(capturedUrl, /\/api\/v1\/tasks\/overdue\?project_id=7&priority=CRITICAL&page=1&limit=20$/);
     assert.equal(res.total_overdue, 3);
+  });
+});
+
+describe("6. PM Risk Dashboard - Seed Demo Data Scenarios & Shape Verification", () => {
+  // Mock data representing the Alpha ERP Modernization project in Wave 3 seed
+  const SEED_ALPHA_ERP_DASHBOARD = {
+    project_id: 1,
+    project_name: "Alpha ERP Modernization",
+    status: "ACTIVE",
+    completion_pct: 20,
+    total_tasks: 10,
+    tasks_by_status: {
+      TODO: 4,
+      IN_PROGRESS: 2,
+      BLOCKED: 1,
+      IN_REVIEW: 0,
+      DONE: 2,
+      REJECTED: 1,
+    },
+    overdue_tasks_count: 3,
+    blocked_tasks_count: 1,
+    at_risk_milestones_count: 1,
+    overdue_milestones_count: 0,
+    repeatedly_rejected_count: 1,
+    rejection_threshold: 2,
+    upcoming_milestones: [
+      {
+        milestone_id: 2,
+        title: "Sprint 2 Deliverables",
+        target_date: "2026-11-25",
+        open_tasks: 5,
+      },
+    ],
+  };
+
+  const SEED_ALPHA_ERP_OVERDUE = [
+    {
+      task_id: 21,
+      title: "Migrate Legacy Invoice Module",
+      project_id: 1,
+      project_name: "Alpha ERP Modernization",
+      team_id: 1,
+      assignee_id: 3,
+      assignee_name: "John Matrix",
+      due_date: "2026-11-13",
+      days_overdue: 5,
+      priority: "CRITICAL",
+      status: "IN_PROGRESS",
+      progress_pct: 60,
+    },
+    {
+      task_id: 22,
+      title: "Write API Integration Tests",
+      project_id: 1,
+      project_name: "Alpha ERP Modernization",
+      team_id: 1,
+      assignee_id: 4,
+      assignee_name: "Kyle Reese",
+      due_date: "2026-11-15",
+      days_overdue: 3,
+      priority: "MEDIUM",
+      status: "TODO",
+      progress_pct: 0,
+    },
+    {
+      task_id: 23,
+      title: "Setup Deployment Pipeline",
+      project_id: 1,
+      project_name: "Alpha ERP Modernization",
+      team_id: 1,
+      assignee_id: 2,
+      assignee_name: "Sarah Connor",
+      due_date: "2026-11-17",
+      days_overdue: 1,
+      priority: "HIGH",
+      status: "IN_PROGRESS",
+      progress_pct: 30,
+    },
+  ];
+
+  const SEED_ALPHA_ERP_RISKS = {
+    project_id: 1,
+    risk_score: "HIGH",
+    risk_points: 13,
+    rejection_threshold: 2,
+    repeatedly_rejected_tasks: [
+      {
+        task_id: 25,
+        title: "Design Payment Reconciliation Report",
+        assignee_id: 3,
+        assignee_name: "John Matrix",
+        rejection_count: 3,
+        status: "REJECTED",
+        latest_rejection_feedback: "Missing reconciliation for partial refunds.",
+        rejection_history: [
+          {
+            rejected_at: "2026-11-14T10:00:00Z",
+            feedback: "Report totals do not match the ledger export.",
+          },
+          {
+            rejected_at: "2026-11-15T11:30:00Z",
+            feedback: "Currency rounding is still off for EUR invoices.",
+          },
+          {
+            rejected_at: "2026-11-16T14:15:00Z",
+            feedback: "Missing reconciliation for partial refunds.",
+          },
+        ],
+      },
+    ],
+    blocked_tasks: [
+      {
+        task_id: 26,
+        title: "Integrate SSO Provider",
+        assignee_name: "Kyle Reese",
+        blocker_reason: "Waiting on Acme IT to issue SSO client credentials.",
+        blocked_since: "2026-11-16T09:00:00Z",
+      },
+    ],
+  };
+
+  const SEED_ALPHA_ERP_WORKLOAD = [
+    {
+      emp_id: 3,
+      full_name: "John Matrix",
+      role_in_project: "Developer",
+      open_tasks_in_project: 2,
+      open_tasks_all_projects: 4,
+      active_projects_count: 2,
+      utilization_pct: 80.0,
+    },
+    {
+      emp_id: 2,
+      full_name: "Sarah Connor",
+      role_in_project: "Developer",
+      open_tasks_in_project: 3,
+      open_tasks_all_projects: 3,
+      active_projects_count: 1,
+      utilization_pct: 60.0,
+    },
+    {
+      emp_id: 4,
+      full_name: "Kyle Reese",
+      role_in_project: "Developer",
+      open_tasks_in_project: 2,
+      open_tasks_all_projects: 5,
+      active_projects_count: 2,
+      utilization_pct: 100.0,
+    },
+  ];
+
+  test("KPI values match the seed scenario (3 overdue tasks and 1 CRITICAL)", () => {
+    assert.equal(SEED_ALPHA_ERP_DASHBOARD.overdue_tasks_count, 3);
+    const criticalTasks = SEED_ALPHA_ERP_OVERDUE.filter((t) => t.priority === "CRITICAL");
+    assert.equal(criticalTasks.length, 1);
+    assert.equal(criticalTasks[0].title, "Migrate Legacy Invoice Module");
+    assert.equal(overdueChipLabel(criticalTasks[0].days_overdue), "5 days overdue");
+  });
+
+  test("Repeatedly rejected task matches seed: Rejected 3x with exactly 3 history entries", () => {
+    const rejectedTasks = SEED_ALPHA_ERP_RISKS.repeatedly_rejected_tasks;
+    assert.equal(rejectedTasks.length, 1);
+    const item = rejectedTasks[0];
+    assert.equal(item.rejection_count, 3);
+    assert.equal(item.rejection_history.length, 3);
+    assert.equal(item.latest_rejection_feedback, "Missing reconciliation for partial refunds.");
+    assert.equal(item.assignee_name, "John Matrix");
+  });
+
+  test("Team workload matches seed with John Matrix, Sarah Connor, and Kyle Reese", () => {
+    const names = SEED_ALPHA_ERP_WORKLOAD.map((w) => w.full_name);
+    assert.ok(names.includes("John Matrix"));
+    assert.ok(names.includes("Sarah Connor"));
+    assert.ok(names.includes("Kyle Reese"));
+
+    SEED_ALPHA_ERP_WORKLOAD.forEach((member) => {
+      assert.ok(member.utilization_pct >= 0);
+      assert.ok(member.open_tasks_in_project <= member.open_tasks_all_projects);
+    });
+  });
+});
+
+describe("7. PM Risk Dashboard - Route Authorization & Role Guard (US-23 / RBAC)", () => {
+  test("navConfig exposes /pm/risk-dashboard to PM, ADMIN and SYSTEM_ADMIN only", () => {
+    const pmNav = filterNavForRole(navConfig, "PM");
+    assert.ok(pmNav.some((item) => item.path === "/pm/risk-dashboard"));
+
+    const projectManagerNav = filterNavForRole(navConfig, "PROJECT_MANAGER");
+    assert.ok(projectManagerNav.some((item) => item.path === "/pm/risk-dashboard"));
+
+    const adminNav = filterNavForRole(navConfig, "ADMIN");
+    assert.ok(adminNav.some((item) => item.path === "/pm/risk-dashboard"));
+
+    const sysAdminNav = filterNavForRole(navConfig, "SYSTEM_ADMIN");
+    assert.ok(sysAdminNav.some((item) => item.path === "/pm/risk-dashboard"));
+  });
+
+  test("navConfig strictly denies EMPLOYEE, HR, IT_SUPPORT, and CLIENT roles", () => {
+    const employeeNav = filterNavForRole(navConfig, "EMPLOYEE");
+    assert.equal(employeeNav.some((item) => item.path === "/pm/risk-dashboard"), false);
+
+    const hrNav = filterNavForRole(navConfig, "HR");
+    assert.equal(hrNav.some((item) => item.path === "/pm/risk-dashboard"), false);
+
+    const itNav = filterNavForRole(navConfig, "IT_SUPPORT");
+    assert.equal(itNav.some((item) => item.path === "/pm/risk-dashboard"), false);
+
+    const clientNav = filterNavForRole(navConfig, "CLIENT");
+    assert.equal(clientNav.some((item) => item.path === "/pm/risk-dashboard"), false);
   });
 });

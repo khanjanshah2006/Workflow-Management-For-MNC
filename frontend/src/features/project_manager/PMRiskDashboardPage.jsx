@@ -68,7 +68,6 @@ export default function PMRiskDashboardPage() {
   // 2. Fetch Project Dashboard Aggregates (US-23)
   const {
     data: dashboard,
-    isLoading: isLoadingDashboard,
     isError: isDashboardError,
     error: dashboardError,
   } = useQuery({
@@ -102,10 +101,12 @@ export default function PMRiskDashboardPage() {
   const currentRiskScore = risks?.risk_score || "LOW";
   const tone = riskTone(currentRiskScore);
 
-  const handleReassignSuccess = (data) => {
-    toast?.success
-      ? toast.success(`Task successfully reassigned.`)
-      : alert(`Task reassigned successfully.`);
+  const handleReassignSuccess = () => {
+    if (toast?.success) {
+      toast.success("Task successfully reassigned.");
+    } else {
+      alert("Task reassigned successfully.");
+    }
 
     // Invalidate affected queries
     queryClient.invalidateQueries({ queryKey: ["tasks", "overdue", selectedProjectId] });
