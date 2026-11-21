@@ -130,6 +130,7 @@ describe("1. Role-Aware Navigation Filtering (filterNavForRole)", () => {
     const empPaths = empNav.map((i) => i.path);
     assert.equal(empPaths.includes("/dashboard"), true);
     assert.equal(empPaths.includes("/tasks"), true);
+    assert.equal(empPaths.includes("/leave"), true);
     assert.equal(empPaths.includes("/team"), true);
     assert.equal(empPaths.includes("/profile"), true);
     assert.equal(empPaths.includes("/support"), true);
@@ -141,6 +142,7 @@ describe("1. Role-Aware Navigation Filtering (filterNavForRole)", () => {
     const tlNav = filterNavForRole(navConfig, "TEAM_LEAD");
     const tlPaths = tlNav.map((i) => i.path);
     assert.equal(tlPaths.includes("/team-lead/tasks"), true);
+    assert.equal(tlPaths.includes("/leave"), true);
 
     // PM check (supports PM and PROJECT_MANAGER)
     const pmNav = filterNavForRole(navConfig, "PM");
