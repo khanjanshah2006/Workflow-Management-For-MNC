@@ -1,4 +1,4 @@
-import { apiClient } from "./client";
+import { apiClient } from "./client.js";
 
 /**
  * List projects scoped to user role (returns raw project array).
