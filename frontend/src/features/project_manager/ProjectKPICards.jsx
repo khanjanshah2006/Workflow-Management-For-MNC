@@ -116,7 +116,7 @@ export default function ProjectKPICards({ dashboard = null }) {
           <div className="pm-kpi-content">
             <div className="pm-kpi-value">{at_risk_milestones_count}</div>
             <div className="pm-kpi-title">At-Risk Milestones</div>
-            <div className="pm-kpi-meta">Due within 14 days with open work</div>
+            <div className="pm-kpi-meta">Due within 3 days with open work</div>
           </div>
         </div>
 
