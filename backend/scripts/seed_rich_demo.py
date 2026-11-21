@@ -34,6 +34,7 @@ from app.models.department import Department
 from app.models.employee import Employee
 from app.models.enums import (
     AuditAction,
+    LeaveStatus,
     MilestoneStatus,
     PriorityLevel,
     ProjectStatus,
@@ -42,6 +43,7 @@ from app.models.enums import (
     TeamStatus,
     UserType,
 )
+from app.models.leave import LeaveRequest, LeaveType
 from app.models.milestone import ProjectMilestone
 from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
@@ -791,6 +793,104 @@ def _seed_tasks(db: Session, today: date, ctx: dict, rng: random.Random) -> dict
     return {"tasks": tasks}
 
 
+LEAVE_TYPES = (
+    # key, name, yearly_quota, is_paid, is_active, description. Annual/Sick/Casual come from wave3.
+    ("parental", "Parental", 30, True, True, "Leave for the birth or adoption of a child."),
+    ("bereavement", "Bereavement", 5, True, True, "Leave following the death of a family member."),
+    ("unpaid", "Unpaid", 30, False, True, "Unpaid leave, subject to approval."),
+    ("sabbatical", "Sabbatical", 60, False, False, "Extended career break. Currently not offered."),
+)
+
+LEAVE_REQUESTS = (
+    # person, leave type, start/end as days from next Monday, status, reviewer key, review remarks, reason.
+    # One request per person, so no overlaps and every quota holds. Sarah and Kyle are wave3's.
+    ("elena", "annual", 0, 4, LeaveStatus.PENDING, None, None,
+     "Family trip abroad that was booked months ago."),
+    ("tom", "bereavement", 1, 2, LeaveStatus.PENDING, None, None,
+     "Attending a family funeral out of town."),
+    ("aisha", "annual", 14, 16, LeaveStatus.PENDING, None, None,
+     "Short break to move into a new apartment."),
+    ("samir", "casual", 7, 7, LeaveStatus.PENDING, None, None,
+     "Personal errands that need a full working day."),
+    ("ben", "annual", 21, 25, LeaveStatus.PENDING, None, None,
+     "Year-end holiday with family."),
+    ("ravi", "annual", 7, 11, LeaveStatus.APPROVED, "ana", "Approved. Please hand over your Phoenix tasks.",
+     "Attending my sister's wedding in Pune."),
+    ("carlos", "parental", 14, 18, LeaveStatus.APPROVED, "hr", "Approved. Congratulations!",
+     "Paternity leave for the birth of our first child."),
+    ("yuki", "sick", -13, -12, LeaveStatus.APPROVED, "marcus", "Get well soon.",
+     "Down with the flu, doctor advised rest."),
+    ("olivia", "annual", -35, -33, LeaveStatus.APPROVED, "grace", "Approved, enjoy the time off.",
+     "Long weekend trip planned with friends."),
+    ("lucas", "casual", -38, -38, LeaveStatus.APPROVED, "hr", "Approved.",
+     "Need a day to sort out visa paperwork."),
+    ("zoe", "annual", 0, 4, LeaveStatus.REJECTED, "marcus",
+     "Elena is already out that week and the executive reports milestone is due. Please pick another week.",
+     "Taking a week off to visit my parents."),
+    ("noah", "unpaid", 7, 11, LeaveStatus.REJECTED, "hr",
+     "Unpaid leave cannot be approved while the Helios restart plan is being prepared.",
+     "Extra week off to extend a planned trip."),
+    ("ethan", "annual", 14, 15, LeaveStatus.CANCELLED, None, None,
+     "Concert trip, may not be able to go."),
+    ("priya", "casual", -21, -21, LeaveStatus.CANCELLED, None, None,
+     "Home repair appointment, later rescheduled."),
+)
+
+
+def _seed_leave(db: Session, today: date, ctx: dict) -> dict:
+    """Leave types and requests in every status, with the review audit rows LeaveReviewService writes.
+
+    Returns {"leave_types": {key: LeaveType}, "leaves": {person key: LeaveRequest}}.
+    leave_types includes wave3's annual, sick and casual.
+    """
+    people, accounts = ctx["people"], ctx["accounts"]
+    now = datetime.now(timezone.utc)
+    next_monday = today + timedelta(days=7 - today.weekday())
+
+    leave_types = {
+        key: db.query(LeaveType).filter_by(name=name).one()
+        for key, name in (("annual", "Annual"), ("sick", "Sick"), ("casual", "Casual"))
+    }
+    for key, name, quota, is_paid, is_active, description in LEAVE_TYPES:
+        leave_types[key] = _get_or_create(
+            db, LeaveType, {"name": name},
+            yearly_quota=quota, is_paid=is_paid, is_active=is_active, description=description,
+        )
+
+    leaves = {}
+    for person, leave_type, start, end, status, reviewer, remarks, reason in LEAVE_REQUESTS:
+        employee = people[person]
+        start_date = next_monday + timedelta(days=start)
+        end_date = next_monday + timedelta(days=end)
+        applied_at = min(
+            datetime.combine(start_date - timedelta(days=10), time(10, 0), tzinfo=timezone.utc),
+            now - timedelta(days=2),
+        )
+        decided = status in (LeaveStatus.APPROVED, LeaveStatus.REJECTED)
+        reviewer_account = accounts[reviewer].account_id if reviewer else None
+        reviewed_at = applied_at + timedelta(days=1) if decided else None
+        leaves[person] = request = _get_or_create(
+            db, LeaveRequest, {"emp_id": employee.emp_id, "reason": reason},
+            leave_type_id=leave_types[leave_type].leave_type_id, start_date=start_date, end_date=end_date,
+            total_days=_business_days(start_date, end_date), status=status, applied_at=applied_at,
+            reviewed_by_account_id=reviewer_account, reviewed_at=reviewed_at, review_remarks=remarks,
+        )
+
+        if decided:
+            action = AuditAction.APPROVE if status == LeaveStatus.APPROVED else AuditAction.UPDATE
+            _audit_once(
+                db, reviewer_account, action, "LEAVE_REQUEST", request.leave_id,
+                {"status": "PENDING"}, {"status": status.value, "review_remarks": remarks}, reviewed_at,
+            )
+        elif status == LeaveStatus.CANCELLED:
+            _audit_once(
+                db, employee.account_id, AuditAction.UPDATE, "LEAVE_REQUEST", request.leave_id,
+                {"status": "PENDING"}, {"status": "CANCELLED"}, applied_at + timedelta(hours=6),
+            )
+
+    return {"leave_types": leave_types, "leaves": leaves}
+
+
 def seed_rich_demo(db: Session, today: date | None = None, password: str | None = None) -> None:
     today = today or date.today()
     password = password or os.getenv("SEED_PASSWORD", DEFAULT_PASSWORD)
@@ -802,6 +902,7 @@ def seed_rich_demo(db: Session, today: date | None = None, password: str | None 
     ctx = _seed_people(db, pw_hash)
     ctx.update(_seed_projects(db, today, ctx))
     ctx.update(_seed_tasks(db, today, ctx, rng))
+    ctx.update(_seed_leave(db, today, ctx))
 
     db.commit()
 
