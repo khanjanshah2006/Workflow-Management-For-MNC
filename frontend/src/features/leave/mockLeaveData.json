@@ -1,0 +1,141 @@
+{
+  "balances": [
+    {
+      "leave_type_id": 1,
+      "leave_type_name": "Annual Leave",
+      "yearly_quota": 20,
+      "used_days": 5,
+      "pending_days": 2,
+      "available_days": 13,
+      "is_paid": true
+    },
+    {
+      "leave_type_id": 2,
+      "leave_type_name": "Sick Leave",
+      "yearly_quota": 10,
+      "used_days": 2,
+      "pending_days": 0,
+      "available_days": 8,
+      "is_paid": true
+    },
+    {
+      "leave_type_id": 3,
+      "leave_type_name": "Casual Leave",
+      "yearly_quota": 5,
+      "used_days": 5,
+      "pending_days": 0,
+      "available_days": 0,
+      "is_paid": true
+    },
+    {
+      "leave_type_id": 4,
+      "leave_type_name": "Unpaid Leave",
+      "yearly_quota": 30,
+      "used_days": 0,
+      "pending_days": 0,
+      "available_days": 30,
+      "is_paid": false
+    }
+  ],
+  "policies": [
+    {
+      "leave_type_id": 1,
+      "name": "Annual Leave",
+      "yearly_quota": 20,
+      "is_paid": true,
+      "description": "Standard annual paid vacation quota",
+      "is_active": true
+    },
+    {
+      "leave_type_id": 2,
+      "name": "Sick Leave",
+      "yearly_quota": 10,
+      "is_paid": true,
+      "description": "Medical and health related leaves",
+      "is_active": true
+    },
+    {
+      "leave_type_id": 3,
+      "name": "Casual Leave",
+      "yearly_quota": 5,
+      "is_paid": true,
+      "description": "Short urgent personal leaves",
+      "is_active": true
+    },
+    {
+      "leave_type_id": 4,
+      "name": "Unpaid Leave",
+      "yearly_quota": 30,
+      "is_paid": false,
+      "description": "Extended unpaid leave of absence",
+      "is_active": true
+    }
+  ],
+  "requests": {
+    "items": [
+      {
+        "leave_id": 101,
+        "emp_id": 12,
+        "leave_type_id": 1,
+        "leave_type_name": "Annual Leave",
+        "start_date": "2026-12-15",
+        "end_date": "2026-12-18",
+        "total_days": 4,
+        "reason": "Year-end family trip and holiday rest.",
+        "status": "PENDING",
+        "applied_at": "2026-11-19T09:30:00Z",
+        "reviewed_at": null,
+        "reviewed_by_account_id": null,
+        "review_remarks": null
+      },
+      {
+        "leave_id": 102,
+        "emp_id": 12,
+        "leave_type_id": 2,
+        "leave_type_name": "Sick Leave",
+        "start_date": "2026-11-05",
+        "end_date": "2026-11-06",
+        "total_days": 2,
+        "reason": "Seasonal flu recovery under physician care.",
+        "status": "APPROVED",
+        "applied_at": "2026-11-04T08:00:00Z",
+        "reviewed_at": "2026-11-04T11:20:00Z",
+        "reviewed_by_account_id": "a0000000-0000-0000-0000-000000000001",
+        "review_remarks": "Approved. Get well soon."
+      },
+      {
+        "leave_id": 103,
+        "emp_id": 12,
+        "leave_type_id": 3,
+        "leave_type_name": "Casual Leave",
+        "start_date": "2026-10-12",
+        "end_date": "2026-10-14",
+        "total_days": 3,
+        "reason": "Personal urgent matters at home town.",
+        "status": "REJECTED",
+        "applied_at": "2026-10-08T14:10:00Z",
+        "reviewed_at": "2026-10-09T10:00:00Z",
+        "reviewed_by_account_id": "a0000000-0000-0000-0000-000000000001",
+        "review_remarks": "Project milestone deadline on October 14. Please reschedule."
+      },
+      {
+        "leave_id": 104,
+        "emp_id": 12,
+        "leave_type_id": 1,
+        "leave_type_name": "Annual Leave",
+        "start_date": "2026-08-03",
+        "end_date": "2026-08-05",
+        "total_days": 3,
+        "reason": "Summer holiday with extended family.",
+        "status": "CANCELLED",
+        "applied_at": "2026-07-20T11:00:00Z",
+        "reviewed_at": null,
+        "reviewed_by_account_id": null,
+        "review_remarks": null
+      }
+    ],
+    "total": 4,
+    "page": 1,
+    "limit": 20
+  }
+}

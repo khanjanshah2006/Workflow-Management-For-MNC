@@ -5,6 +5,7 @@ import { getPendingLeaveRequests, getLeaveConflicts } from "../../api/leaveApi";
 import LeaveConflictDrawer from "./LeaveConflictDrawer";
 import ApproveLeaveModal from "./ApproveLeaveModal";
 import RejectLeaveModal from "./RejectLeaveModal";
+import "../leave/leave.css";
 import "./leaveTriage.css";
 
 /**

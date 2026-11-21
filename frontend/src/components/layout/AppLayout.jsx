@@ -2,16 +2,7 @@ import { useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import NotificationBell from "../common/NotificationBell";
 import { useAuth } from "../../context/AuthContext";
-
-const navigation = [
-  { path: "/dashboard", label: "Dashboard", icon: "▦" },
-  { path: "/projects", label: "Projects", icon: "◇" },
-  { path: "/team", label: "Team Roster", icon: "👥" },
-  { path: "/tasks", label: "Tasks", icon: "✓" },
-  { path: "/support", label: "IT Support", icon: "🛠" },
-  { path: "/profile", label: "My Profile", icon: "○" },
-  { path: "/admin/users", label: "User Admin", icon: "👤" },
-];
+import { navConfig, filterNavForRole } from "./navConfig";
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -25,34 +16,22 @@ export default function AppLayout() {
     navigate("/login", { replace: true });
   };
 
-  const userRole = (role || "").toUpperCase();
-  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes(userRole);
-  const isLeaveTriageRole = ["TEAM_LEAD", "HR", "SYSTEM_ADMIN", "ADMIN"].includes(userRole);
-
-  const extraNavItems = [];
-  if (isTeamLeadOrManager) {
-    extraNavItems.push({ path: "/team-lead/tasks", label: "Team Tasks", icon: "📋" });
-  }
-  if (isLeaveTriageRole) {
-    extraNavItems.push({ path: "/team-lead/leave", label: "Leave Triage", icon: "⚖️" });
-  }
-
-  const activeNavigation = [
-    ...navigation.slice(0, 4),
-    ...extraNavItems,
-    ...navigation.slice(4),
-  ];
+  const activeNavigation = filterNavForRole(navConfig, role);
 
   const currentPage =
     activeNavigation.find((item) => item.path === location.pathname)?.label ??
     (location.pathname.startsWith("/team-lead/leave")
       ? "Leave Triage"
+      : location.pathname.startsWith("/pm")
+      ? "Risk Dashboard"
       : location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team")
       ? "Team Tasks"
       : location.pathname.startsWith("/team")
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
+      : location.pathname.startsWith("/leave")
+      ? "Leave Management"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
       : location.pathname.startsWith("/admin")

@@ -12,7 +12,7 @@
  */
 
 import { useSyncExternalStore } from "react";
-import { getStoredToken, setStoredToken, setTokenGetter } from "../api/client";
+import { getStoredToken, setStoredToken, setTokenGetter } from "../api/client.js";
 
 // In-memory stable snapshot reference
 function getInitialSnapshot() {
@@ -176,6 +176,84 @@ export function isAdmin(roleOrUser) {
  */
 export function canCreateProject(roleOrUser) {
   return isProjectManager(roleOrUser) || isAdmin(roleOrUser);
+}
+
+/**
+ * Canonical list of internal roles (all valid enterprise roles except CLIENT).
+ */
+export const INTERNAL_ROLES = Object.freeze([
+  "EMPLOYEE",
+  "TEAM_LEAD",
+  "PM",
+  "PROJECT_MANAGER",
+  "HR",
+  "ADMIN",
+  "IT_SUPPORT",
+  "SYSTEM_ADMIN",
+  "MNC_EXECUTIVE",
+]);
+
+/**
+ * Checks if the role represents an MNC Executive ("MNC_EXECUTIVE").
+ * @param {Object|string} roleOrUser
+ * @returns {boolean}
+ */
+export function isExecutive(roleOrUser) {
+  const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
+  return norm === "MNC_EXECUTIVE";
+}
+
+/**
+ * Checks if the role represents a Client ("CLIENT").
+ * @param {Object|string} roleOrUser
+ * @returns {boolean}
+ */
+export function isClient(roleOrUser) {
+  const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
+  return norm === "CLIENT";
+}
+
+/**
+ * Checks if the role represents HR ("HR").
+ * @param {Object|string} roleOrUser
+ * @returns {boolean}
+ */
+export function isHr(roleOrUser) {
+  const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
+  return norm === "HR";
+}
+
+/**
+ * Checks if the role is an authorized internal role.
+ * @param {Object|string} roleOrUser
+ * @returns {boolean}
+ */
+export function isInternalRole(roleOrUser) {
+  const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
+  return INTERNAL_ROLES.includes(norm);
+}
+
+/**
+ * Maps an authenticated role to its designated landing route.
+ * - CLIENT -> /client/projects
+ * - MNC_EXECUTIVE -> /executive/console
+ * - All other valid internal roles -> /dashboard
+ * - Unknown or invalid roles -> /login (fails safely without granting privileged access)
+ * @param {Object|string} roleOrUser
+ * @returns {string}
+ */
+export function getHomeRouteForRole(roleOrUser) {
+  const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
+  if (norm === "CLIENT") {
+    return "/client/projects";
+  }
+  if (norm === "MNC_EXECUTIVE") {
+    return "/executive/console";
+  }
+  if (INTERNAL_ROLES.includes(norm)) {
+    return "/dashboard";
+  }
+  return "/login";
 }
 
 // Expose on window in browser dev environment only for testing

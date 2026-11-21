@@ -3,13 +3,16 @@ import {
   Routes,
   Route,
   Navigate,
+  useLocation,
+  Outlet,
 } from "react-router-dom";
 import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { AuthProvider } from "./context/AuthContext";
+import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
+import ToastProvider from "./components/common/Toast";
 import LoginPage from "./features/auth/LoginPage";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
@@ -22,9 +25,42 @@ import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
 import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
+import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
+import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
+import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
 const queryClient = new QueryClient();
+
+function RootRedirect() {
+  const { isAuthenticated, role, isLoading } = useAuth();
+  const location = useLocation();
+
+  if (isLoading) {
+    return (
+      <div style={{ display: "grid", placeItems: "center", minHeight: "60vh" }}>
+        <div style={{ textAlign: "center" }}>
+          <div className="placeholder-symbol" style={{ fontSize: "2rem" }}>✳</div>
+          <p style={{ marginTop: "12px", color: "#64748b", fontSize: "14px", fontWeight: "500" }}>
+            Verifying authentication...
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  const requestedFrom = location.state?.from?.pathname || location.state?.from;
+  const targetPath =
+    requestedFrom && requestedFrom !== "/" && requestedFrom !== "/login"
+      ? requestedFrom
+      : getHomeRouteForRole(role);
+
+  return <Navigate to={targetPath} replace />;
+}
 
 function PagePlaceholder({ title, description }) {
   return (
@@ -60,111 +96,245 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <AuthProvider>
-          <Routes>
-            {/* Public Login Route */}
-            <Route path="/login" element={<LoginPage />} />
+          <ToastProvider>
+            <Routes>
+              {/* Public Login Route */}
+              <Route path="/login" element={<LoginPage />} />
 
-            {/* Guarded Application Shell: redirects to /login if unauthenticated */}
-            <Route
-              element={
-                <ProtectedRoute>
-                  <AppLayout />
-                </ProtectedRoute>
-              }
-            >
-              <Route
-                path="/"
-                element={<Navigate to="/dashboard" replace />}
-              />
-              <Route
-                path="/dashboard"
-                element={
-                  <PagePlaceholder
-                    title="Dashboard"
-                    description="Welcome to your WorkSphere workspace."
-                  />
-                }
-              />
+              {/* Root route: role-based home redirection */}
+              <Route path="/" element={<RootRedirect />} />
 
-              {/* Projects: Guarded & role permitted */}
+              {/* Client Portal Route Tree (strictly outside internal AppLayout shell) */}
+              {/* S6-FE-1 integration slot: Client Deliverables & Feedback */}
               <Route
-                path="/projects"
+                path="/client"
                 element={
-                  <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
-                    <ProjectListPage />
+                  <ProtectedRoute allowedRoles={["CLIENT"]}>
+                    <Outlet />
                   </ProtectedRoute>
                 }
-              />
-              <Route
-                path="/projects/:projectId"
-                element={
-                  <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
-                    <ProjectDetailPage />
-                  </ProtectedRoute>
-                }
-              />
+              >
+                <Route index element={<Navigate to="/client/projects" replace />} />
+                <Route
+                  path="projects"
+                  element={
+                    <PagePlaceholder
+                      title="Client Projects"
+                      description="Client portal workspace for deliverables and project tracking."
+                    />
+                  }
+                />
+                <Route path="*" element={<Navigate to="/client/projects" replace />} />
+              </Route>
 
-              <Route path="/team" element={<TeamRosterPage />} />
-              <Route path="/team/roster" element={<TeamRosterPage />} />
-              <Route path="/teams/:teamId/roster" element={<TeamRosterPage />} />
-              <Route path="/tasks" element={<MyTasksPage />} />
+              {/* Guarded Internal Application Shell: requires internal role */}
               <Route
-                path="/team-lead/tasks"
                 element={
-                  <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
-                    <TeamLeadTaskWorkspace />
+                  <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                    <AppLayout />
                   </ProtectedRoute>
                 }
-              />
-              <Route
-                path="/team-lead/leave"
-                element={
-                  <ProtectedRoute allowedRoles={["TEAM_LEAD", "HR", "ADMIN"]}>
-                    <TeamLeaveTriagePage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/tasks/team"
-                element={
-                  <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
-                    <TeamLeadTaskWorkspace />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="/support" element={<ITSupportDashboard />} />
-              <Route path="/support/tickets" element={<ITSupportDashboard />} />
-              <Route path="/it-support" element={<ITSupportDashboard />} />
-              <Route path="/profile" element={<ProfilePage />} />
+              >
+                {/* W3-FE-0 Foundation routes */}
+                <Route
+                  path="/dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <PagePlaceholder
+                        title="Dashboard"
+                        description="Welcome to your WorkSphere workspace."
+                      />
+                    </ProtectedRoute>
+                  }
+                />
 
-              {/* Admin: Guarded & role permitted */}
-              <Route
-                path="/admin"
-                element={
-                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
-                    <Navigate to="/admin/users" replace />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/users"
-                element={
-                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
-                    <UserManagementPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/admin/security"
-                element={
-                  <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
-                    <SecurityOpsPage />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Route>
-          </Routes>
+                {/* Projects: Guarded & role permitted */}
+                <Route
+                  path="/projects"
+                  element={
+                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                      <ProjectListPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/projects/:projectId"
+                  element={
+                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                      <ProjectDetailPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Team Roster: Guarded for internal roles */}
+                <Route
+                  path="/team"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <TeamRosterPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/team/roster"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <TeamRosterPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/teams/:teamId/roster"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <TeamRosterPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Tasks: Guarded for internal roles */}
+                <Route
+                  path="/tasks"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <MyTasksPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/team-lead/tasks"
+                  element={
+                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                      <TeamLeadTaskWorkspace />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/tasks/team"
+                  element={
+                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                      <TeamLeadTaskWorkspace />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Support: Guarded for internal roles */}
+                <Route
+                  path="/support"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ITSupportDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/support/tickets"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ITSupportDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/it-support"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ITSupportDashboard />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Profile: Guarded for internal roles */}
+                <Route
+                  path="/profile"
+                  element={
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ProfilePage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Admin: Guarded & role permitted */}
+                <Route
+                  path="/admin"
+                  element={
+                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                      <Navigate to="/admin/users" replace />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/users"
+                  element={
+                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                      <UserManagementPage />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/admin/security"
+                  element={
+                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                      <SecurityOpsPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* S4-FE-1 routes (Employee Leave Application & History: /leave) */}
+                <Route
+                  path="/leave"
+                  element={
+                    <ProtectedRoute allowedRoles={["EMPLOYEE", "TEAM_LEAD"]}>
+                      <LeaveDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* S4-FE-2 routes (Team Lead Leave Triage & Conflict Calendar: /team-lead/leave) */}
+                <Route
+                  path="/team-lead/leave"
+                  element={
+                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "HR", "ADMIN"]}>
+                      <TeamLeaveTriagePage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
+                {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
+                <Route
+                  path="/pm/risk-dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"]}>
+                      <PMRiskDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
+
+                {/* Executive: Guarded & MNC_EXECUTIVE permitted */}
+                {/* S7-FE-1 routes (MNC Executive Dashboard & Export: /executive/console) */}
+                <Route
+                  path="/executive"
+                  element={
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
+                      <Navigate to="/executive/console" replace />
+                    </ProtectedRoute>
+                  }
+                />
+                <Route
+                  path="/executive/console"
+                  element={
+                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE"]}>
+                      <PagePlaceholder
+                        title="Executive Console"
+                        description="Executive dashboard for enterprise metrics, risk indicators, and delivery health."
+                      />
+                    </ProtectedRoute>
+                  }
+                />
+
+                <Route path="*" element={<NotFound />} />
+              </Route>
+            </Routes>
+          </ToastProvider>
         </AuthProvider>
       </BrowserRouter>
     </QueryClientProvider>

@@ -15,6 +15,11 @@ import {
   reallocateLeaveTasks,
 } from "../src/api/leaveApi.js";
 
+import {
+  navConfig,
+  filterNavForRole,
+} from "../src/components/layout/navConfig.js";
+
 import mockTriageData from "../src/features/team_lead/mockLeaveTriageData.json" with { type: "json" };
 
 describe("1. Rejection Remarks Validation (validateRejectionRemarks)", () => {
@@ -407,5 +412,36 @@ describe("5. Team Lead Leave API Functions (Mocked Fetch)", () => {
         return true;
       }
     );
+  });
+});
+
+describe("6. Team Lead Leave Triage - Navigation Link & Role-Based Access", () => {
+  test("navConfig exposes /team-lead/leave with roles TEAM_LEAD, HR, and ADMIN", () => {
+    const item = navConfig.find((entry) => entry.path === "/team-lead/leave");
+    assert.ok(item, "Expected /team-lead/leave to exist in navConfig");
+    assert.equal(item.label, "Leave Triage");
+    assert.deepEqual(item.roles, ["TEAM_LEAD", "HR", "ADMIN"]);
+  });
+
+  test("navConfig link appears for TEAM_LEAD, HR, and ADMIN roles", () => {
+    const tlNav = filterNavForRole(navConfig, "TEAM_LEAD");
+    assert.ok(tlNav.some((entry) => entry.path === "/team-lead/leave"), "TEAM_LEAD should see Leave Triage");
+
+    const hrNav = filterNavForRole(navConfig, "HR");
+    assert.ok(hrNav.some((entry) => entry.path === "/team-lead/leave"), "HR should see Leave Triage");
+
+    const adminNav = filterNavForRole(navConfig, "ADMIN");
+    assert.ok(adminNav.some((entry) => entry.path === "/team-lead/leave"), "ADMIN should see Leave Triage");
+  });
+
+  test("navConfig strictly denies EMPLOYEE, PM, and CLIENT roles from seeing Leave Triage", () => {
+    const empNav = filterNavForRole(navConfig, "EMPLOYEE");
+    assert.equal(empNav.some((entry) => entry.path === "/team-lead/leave"), false);
+
+    const pmNav = filterNavForRole(navConfig, "PM");
+    assert.equal(pmNav.some((entry) => entry.path === "/team-lead/leave"), false);
+
+    const clientNav = filterNavForRole(navConfig, "CLIENT");
+    assert.equal(clientNav.some((entry) => entry.path === "/team-lead/leave"), false);
   });
 });
