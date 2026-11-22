@@ -1,6 +1,7 @@
 from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
+import pyotp
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -14,7 +15,7 @@ from app.core.notification_types import (
     ELEVATED_ACCESS_REVOKED,
     SECURITY_ALERT,
 )
-from app.core.security import create_access_token, hash_password
+from app.core.security import create_access_token, create_mfa_pending_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.features.auth.rate_limit import LOGIN_RATE_LIMIT
@@ -389,6 +390,77 @@ def test_revoke_elevated_access_audited_and_effective(client, db):
 
 
 # ==============================================================================
+# Admin MFA enforcement (US-31)
+# ==============================================================================
+
+def test_admin_without_mfa_gets_setup_required_when_enforced(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "enforce_admin_mfa", True)
+    admin = make_account(db, UserType.ADMIN)
+    system_admin = make_account(db, UserType.SYSTEM_ADMIN)
+    employee = make_account(db, UserType.EMPLOYEE)
+
+    setup_tokens = {}
+    for account in (admin, system_admin):
+        res = login(client, account.email, PASSWORD)
+        assert res.status_code == 200
+        body = res.json()
+        assert body["mfa_setup_required"] is True
+        assert body["mfa_required"] is False
+        assert body["mfa_token"]
+        assert body["access_token"] is None
+        assert "refresh_token" not in res.cookies
+        setup_tokens[account.account_id] = body["mfa_token"]
+
+    setup_headers = {"Authorization": f"Bearer {setup_tokens[admin.account_id]}"}
+    assert client.get("/api/v1/auth/me", headers=setup_headers).status_code == 401
+    assert client.get("/api/v1/admin/users", headers=setup_headers).status_code == 401
+
+    pending = create_mfa_pending_token({"sub": str(admin.account_id), "email": admin.email, "user_type": "ADMIN"})
+    res = client.post("/api/v1/auth/mfa/setup", headers={"Authorization": f"Bearer {pending}"})
+    assert res.status_code == 401
+
+    res = client.post("/api/v1/auth/mfa/setup", headers=setup_headers)
+    assert res.status_code == 200
+    secret = res.json()["secret"]
+    res = client.post(
+        "/api/v1/auth/mfa/verify",
+        json={"code": pyotp.TOTP(secret).now()},
+        headers=setup_headers,
+    )
+    assert res.status_code == 200
+    body = res.json()
+    assert body["access_token"]
+    assert body["refresh_token"]
+    assert "refresh_token" in res.cookies
+    db.expire_all()
+    assert admin.is_mfa_enabled is True
+    res = client.get("/api/v1/auth/me", headers={"Authorization": f"Bearer {body['access_token']}"})
+    assert res.status_code == 200
+    assert res.json()["email"] == admin.email
+    # The enrolment token is single-purpose once MFA is on.
+    assert client.post("/api/v1/auth/mfa/setup", headers=setup_headers).status_code == 401
+
+    res = login(client, employee.email, PASSWORD)
+    assert res.status_code == 200
+    assert res.json()["access_token"]
+
+    monkeypatch.setattr(settings, "enforce_admin_mfa", False)
+    res = login(client, system_admin.email, PASSWORD)
+    assert res.status_code == 200
+    body = res.json()
+    assert body["access_token"]
+    assert body["mfa_setup_required"] is False
+    refresh_token = body["refresh_token"]
+    res = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert res.status_code == 200
+
+    monkeypatch.setattr(settings, "enforce_admin_mfa", True)
+    res = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert res.status_code == 403
+    assert res.json()["detail"] == "MFA setup required"
+
+
+# ==============================================================================
 # Login rate limit (per path and client IP)
 # ==============================================================================
 
@@ -406,3 +478,16 @@ def test_login_rate_limit_returns_429(client):
     # /mfa/login has its own bucket.
     res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": "not-a-token", "code": "123456"})
     assert res.status_code != 429
+
+def test_mfa_setup_hides_current_otp_in_production(client, db, monkeypatch):
+    account = make_account(db, UserType.EMPLOYEE)
+
+    res = client.post("/api/v1/auth/mfa/setup", headers=auth_headers(account))
+    assert res.status_code == 200
+    assert res.json()["current_otp"]
+
+    monkeypatch.setattr(settings, "env", "production")
+    res = client.post("/api/v1/auth/mfa/setup", headers=auth_headers(account))
+    assert res.status_code == 200
+    assert res.json()["secret"]
+    assert res.json()["current_otp"] is None

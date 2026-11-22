@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Request, Response, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_mfa_enrollment_user
 from app.db.session import get_db
 from app.features.auth.rate_limit import login_rate_limit
 from app.features.auth.schemas import (
@@ -64,8 +64,8 @@ def login(
         ip_address=request.client.host if request.client else None,
     )
 
-    # If MFA challenge is required, return immediately without setting session cookie
-    if result.mfa_required:
+    # If MFA challenge or enrolment is required, return immediately without setting session cookie
+    if result.mfa_required or result.mfa_setup_required:
         return result
 
     # Set HttpOnly refresh token cookie on direct success
@@ -82,13 +82,14 @@ def login(
     summary="Generate TOTP MFA secret and provisioning URI (US-31)",
 )
 def setup_mfa(
-    current_user: UserAccount = Depends(get_current_user),
+    enrollment: tuple[UserAccount, str] = Depends(get_mfa_enrollment_user),
     db: Session = Depends(get_db),
 ) -> MfaSetupResponse:
     """
     Generate a new random TOTP secret for the authenticated user.
     Returns secret key and standard otpauth:// URI to import into authenticator apps.
     """
+    current_user, _ = enrollment
     return AuthService.setup_mfa(db=db, user=current_user)
 
 
@@ -100,18 +101,25 @@ def setup_mfa(
 def verify_mfa(
     payload: MfaVerifyRequest,
     request: Request,
-    current_user: UserAccount = Depends(get_current_user),
+    response: Response,
+    enrollment: tuple[UserAccount, str] = Depends(get_mfa_enrollment_user),
     db: Session = Depends(get_db),
 ):
     """
     Submit a 6-digit TOTP code to confirm authenticator configuration and activate MFA.
+    With an mfa_setup token (enforced admin enrolment) this also completes the login.
     """
-    return AuthService.verify_and_enable_mfa(
+    current_user, token_type = enrollment
+    result = AuthService.verify_and_enable_mfa(
         db=db,
         user=current_user,
         code=payload.code,
         ip_address=request.client.host if request.client else None,
+        issue_tokens=token_type == "mfa_setup",
     )
+    if result.get("refresh_token"):
+        set_refresh_cookie(response, result["refresh_token"])
+    return result
 
 
 @router.post(
