@@ -74,6 +74,12 @@ export const navConfig = [
     icon: "👤",
     roles: ["SYSTEM_ADMIN", "ADMIN"],
   },
+  {
+    path: "/executive/console",
+    label: "Executive Console",
+    icon: "📊",
+    roles: ["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"],
+  },
 ];
 
 /**
