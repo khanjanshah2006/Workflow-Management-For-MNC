@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core import roles
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.models.user_account import UserAccount
@@ -48,9 +49,9 @@ from app.features.projects.service import (
 router = APIRouter(prefix="/api/v1/projects", tags=["Projects"])
 
 # Role guard for project leadership
-pm_or_admin_guard = require_role(["PM", "PROJECT_MANAGER", "ADMIN"])
+pm_or_admin_guard = require_role([roles.PM, roles.ADMIN])
 # PM risk dashboard (S5-BE-2) also admits SYSTEM_ADMIN.
-risk_guard = require_role(["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"])
+risk_guard = require_role([roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN])
 
 
 # ==========================================

@@ -23,6 +23,13 @@ class UserInfoResponse(BaseModel):
     is_mfa_enabled: bool = False
 
 
+class MeResponse(UserInfoResponse):
+    emp_id: Optional[int] = None
+    led_team_ids: list[int] = Field(default_factory=list)
+    team_ids: list[int] = Field(default_factory=list)
+    active_elevated_roles: list[str] = Field(default_factory=list)
+
+
 class TokenResponse(BaseModel):
     access_token: str
     refresh_token: str
@@ -38,6 +45,7 @@ class LoginResponse(BaseModel):
     expires_in: Optional[int] = None
     user: Optional[UserInfoResponse] = None
     mfa_required: bool = False
+    mfa_setup_required: bool = False
     mfa_token: Optional[str] = None
     message: Optional[str] = None
 

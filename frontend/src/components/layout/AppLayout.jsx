@@ -20,10 +20,18 @@ export default function AppLayout() {
 
   const currentPage =
     activeNavigation.find((item) => item.path === location.pathname)?.label ??
-    (location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team") ? "Team Tasks" : location.pathname.startsWith("/team")
+    (location.pathname.startsWith("/team-lead/leave")
+      ? "Leave Triage"
+      : location.pathname.startsWith("/pm")
+      ? "Risk Dashboard"
+      : location.pathname.startsWith("/team-lead") || location.pathname.startsWith("/tasks/team")
+      ? "Team Tasks"
+      : location.pathname.startsWith("/team")
       ? "Team Roster"
       : location.pathname.startsWith("/projects")
       ? "Projects"
+      : location.pathname.startsWith("/leave")
+      ? "Leave Management"
       : location.pathname.startsWith("/support") || location.pathname.startsWith("/it-support")
       ? "IT Support"
       : location.pathname.startsWith("/admin")

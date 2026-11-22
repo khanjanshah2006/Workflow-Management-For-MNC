@@ -72,6 +72,7 @@ class TaskSubmissionResponse(BaseModel):
     file_url: Optional[str] = Field(None, description="Accessible URL or path to uploaded deliverable file")
     file_name: Optional[str] = Field(None, description="Original filename of attached deliverable")
     file_size_bytes: Optional[int] = Field(None, description="Size of uploaded deliverable in bytes")
+    file_id: Optional[int] = Field(None, description="Stored file identifier")
     submitted_at: datetime = Field(..., description="Timestamp when the deliverable was submitted")
 
     model_config = ConfigDict(from_attributes=True)

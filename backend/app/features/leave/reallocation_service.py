@@ -4,9 +4,9 @@ from typing import Any, List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core import scope
+from app.core import roles, scope
 from app.core.audit import write_audit_log
-from app.core.notification_types import TASK_DEADLINE_EXTENDED, TASK_REASSIGNED
+from app.core.notification_types import TASK_DEADLINE_EXTENDED
 from app.features.leave.repository import LeaveRepository
 from app.features.leave.schemas import (
     ExtendedDeadlineTaskOut,
@@ -77,7 +77,7 @@ class LeaveReallocationService:
 
         current_emp = scope.resolve_employee(db, current_user)
         is_admin = effective_role in ("ADMIN", "SYSTEM_ADMIN")
-        is_pm = effective_role in ("PM", "PROJECT_MANAGER")
+        is_pm = effective_role == roles.PM
         is_team_lead = effective_role == "TEAM_LEAD"
 
         if not is_team_lead and current_emp and effective_role == "EMPLOYEE":
@@ -390,22 +390,6 @@ class LeaveReallocationService:
                             old_due_date=old_due,
                             new_due_date=action.new_due_date,
                         )
-                    )
-
-            if reassigned_out and leave_request.emp_id:
-                applicant = TaskRepository.get_employee_by_id(db, emp_id=leave_request.emp_id)
-                if applicant and applicant.account_id:
-                    task_list_str = ", ".join(f"#{r.task_id}" for r in reassigned_out)
-                    NotificationService.create_notification(
-                        db=db,
-                        user_id=applicant.account_id,
-                        type=TASK_REASSIGNED,
-                        title="Tasks Reallocated for Leave",
-                        message=(
-                            f"{len(reassigned_out)} task(s) ({task_list_str}) have been "
-                            f"reallocated due to your approved leave."
-                        ),
-                        link=f"/leave/{leave_id}",
                     )
 
             db.commit()

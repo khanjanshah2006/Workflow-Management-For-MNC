@@ -38,7 +38,7 @@ from app.features.notifications.router import router as notifications_router
 from app.features.notifications.schemas import NotificationOut, PaginatedNotifications
 from app.features.projects.router import router as projects_router
 from app.features.projects.schemas import ProjectResponse
-from app.features.support.schemas import TicketOut
+from app.features.support.schemas import SupportQueueItem, SupportQueueResponse
 from app.features.tasks.router import router as tasks_router
 from app.features.tasks.schemas import PaginatedTasksResponse, TaskSummaryResponse
 from app.models.client import Client
@@ -413,9 +413,15 @@ def test_list_contract_keys():
     user_page_keys = set(UserAccountPaginationResponse.model_fields.keys())
     assert {"items", "total", "page", "limit", "total_pages"}.issubset(user_page_keys)
 
-    # 5. Support Queue
-    ticket_keys = set(TicketOut.model_fields.keys())
-    assert {"id", "ticket_id", "ticket_number", "title", "description"}.issubset(ticket_keys)
+    # 5. Support Queue (GET /api/v1/support/tickets → SupportQueueResponse, #156)
+    queue_keys = set(SupportQueueResponse.model_fields.keys())
+    assert {"items", "total", "page", "limit"}.issubset(queue_keys)
+
+    item_keys = set(SupportQueueItem.model_fields.keys())
+    assert {
+        "id", "ticket_number", "subject", "priority", "status",
+        "reporter_name", "assignee_name",
+    }.issubset(item_keys)
 
 
 # ------------------------------------------------------------------------------

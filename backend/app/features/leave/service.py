@@ -1,4 +1,4 @@
-"""Business logic for the leave feature (US-16, US-40, S4-BE-1)."""
+"""Business logic for the leave feature (US-16, US-40, S4-BE-1, S4-BE-2)."""
 from datetime import date, timedelta
 from typing import List, Optional, Tuple
 
@@ -14,6 +14,9 @@ from app.features.leave.schemas import (
     EmployeeLeaveBalanceResponse,
     LeaveBalanceItem,
     LeaveBalanceOut,
+    LeavePolicyCreate,
+    LeavePolicyResponse,
+    LeavePolicyUpdate,
     LeaveConflictReportOut,
     LeaveRequestCreate,
     LeaveRequestOut,
@@ -29,7 +32,7 @@ from app.models.user_account import UserAccount
 
 
 class LeaveService:
-    """Service providing core leave operations and validations."""
+    """Service providing core leave operations and validations (S4-BE-1)."""
 
     @staticmethod
     def calculate_business_days(start_date: date, end_date: date) -> int:
@@ -591,3 +594,94 @@ class LeaveService:
             team_coverage=team_coverage,
             availability_threshold=threshold,
         )
+
+
+# ── US-18 / S4-BE-2 Leave Policies ───────────────────────────────────────────
+
+LEAVE_POLICY_ENTITY = "LEAVE_POLICY"
+DUPLICATE_POLICY_NAME = "Leave policy with this name already exists"
+
+
+class LeavePolicyNotFoundError(Exception):
+    pass
+
+
+class DuplicateLeavePolicyNameError(Exception):
+    pass
+
+
+class LeavePolicyService:
+    """Create, list and update leave policies (leave types)."""
+
+    @staticmethod
+    def list_policies(db: Session, include_inactive: bool = False) -> List[LeavePolicyResponse]:
+        rows = LeaveRepository.list_leave_types(db, include_inactive=include_inactive)
+        return [LeavePolicyResponse.model_validate(r) for r in rows]
+
+    @staticmethod
+    def create_policy(
+        db: Session,
+        payload: LeavePolicyCreate,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> LeavePolicyResponse:
+        if LeaveRepository.get_leave_type_by_name(db, payload.name):
+            raise DuplicateLeavePolicyNameError(DUPLICATE_POLICY_NAME)
+
+        leave_type = LeaveRepository.create_leave_type(db, **payload.model_dump())
+        write_audit_log(
+            db=db,
+            action=AuditAction.CREATE,
+            entity_name=LEAVE_POLICY_ENTITY,
+            entity_ref_id=leave_type.leave_type_id,
+            account_id=actor.account_id,
+            new_value=payload.model_dump(),
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(leave_type)
+        return LeavePolicyResponse.model_validate(leave_type)
+
+    @staticmethod
+    def update_policy(
+        db: Session,
+        leave_type_id: int,
+        payload: LeavePolicyUpdate,
+        actor: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> LeavePolicyResponse:
+        """Partial update. Only fields whose value actually changes are written and audited."""
+        leave_type = LeaveRepository.get_leave_type(db, leave_type_id)
+        if not leave_type:
+            raise LeavePolicyNotFoundError(f"Leave policy {leave_type_id} not found")
+
+        changes = {
+            field: value
+            for field, value in payload.model_dump(exclude_unset=True).items()
+            if getattr(leave_type, field) != value
+        }
+        if "name" in changes and LeaveRepository.get_leave_type_by_name(
+            db, changes["name"], exclude_id=leave_type_id
+        ):
+            raise DuplicateLeavePolicyNameError(DUPLICATE_POLICY_NAME)
+
+        if changes:
+            old_value = {field: getattr(leave_type, field) for field in changes}
+            for field, value in changes.items():
+                setattr(leave_type, field, value)
+            write_audit_log(
+                db=db,
+                action=AuditAction.UPDATE,
+                entity_name=LEAVE_POLICY_ENTITY,
+                entity_ref_id=leave_type_id,
+                account_id=actor.account_id,
+                old_value=old_value,
+                new_value=changes,
+                ip_address=ip_address,
+                commit=False,
+            )
+            db.commit()
+            db.refresh(leave_type)
+
+        return LeavePolicyResponse.model_validate(leave_type)

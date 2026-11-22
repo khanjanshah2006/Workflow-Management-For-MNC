@@ -1,0 +1,105 @@
+{
+  "pendingRequests": {
+    "items": [
+      {
+        "leave_id": 1,
+        "employee_id": 10,
+        "employee_name": "Sarah Connor",
+        "leave_type_name": "Annual Leave",
+        "start_date": "2026-11-23",
+        "end_date": "2026-11-25",
+        "total_days": 3,
+        "reason": "Personal rest and recovery after release milestone.",
+        "status": "PENDING",
+        "applied_at": "2026-11-20T08:30:00Z",
+        "conflicting_task_count": 1
+      },
+      {
+        "leave_id": 2,
+        "employee_id": 11,
+        "employee_name": "Marcus Wright",
+        "leave_type_name": "Casual Leave",
+        "start_date": "2026-11-26",
+        "end_date": "2026-11-27",
+        "total_days": 2,
+        "reason": "Family gathering out of town.",
+        "status": "PENDING",
+        "applied_at": "2026-11-20T09:15:00Z",
+        "conflicting_task_count": 0
+      }
+    ],
+    "total": 2,
+    "page": 1,
+    "limit": 20
+  },
+  "conflictReports": {
+    "1": {
+      "leave_id": 1,
+      "employee_id": 10,
+      "employee_name": "Sarah Connor",
+      "leave_type_name": "Annual Leave",
+      "status": "PENDING",
+      "start_date": "2026-11-23",
+      "end_date": "2026-11-25",
+      "total_days": 3,
+      "reason": "Personal rest and recovery after release milestone.",
+      "has_conflicts": true,
+      "conflicting_tasks": [
+        {
+          "task_id": 42,
+          "title": "Audit log streaming & retention verification",
+          "priority": "HIGH",
+          "status": "IN_PROGRESS",
+          "due_date": "2026-11-24",
+          "project_id": 1,
+          "milestone_id": 3,
+          "milestone_title": "Security & Compliance Release"
+        }
+      ],
+      "milestone_conflicts": [
+        {
+          "milestone_id": 3,
+          "title": "Security & Compliance Release",
+          "project_id": 1,
+          "target_date": "2026-11-25",
+          "open_tasks_assigned_to_applicant": 1
+        }
+      ],
+      "team_coverage": [
+        {
+          "emp_id": 12,
+          "full_name": "John Matrix",
+          "active_tasks_count": 2,
+          "has_leave_overlap": false,
+          "has_pending_leave_overlap": false,
+          "is_available_for_reassignment": true
+        },
+        {
+          "emp_id": 13,
+          "full_name": "Kyle Reese",
+          "active_tasks_count": 1,
+          "has_leave_overlap": true,
+          "has_pending_leave_overlap": false,
+          "is_available_for_reassignment": false
+        },
+        {
+          "emp_id": 14,
+          "full_name": "Ellen Ripley",
+          "active_tasks_count": 5,
+          "has_leave_overlap": false,
+          "has_pending_leave_overlap": false,
+          "is_available_for_reassignment": false
+        },
+        {
+          "emp_id": 15,
+          "full_name": "Dutch Schaefer",
+          "active_tasks_count": 3,
+          "has_leave_overlap": false,
+          "has_pending_leave_overlap": true,
+          "is_available_for_reassignment": true
+        }
+      ],
+      "availability_threshold": 5
+    }
+  }
+}

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, AliasChoices, model_validator
 
@@ -71,6 +71,7 @@ class TicketActivityOut(BaseModel):
     ticket_id: int
     actor_id: Optional[UUID] = None
     performed_by: Optional[UUID] = None
+    actor_name: Optional[str] = None
     action: str
     activity_type: str
     note: Optional[str] = None
@@ -94,6 +95,8 @@ class TicketOut(BaseModel):
     escalation_reason: Optional[str] = None
     reporter_id: Optional[UUID] = None
     assigned_to: Optional[UUID] = None
+    reporter_name: Optional[str] = None
+    assignee_name: Optional[str] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
     resolved_at: Optional[datetime] = None
@@ -105,3 +108,93 @@ class TicketOut(BaseModel):
 class TicketListOut(BaseModel):
     total: int
     tickets: List[TicketOut]
+
+
+# -----------------------------------------------------------------------------
+# S8-BE-2: IT Support Triage Queue, Status Workflow & Assignment Schemas
+# -----------------------------------------------------------------------------
+
+class TicketAssignRequest(BaseModel):
+    """Payload for PUT /api/v1/support/tickets/{id}/assign."""
+    assignee_account_id: UUID = Field(
+        ...,
+        validation_alias=AliasChoices("assignee_account_id", "assigned_to", "assigned_to_emp_id", "assignee_id"),
+        description="UserAccount UUID of the IT staff member being assigned",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TicketNoteRequest(BaseModel):
+    """Payload for POST /api/v1/support/tickets/{id}/notes."""
+    note: str = Field(
+        ...,
+        min_length=1,
+        max_length=2000,
+        validation_alias=AliasChoices("note", "note_text"),
+        description="Internal troubleshooting note (1–2000 characters)",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class TicketStatusUpdateRequest(BaseModel):
+    """Payload for PUT /api/v1/support/tickets/{id}/status."""
+    status: Literal["open", "in_progress", "resolved", "closed", "escalated"] = Field(
+        ...,
+        description="Target status: open, in_progress, resolved, closed, escalated",
+    )
+    resolution_note: Optional[str] = Field(
+        None,
+        validation_alias=AliasChoices("resolution_note", "resolution_notes"),
+        description="Resolution explanation (mandatory when transitioning to 'resolved')",
+    )
+
+    model_config = ConfigDict(populate_by_name=True)
+
+
+class SupportQueueItem(BaseModel):
+    """Summary item for IT support triage queue listing."""
+    id: int
+    ticket_number: str
+    subject: str
+    category: str
+    priority: str
+    status: str
+    reporter_name: Optional[str] = None
+    assignee_name: Optional[str] = None
+    created_at: datetime
+    updated_at: Optional[datetime] = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SupportQueueResponse(BaseModel):
+    """Paginated triage queue response for GET /api/v1/support/tickets."""
+    items: List[SupportQueueItem] = []
+    total: int
+    page: int
+    limit: int
+    tickets: Optional[List[SupportQueueItem]] = None
+
+    @model_validator(mode="after")
+    def sync_tickets_alias(self) -> "SupportQueueResponse":
+        if self.tickets is None:
+            self.tickets = self.items
+        return self
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class SupportQueueMetricsResponse(BaseModel):
+    """Summary counts by status and unassigned for support dashboard header."""
+    open: int = 0
+    in_progress: int = 0
+    resolved: int = 0
+    closed: int = 0
+    escalated: int = 0
+    unassigned: int = 0
+    total: int = 0
+
+    model_config = ConfigDict(from_attributes=True)
+

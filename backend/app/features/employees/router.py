@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core import roles
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.models.user_account import UserAccount
@@ -14,6 +15,7 @@ from app.features.employees.schemas import (
     EmployeeDetailResponse,
     EmployeeWorkloadResponse,
 )
+from app.features.employees.repository import EmployeeRepository
 from app.features.employees.service import (
     EmployeeService,
     EmployeeNotFoundError,
@@ -75,14 +77,29 @@ def get_employee(
 @router.get(
     "/{id}/workload",
     response_model=EmployeeWorkloadResponse,
-    summary="Get cross-project workload metrics for an employee (US-39)",
-    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Restricted to PMs and Admins.",
+    summary="Get cross-project workload metrics for an employee (US-35, US-39)",
+    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Visibility restricted to self, HR, Admin, managing PM, and Team Lead.",
 )
 def get_employee_workload(
     id: int,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["PM", "PROJECT_MANAGER", "ADMIN"])),
+    current_user: UserAccount = Depends(get_current_user),
 ) -> EmployeeWorkloadResponse:
+    # 1. US-35 Workload Visibility Rule (check access before 404 to avoid leaking employee IDs)
+    if not EmployeeService.check_workload_access(db=db, current_user=current_user, target_emp_id=id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to view this employee's workload",
+        )
+
+    # 2. Target employee must exist
+    target_emp = EmployeeRepository.get_by_id(db, id)
+    if not target_emp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee with ID {id} not found",
+        )
+
     try:
         return EmployeeService.get_employee_workload(db=db, emp_id=id)
     except EmployeeNotFoundError as exc:
@@ -97,13 +114,13 @@ def get_employee_workload(
     response_model=EmployeeDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new employee and user account (US-04)",
-    description="Onboard an employee, auto-generate EMP-XXXX code, and link user account. Restricted to HR_MANAGER and ADMIN roles.",
+    description="Onboard an employee, auto-generate EMP-XXXX code, and link user account. Restricted to HR and ADMIN roles.",
 )
 def create_employee(
     payload: EmployeeCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role([roles.HR, roles.ADMIN, roles.SYSTEM_ADMIN])),
 ) -> EmployeeDetailResponse:
     client_ip = request.client.host if request.client else None
     requested_role = payload.user_type or UserType.EMPLOYEE
@@ -133,14 +150,14 @@ def create_employee(
     "/{emp_id}/status",
     response_model=EmployeeDetailResponse,
     summary="Update employee employment status (US-04)",
-    description="Change status between ACTIVE and INACTIVE, and sync account login status. Restricted to HR_MANAGER and ADMIN.",
+    description="Change status between ACTIVE and INACTIVE, and sync account login status. Restricted to HR and ADMIN.",
 )
 def update_employee_status(
     emp_id: int,
     payload: EmployeeStatusUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN"])),
+    current_user: UserAccount = Depends(require_role([roles.HR, roles.ADMIN])),
 ) -> EmployeeDetailResponse:
     client_ip = request.client.host if request.client else None
     try:

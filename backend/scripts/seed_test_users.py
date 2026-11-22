@@ -45,7 +45,27 @@ def seed():
             admin.password_hash = hash_password("Admin@123")
             print("Reset Admin user to clean state: admin@company.com / Admin@123 (MFA disabled)")
 
-        # 2. Employee User (for RBAC testing)
+        # 2. System Admin User
+        sysadmin = db.query(UserAccount).filter(UserAccount.email == "sysadmin@company.com").first()
+        if not sysadmin:
+            sysadmin = UserAccount(
+                account_id=uuid.uuid4(),
+                email="sysadmin@company.com",
+                password_hash=hash_password("Admin@123"),
+                user_type=UserType.SYSTEM_ADMIN,
+                is_active=True,
+                is_mfa_enabled=False,
+            )
+            db.add(sysadmin)
+            print("Created System Admin user: sysadmin@company.com / Admin@123")
+        else:
+            sysadmin.user_type = UserType.SYSTEM_ADMIN
+            sysadmin.is_mfa_enabled = False
+            sysadmin.mfa_secret = None
+            sysadmin.password_hash = hash_password("Admin@123")
+            print("Reset System Admin user to clean state: sysadmin@company.com / Admin@123 (MFA disabled)")
+
+        # 3. Employee User (for RBAC testing)
         emp = db.query(UserAccount).filter(UserAccount.email == "employee@company.com").first()
         if not emp:
             emp = UserAccount(

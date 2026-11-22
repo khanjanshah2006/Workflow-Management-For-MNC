@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
@@ -50,6 +51,8 @@ from app.models.user_account import UserAccount
 router = APIRouter(prefix="/api/v1/tasks", tags=["Tasks"])
 project_tasks_router = APIRouter(prefix="/api/v1/projects", tags=["Tasks"])
 
+TASK_COMMENT_ROLES = (roles.EMPLOYEE, roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN)
+
 
 # ── RBAC Helpers for US-13 ──────────────────────────────────────────────
 
@@ -67,7 +70,7 @@ def _check_review_queue_access(
         user_type_raw.value if hasattr(user_type_raw, "value") else str(user_type_raw or "")
     ).upper()
 
-    if user_type_str in ["TEAM_LEAD", "PM", "ADMIN", "SYSTEM_ADMIN", "PROJECT_MANAGER"]:
+    if user_type_str in [roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN]:
         return current_user
 
     if getattr(current_user, "is_team_lead", False) or getattr(current_user, "role", "").upper() == "TEAM_LEAD":
@@ -142,7 +145,7 @@ def get_my_tasks(
     priority: Optional[PriorityLevel] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: UserAccount = Depends(get_current_user),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> PaginatedTasksResponse:
     items, total = TaskService.list_my_tasks(
@@ -363,7 +366,7 @@ def reassign_task(
 def create_task_comment(
     id: int,
     payload: TaskCommentCreate,
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role(TASK_COMMENT_ROLES)),
     db: Session = Depends(get_db),
 ) -> TaskCommentResponse:
     return TaskCommentService.create_comment(
@@ -383,7 +386,7 @@ def create_task_comment(
 )
 def get_task_comments(
     id: int,
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role(TASK_COMMENT_ROLES)),
     db: Session = Depends(get_db),
 ) -> List[TaskCommentResponse]:
     return TaskCommentService.list_comments(db=db, task_id=id, current_user=current_user)
@@ -509,6 +512,29 @@ def get_task_submissions(
     )
 
 
+@router.get(
+    "/{id}/submissions/{submission_id}/file",
+    status_code=status.HTTP_200_OK,
+    summary="Download task submission deliverable file (S9, US-11)",
+    description=(
+        "Streams the deliverable attachment stored in Postgres. "
+        "Allowed: task assignee, lead of the task's team, PM of the task's project, and ADMIN."
+    ),
+)
+def download_task_submission_file(
+    id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+):
+    return TaskSubmissionService.download_submission_file(
+        db=db,
+        task_id=id,
+        submission_id=submission_id,
+        current_user=current_user,
+    )
+
+
 @router.put(
     "/{id}/progress",
     response_model=TaskProgressResponse,
@@ -550,7 +576,7 @@ def review_task(
     payload: TaskReviewDecisionSchema,
     request: Request,
     current_user: UserAccount = Depends(
-        require_role(["TEAM_LEAD", "PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"])
+        require_role([roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN, roles.EMPLOYEE])
     ),
     db: Session = Depends(get_db),
 ) -> TaskReviewResponse:

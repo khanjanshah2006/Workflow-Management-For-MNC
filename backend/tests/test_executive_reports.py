@@ -24,6 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
@@ -76,7 +77,7 @@ def db_session():
 @pytest.fixture
 def test_setup(db_session, tmp_path, monkeypatch):
     """Seed test entities and isolate reports directory to tmp_path."""
-    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "reports_dir", str(tmp_path))
 
     # 1. Department
     dept = Department(dept_id=1, name="Core Engineering", description="Engineering division")
@@ -338,12 +339,10 @@ def test_generate_pdf_report_valid_pdf_buffer(client, test_setup):
     assert data["file_size_bytes"] > 0
     assert data["download_url"] == f"/api/v1/executive/reports/{data['report_id']}/download"
 
-    # Verify file content on disk starts with %PDF
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.pdf"))
-    assert len(files) == 1
-    content = files[0].read_bytes()
-    assert content.startswith(b"%PDF")
+    # Verify file content starts with %PDF via download endpoint
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    assert dl_resp.content.startswith(b"%PDF")
 
 
 def test_generate_csv_report_correct_headers_and_rows(client, test_setup):
@@ -367,11 +366,9 @@ def test_generate_csv_report_correct_headers_and_rows(client, test_setup):
     data = response.json()
     assert data["format"] == "CSV"
 
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.csv"))
-    assert len(files) == 1
-
-    lines = files[0].read_text(encoding="utf-8").strip().split("\n")
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    lines = dl_resp.text.strip().split("\n")
     expected_header = (
         "project_code,project_name,department,status,tasks_completed,"
         "milestones_due,milestones_completed,deliverables_submitted,"
@@ -401,9 +398,9 @@ def test_metrics_respect_period_boundaries(client, test_setup):
     assert response.status_code == 201
     data = response.json()
 
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.csv"))
-    csv_text = files[0].read_text(encoding="utf-8")
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    csv_text = dl_resp.text
 
     # PRJ-OLD ended in 2025 and must not be in this report
     assert "PRJ-OLD" not in csv_text
@@ -521,14 +518,14 @@ def test_audit_log_created_on_report_generation(client, test_setup, db_session):
 
 
 def test_download_missing_file_returns_404(client, test_setup, db_session):
-    """Verify HTTP 404 when report does not exist or file is deleted from disk."""
+    """Verify HTTP 404 when report does not exist or legacy report has missing disk file."""
     headers = {"Authorization": f"Bearer {test_setup['token_exec']}"}
 
     # 1. Nonexistent report ID
     resp_missing_id = client.get("/api/v1/executive/reports/99999/download", headers=headers)
     assert resp_missing_id.status_code == 404
 
-    # 2. Report exists in DB, but file removed from disk
+    # 2. In S9, generated reports are stored in DB, so removing file from disk survives (200 OK)
     gen_resp = client.post(
         "/api/v1/executive/reports/generate",
         headers=headers,
@@ -543,12 +540,29 @@ def test_download_missing_file_returns_404(client, test_setup, db_session):
 
     # Delete file from disk
     files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.pdf"))
-    assert len(files) == 1
-    os.remove(files[0])
+    if files:
+        os.remove(files[0])
 
-    resp_deleted_file = client.get(f"/api/v1/executive/reports/{report_id}/download", headers=headers)
-    assert resp_deleted_file.status_code == 404
-    assert "no longer exists on disk" in resp_deleted_file.json()["detail"].lower()
+    resp_survives = client.get(f"/api/v1/executive/reports/{report_id}/download", headers=headers)
+    assert resp_survives.status_code == 200
+    assert resp_survives.content.startswith(b"%PDF")
+
+    # 3. Legacy report without file_id and missing disk file returns 404
+    from app.models.enums import ReportFormat
+    legacy_report = ExecutiveReport(
+        report_title="Legacy Missing",
+        period_start=date(2026, 10, 1),
+        period_end=date(2026, 12, 31),
+        report_format=ReportFormat.PDF,
+        file_path="/nonexistent/path/legacy.pdf",
+        file_size_bytes=100,
+        file_id=None,
+    )
+    db_session.add(legacy_report)
+    db_session.commit()
+
+    resp_legacy = client.get(f"/api/v1/executive/reports/{legacy_report.report_id}/download", headers=headers)
+    assert resp_legacy.status_code == 404
 
 
 def test_get_reports_history_and_detail(client, test_setup):

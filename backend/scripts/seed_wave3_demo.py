@@ -128,6 +128,9 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
         full_name="Helen Ross", date_of_joining=date(2023, 3, 1),
     )
     _account(db, "executive@company.com", UserType.MNC_EXECUTIVE, pw_hash)
+    # Platform admins (Wave 4 admin features need both roles)
+    _account(db, "admin@company.com", UserType.ADMIN, pw_hash)
+    _account(db, "sysadmin@company.com", UserType.SYSTEM_ADMIN, pw_hash)
     client_account = _account(db, "client@acme.com", UserType.CLIENT, pw_hash)
     client = _get_or_create(
         db, Client, {"email": "client@acme.com"},
@@ -157,8 +160,8 @@ def seed_wave3_demo(db: Session, today: date | None = None, password: str | None
     )
     team = _get_or_create(
         db, Team, {"name": "Alpha Core Team"},
-        project_id=project.project_id, lead_emp_id=john.emp_id, status=TeamStatus.ACTIVE,
-        description="Core delivery team for Alpha ERP Modernization.",
+        project_id=project.project_id, lead_emp_id=john.emp_id, dept_id=john.dept_id,
+        status=TeamStatus.ACTIVE, description="Core delivery team for Alpha ERP Modernization.",
     )
     for member in (sarah, matrix, kyle):
         _get_or_create(db, TeamMember, {"team_id": team.team_id, "emp_id": member.emp_id})

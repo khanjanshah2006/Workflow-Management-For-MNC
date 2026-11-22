@@ -4,12 +4,15 @@ import re
 import uuid
 from typing import Any, List, Optional, Tuple
 from uuid import UUID
-from fastapi import HTTPException, UploadFile, status
+from fastapi import HTTPException, Response, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.audit import write_audit_log
+from app.core.files import save_file, stream_file
 from app.core.notification_types import TASK_ASSIGNED, TASK_REASSIGNED
+from app.core.scope import resolve_pm
 from app.features.notifications.service import NotificationService
 from app.features.tasks.repository import TaskRepository
 from app.features.tasks.schemas import (
@@ -32,6 +35,7 @@ from app.models.enums import MilestoneStatus, PriorityLevel, TaskStatus, UserTyp
 from app.models.milestone import ProjectMilestone
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
+from app.models.stored_file import StoredFile
 from app.models.task import Task, TaskSubmission
 from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
@@ -39,8 +43,6 @@ from app.models.user_account import UserAccount
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".pdf", ".zip", ".tar.gz", ".png", ".jpg", ".jpeg", ".docx"}
-MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25MB
-UPLOAD_STORAGE_DIR = os.path.join("uploads", "task_submissions")
 
 
 # ==========================================
@@ -98,7 +100,7 @@ class TaskService:
         ).upper()
 
         # Admin and Project Manager have management authority
-        if user_type_val in ("ADMIN", "PM", "PROJECT_MANAGER"):
+        if user_type_val in (roles.ADMIN, roles.PM):
             return
 
         # Check elevated active grants if baseline is employee
@@ -117,7 +119,7 @@ class TaskService:
         )
         if active_grant:
             elevated_role = active_grant.granted_role.strip().upper()
-            if elevated_role in ("ADMIN", "PM", "PROJECT_MANAGER", "TEAM_LEAD"):
+            if elevated_role in (roles.ADMIN, roles.PM, roles.TEAM_LEAD):
                 return
 
         # Check if user is a designated TEAM_LEAD or an EMPLOYEE who leads the task's team/project
@@ -636,10 +638,7 @@ class TaskService:
     ) -> Tuple[List[Task], int]:
         actor_emp = TaskRepository.get_employee_by_account_id(db, actor.account_id)
         if not actor_emp:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee record not found for the authenticated user.",
-            )
+            return [], 0
         return TaskRepository.list_my_tasks(
             db=db,
             emp_id=actor_emp.emp_id,
@@ -691,47 +690,6 @@ class TaskSubmissionService:
             return True
         _, ext = os.path.splitext(fn_lower)
         return ext in ALLOWED_EXTENSIONS
-
-    @classmethod
-    def _validate_and_save_file(
-        cls,
-        file: Optional[UploadFile] = None,
-        file_bytes: Optional[bytes] = None,
-        original_filename: Optional[str] = None,
-        task_id: int = 0,
-    ) -> Tuple[Optional[str], Optional[str], Optional[int]]:
-        """Validate uploaded deliverable extension and size, then persist to local storage."""
-        if not file and not file_bytes:
-            return None, None, None
-
-        filename = original_filename or (file.filename if file else "deliverable")
-        if not cls.is_allowed_filename(filename):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File type not allowed. Allowed types: .pdf, .zip, .tar.gz, .png, .jpg, .docx",
-            )
-
-        if file_bytes is None and file is not None:
-            file_bytes = file.file.read()
-
-        file_size = len(file_bytes) if file_bytes else 0
-        if file_size > MAX_FILE_SIZE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File size exceeds the 25MB limit. Current size: {file_size} bytes",
-            )
-
-        os.makedirs(UPLOAD_STORAGE_DIR, exist_ok=True)
-
-        safe_filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", os.path.basename(filename))
-        stored_filename = f"task_{task_id}_{uuid.uuid4().hex[:10]}_{safe_filename}"
-        storage_path = os.path.join(UPLOAD_STORAGE_DIR, stored_filename)
-
-        with open(storage_path, "wb") as f:
-            f.write(file_bytes)
-
-        file_url = f"/uploads/task_submissions/{stored_filename}"
-        return file_url, filename, file_size
 
     @classmethod
     def _notify_team_lead(
@@ -837,17 +795,23 @@ class TaskSubmissionService:
         final_file_url = pre_existing_file_url
         final_file_name = file_name
         final_file_size = file_size_bytes
+        stored_file_id = None
 
         if file or file_bytes:
-            saved_url, saved_name, saved_size = cls._validate_and_save_file(
-                file=file,
-                file_bytes=file_bytes,
-                original_filename=original_filename,
-                task_id=task_id,
+            upload_payload = file if file is not None else (
+                original_filename or file_name or "deliverable",
+                file_bytes,
+                "application/octet-stream",
             )
-            final_file_url = saved_url
-            final_file_name = saved_name
-            final_file_size = saved_size
+            stored = save_file(
+                db=db,
+                purpose="TASK_SUBMISSION",
+                upload=upload_payload,
+                uploaded_by=current_user,
+            )
+            final_file_name = stored.filename
+            final_file_size = stored.size_bytes
+            stored_file_id = stored.file_id
 
         old_status = current_status
         task.status = TaskStatus.IN_REVIEW
@@ -857,11 +821,19 @@ class TaskSubmissionService:
             task_id=task_id,
             submitted_by=employee.emp_id,
             remarks=remarks.strip(),
-            file_url=final_file_url,
+            file_url=None,
             file_name=final_file_name,
             file_size_bytes=final_file_size,
+            file_id=stored_file_id,
         )
         db.add(submission)
+        db.flush()
+
+        submission.file_url = (
+            f"/api/v1/tasks/{task_id}/submissions/{submission.submission_id}/file"
+            if stored_file_id
+            else pre_existing_file_url
+        )
         db.flush()
 
         cls._notify_team_lead(db, task, employee)
@@ -928,6 +900,100 @@ class TaskSubmissionService:
             .all()
         )
         return submissions
+
+    @classmethod
+    def download_submission_file(
+        cls,
+        db: Session,
+        task_id: int,
+        submission_id: int,
+        current_user: UserAccount,
+    ) -> Response:
+        task = db.query(Task).filter(Task.task_id == task_id).first()
+        if not task:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task with ID {task_id} not found.",
+            )
+
+        submission = (
+            db.query(TaskSubmission)
+            .filter(
+                TaskSubmission.submission_id == submission_id,
+                TaskSubmission.task_id == task_id,
+            )
+            .first()
+        )
+        if not submission:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Submission with ID {submission_id} not found for task {task_id}.",
+            )
+
+        if not submission.file_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Task submission has no attached file.",
+            )
+
+        stored_file = (
+            db.query(StoredFile)
+            .filter(StoredFile.file_id == submission.file_id)
+            .first()
+        )
+        if not stored_file:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="File attachment not found.",
+            )
+
+        # Scoped permissions: the assignee, the lead of the task's team, the PM of the task's project, and ADMIN.
+        user_type_raw = getattr(current_user, "user_type", None)
+        user_type_str = (
+            user_type_raw.value if hasattr(user_type_raw, "value") else str(user_type_raw or "")
+        ).upper()
+
+        is_admin = user_type_str in [roles.ADMIN, roles.SYSTEM_ADMIN]
+
+        current_emp = (
+            db.query(Employee)
+            .filter(Employee.account_id == current_user.account_id)
+            .first()
+        )
+
+        is_assignee = current_emp is not None and task.assigned_to == current_emp.emp_id
+
+        is_team_lead = False
+        if current_emp and task.team_id:
+            team = db.query(Team).filter(Team.team_id == task.team_id).first()
+            if team and team.lead_emp_id == current_emp.emp_id:
+                is_team_lead = True
+
+        is_pm = False
+        if task.project_id:
+            project = db.query(Project).filter(Project.project_id == task.project_id).first()
+            if project and project.pm_id:
+                pm_record = db.query(ProjectManager).filter(ProjectManager.pm_id == project.pm_id).first()
+                if pm_record:
+                    if pm_record.account_id and pm_record.account_id == current_user.account_id:
+                        is_pm = True
+                    elif current_emp and pm_record.email and pm_record.email == current_emp.email:
+                        is_pm = True
+            if not is_pm and project:
+                if hasattr(project, "project_manager_id") and current_emp:
+                    if project.project_manager_id == current_emp.emp_id:
+                        is_pm = True
+                pm_user = resolve_pm(db, current_user)
+                if pm_user and project.pm_id == pm_user.pm_id:
+                    is_pm = True
+
+        if not (is_admin or is_assignee or is_team_lead or is_pm):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Forbidden: You do not have permission to download this submission file.",
+            )
+
+        return stream_file(stored_file)
 
 
 
@@ -1078,7 +1144,7 @@ class TaskReviewService:
         is_authorized = False
         if user_type_str in ("ADMIN", "SYSTEM_ADMIN"):
             is_authorized = True
-        elif user_type_str in ("PM", "PROJECT_MANAGER"):
+        elif user_type_str == roles.PM:
             pm = db.query(ProjectManager).filter(ProjectManager.account_id == current_user.account_id).first()
             project = db.query(Project).filter(Project.project_id == task.project_id).first()
             if pm and project and project.pm_id == pm.pm_id:

@@ -11,6 +11,8 @@ from app.models.enums import (
     FeedbackDecision,
     LeaveStatus,
     SkillProficiency,
+    SkillChangeAction,
+    SkillChangeStatus,
     AuditAction,
     ReportFormat,
 )
@@ -26,7 +28,7 @@ from app.models.milestone import ProjectMilestone, Milestone
 from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.leave import LeaveType, LeaveRequest
-from app.models.skill import Skill, EmployeeSkill
+from app.models.skill import Skill, EmployeeSkill, SkillChangeRequest
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
 from app.models.support import SupportTicket, TicketActivity
@@ -34,6 +36,7 @@ from app.models.system_parameter import SystemParameter
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.system_backup_log import SystemBackupLog
 from app.models.executive_report import ExecutiveReport
+from app.models.stored_file import StoredFile
 
 __all__ = [
     "Base",
@@ -48,6 +51,8 @@ __all__ = [
     "FeedbackDecision",
     "LeaveStatus",
     "SkillProficiency",
+    "SkillChangeAction",
+    "SkillChangeStatus",
     "AuditAction",
     "ReportFormat",
     "UserAccount",
@@ -71,6 +76,7 @@ __all__ = [
     "LeaveRequest",
     "Skill",
     "EmployeeSkill",
+    "SkillChangeRequest",
     "Notification",
     "AuditLog",
     "SupportTicket",
@@ -79,4 +85,5 @@ __all__ = [
     "ElevatedAccessGrant",
     "SystemBackupLog",
     "ExecutiveReport",
+    "StoredFile",
 ]

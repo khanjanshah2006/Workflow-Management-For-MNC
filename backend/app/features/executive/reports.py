@@ -18,7 +18,8 @@ from datetime import date, datetime, time, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
-from fastapi import HTTPException, status
+from fastapi import HTTPException, Response, status
+from fastapi.responses import FileResponse
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
@@ -27,6 +28,9 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
+from app.core.config import settings
+from app.core.files import save_file, stream_file
+from app.models.stored_file import StoredFile
 from app.features.executive.schemas import (
     ExecutiveReportCreateRequest,
     ExecutiveReportResponse,
@@ -57,7 +61,7 @@ from app.models.user_account import UserAccount
 
 def get_reports_dir() -> Path:
     """Return the absolute path to the reports storage directory, creating it if needed."""
-    env_dir = os.getenv("REPORTS_DIR")
+    env_dir = settings.reports_dir
     if env_dir:
         path = Path(env_dir)
     else:
@@ -700,22 +704,20 @@ class ExecutiveReportService:
         db.add(report)
         db.flush()
 
-        # 2. Persist file to storage directory using sanitized internal name: exec_report_{id}_{yyyymmdd}.{ext}
+        # 2. Persist file in database (bytea) and set file_id (S9, US-25)
         now_str = now.strftime("%Y%m%d")
         safe_filename = f"exec_report_{report.report_id}_{now_str}.{ext}"
-        storage_path = get_reports_dir() / safe_filename
+        content_type = "application/pdf" if ext == "pdf" else "text/csv; charset=utf-8"
 
-        try:
-            with open(storage_path, "wb") as f:
-                f.write(file_bytes)
-        except Exception as exc:
-            db.rollback()
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=f"Failed to persist report file: {str(exc)}",
-            )
-
-        report.file_path = str(storage_path)
+        stored_file = save_file(
+            db=db,
+            purpose="EXECUTIVE_REPORT",
+            upload=(safe_filename, file_bytes, content_type),
+            uploaded_by=current_user,
+        )
+        report.file_id = stored_file.file_id
+        report.file_size_bytes = stored_file.size_bytes
+        report.file_path = f"stored_file:{stored_file.file_id}"
 
         # 3. Write EXPORT audit log
         write_audit_log(
@@ -778,11 +780,8 @@ class ExecutiveReportService:
         return ExecutiveReportResponse.from_orm_report(report)
 
     @classmethod
-    def get_report_download_info(cls, db: Session, report_id: int) -> Tuple[str, str, str]:
-        """
-        Validate report existence and disk presence.
-        Returns (absolute_file_path, media_type, sanitized_download_filename).
-        """
+    def download_report(cls, db: Session, report_id: int) -> Response:
+        """Stream report from database (bytea), surviving ephemeral local disk restarts."""
         report = (
             db.query(ExecutiveReport)
             .filter(ExecutiveReport.report_id == report_id)
@@ -794,14 +793,27 @@ class ExecutiveReportService:
                 detail=f"Executive report with ID {report_id} not found.",
             )
 
-        if not os.path.exists(report.file_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Report file no longer exists on disk.",
-            )
-
         ext = "pdf" if report.report_format == ReportFormat.PDF else "csv"
-        media_type = "application/pdf" if ext == "pdf" else "text/csv; charset=utf-8"
         download_name = sanitize_filename(report.report_title, ext)
 
-        return report.file_path, media_type, download_name
+        if report.file_id:
+            stored = (
+                db.query(StoredFile)
+                .filter(StoredFile.file_id == report.file_id)
+                .first()
+            )
+            if stored:
+                return stream_file(stored, filename=download_name)
+
+        if report.file_path and os.path.exists(report.file_path):
+            media_type = "application/pdf" if ext == "pdf" else "text/csv; charset=utf-8"
+            return FileResponse(
+                path=report.file_path,
+                media_type=media_type,
+                filename=download_name,
+            )
+
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Report file no longer exists on disk.",
+        )

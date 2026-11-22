@@ -20,6 +20,7 @@
                   "if (pm.response.code === 200) {",
                   "    var jsonData = pm.response.json();",
                   "    pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "    pm.environment.set(\"hr_access_token\", jsonData.access_token);",
                   "    console.log(\"HR access token set:\", jsonData.access_token);",
                   "}"
                 ],
@@ -115,6 +116,7 @@
                   "        console.log(\"MFA challenge required. Ephemeral mfa_token set:\", jsonData.mfa_token);",
                   "    } else {",
                   "        pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "        pm.environment.set(\"admin_access_token\", jsonData.access_token);",
                   "        console.log(\"Admin access token set:\", jsonData.access_token);",
                   "    }",
                   "}"
@@ -147,7 +149,7 @@
                 "login"
               ]
             },
-            "description": "Login as Admin account. Saves access_token to environment automatically."
+            "description": "Login as Admin account. Saves access_token to environment automatically. Failed-login lockout: 5 wrong passwords lock the account for 15 minutes, after which logins (even with the right password) return 423 Account locked. /auth/login and /auth/mfa/login are throttled to 20 requests/minute per IP (429 with Retry-After). When ENFORCE_ADMIN_MFA=true, an ADMIN/SYSTEM_ADMIN without MFA gets mfa_setup_required=true and an mfa_token with no access_token; that mfa_token only works on /auth/mfa/setup and /auth/mfa/verify, and verify then returns normal tokens."
           },
           "response": []
         },
@@ -335,6 +337,26 @@
         },
         {
           "name": "GET Current User Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Has RBAC context keys\", function () {",
+                  "    ['emp_id', 'led_team_ids', 'team_ids', 'active_elevated_roles'].forEach(function (k) { pm.expect(body).to.have.property(k); });",
+                  "});",
+                  "pm.test(\"Team and elevated role lists are arrays\", function () {",
+                  "    pm.expect(body.led_team_ids).to.be.an('array');",
+                  "    pm.expect(body.team_ids).to.be.an('array');",
+                  "    pm.expect(body.active_elevated_roles).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -355,7 +377,7 @@
                 "me"
               ]
             },
-            "description": "Retrieves the authenticated user profile information."
+            "description": "Retrieves the authenticated user profile information: flat user fields (id, email, role, ...) plus emp_id (int or null when the account has no employee row), led_team_ids (int[] teams the user leads), team_ids (int[] teams the user belongs to) and active_elevated_roles (string[] of currently active time-bound elevated roles)."
           },
           "response": []
         },
@@ -750,7 +772,7 @@
                 "members"
               ]
             },
-            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR Manager and SysAdmin can query any team's roster.\n- PM can query any team roster.\n- Team Lead can query their own assigned team.\n- 403 Forbidden if querying other teams or if non-lead employee / client.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
+            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR, Admin, PM, or the team's lead (TEAM_LEAD or EMPLOYEE account whose employee row is the team's lead_emp_id) can query the roster.\n- 403 Forbidden for anyone else, including leads of other teams and clients.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
           },
           "response": [
             {
@@ -808,6 +830,46 @@
           ]
         },
         {
+          "name": "GET Team roster as Team Lead (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "Team roster as the team's lead. Run 'POST Login as Team Lead' first (saves team_lead_access_token) and set team_id to a team led by that account. Allowed: HR, Admin, PM, or the team's lead (TEAM_LEAD or EMPLOYEE account whose employee row is the team's lead_emp_id)."
+          },
+          "response": []
+        },
+        {
           "name": "GET Team Tasks Stub (US-37)",
           "request": {
             "method": "GET",
@@ -861,6 +923,578 @@
               "_postman_previewlanguage": "json"
             }
           ]
+        },
+        {
+          "name": "POST Create Department Team as HR (201) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": [\n    16,\n    18,\n    19\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Create a new team under a department. Promotes lead to TEAM_LEAD if account is EMPLOYEE."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"project_id\": null,\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"lead_name\": \"Sarah Connor\",\n  \"status\": \"ACTIVE\",\n  \"created_at\": \"2026-11-22T10:00:00Z\",\n  \"member_count\": 4,\n  \"members\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team as Employee (403) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rogue Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Employee role is forbidden from creating department teams."
+          },
+          "response": [
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team - Duplicate Name (409) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Team names are unique per department (case-insensitive)."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Team with name 'Payments Squad' already exists in department 1\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET List Department Teams (US-05)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams?include_disbanded=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ],
+              "query": [
+                {
+                  "key": "include_disbanded",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "US-05: List teams in department with lead name and member count."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"team_id\": 1,\n    \"dept_id\": 1,\n    \"project_id\": null,\n    \"name\": \"Payments Squad\",\n    \"description\": \"Card and wallet integrations\",\n    \"lead_emp_id\": 21,\n    \"lead_name\": \"Sarah Connor\",\n    \"status\": \"ACTIVE\",\n    \"created_at\": \"2026-11-22T10:00:00Z\",\n    \"member_count\": 4\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "PUT Change Team Lead & Status (US-05)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_emp_id\": 22\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}"
+              ]
+            },
+            "description": "US-05: Partial update of team. Lead change promotes new lead and demotes previous lead if no other team."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 22,\n  \"lead_name\": \"John Reese\",\n  \"status\": \"ACTIVE\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Add Members to Team (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emp_ids\": [\n    23,\n    24\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "US-05: Idempotent addition of team members."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"member_count\": 6\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Regular Member (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{emp_id}}"
+              ]
+            },
+            "description": "US-05: Remove regular employee from team."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Lead Member (409 Conflict) (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{lead_emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{lead_emp_id}}"
+              ]
+            },
+            "description": "US-05: Removing lead returns 409 Conflict. Must change lead first."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Cannot remove lead employee from team. Change the lead first.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Employee Workload (US-35)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees/1/workload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees",
+                "1",
+                "workload"
+              ]
+            },
+            "description": "Retrieve cross-project workload metrics for an employee. Visibility restricted to self, HR/Admin, managing PM, and Team Lead (US-35)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Propose Skill Change (US-34)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"action\": \"ADD\",\n    \"proposed_skill_name\": \"FastAPI\",\n    \"proficiency\": \"INTERMEDIATE\",\n    \"years_of_experience\": 2,\n    \"justification\": \"Built core backend microservices in recent sprints\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Submit a proposal to ADD, UPDATE, or REMOVE a skill rating. Triggers notifications and audit trail (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Skill Proposals (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Retrieve all skill proposals submitted by current authenticated employee, newest first (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Skill Proposals Review Queue (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests?status=PENDING&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Paginated review queue for pending skill change proposals. Scoped by role: HR/Admin see all; Team Leads see led team members (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Approve Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Approved based on sprint performance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "approve"
+              ]
+            },
+            "description": "Approve a pending skill change request and update employee skill profile. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reject Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Please provide relevant certifications before upgrading to Expert\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "reject"
+              ]
+            },
+            "description": "Reject a pending skill change request with mandatory remarks. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
         }
       ]
     },
@@ -2322,6 +2956,66 @@
               "body": "{\n  \"detail\": \"Access forbidden: requires one of ['TEAM_LEAD', 'PM', 'ADMIN', 'SYSTEM_ADMIN']\"\n}"
             }
           ]
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File (200 OK) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Download task submission deliverable file streamed from database bytea storage. Allowed: assignee, team lead, project manager, or admin."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File - Unauthorized (403 Forbidden) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{unauthorized_employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Returns 403 Forbidden when an unauthorized employee attempts to download another employee's deliverable."
+          },
+          "response": []
         }
       ]
     },
@@ -2329,6 +3023,344 @@
       "name": "05 Leave",
       "description": "Leave requests and approvals (features/leave)",
       "item": [
+        {
+          "name": "GET List Leave Policies - As Employee (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Only active policies\", function () {",
+                  "    pm.response.json().forEach(function (p) { pm.expect(p.is_active).to.eql(true); });",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "All authenticated roles can list policies. Non-HR callers see active policies only, ordered by name. Run 'Login as Employee' first."
+          },
+          "response": []
+        },
+        {
+          "name": "GET List Leave Policies - Include Inactive as HR (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies?include_inactive=true",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ],
+              "query": [
+                {
+                  "key": "include_inactive",
+                  "value": "true"
+                }
+              ]
+            },
+            "description": "HR and ADMIN may pass include_inactive=true to also see deactivated policies. Run 'Login as HR' first."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy - As HR (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 201\", function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "if (pm.response.code === 201) {",
+                  "    var data = pm.response.json();",
+                  "    pm.environment.set(\"leave_type_id\", data.leave_type_id);",
+                  "    pm.environment.set(\"leave_policy_name\", data.name);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "HR or ADMIN creates a policy. Name is stripped, 2-50 chars; yearly_quota 0-366; description up to 1000 chars. Saves leave_type_id and leave_policy_name for the next requests.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Casual Leave {{$timestamp}}\",\n  \"yearly_quota\": 12,\n  \"is_paid\": true,\n  \"description\": \"Short paid leaves for personal commitments.\"\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy - As Employee (403) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 403\", function () {",
+                  "    pm.response.to.have.status(403);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "Only HR and ADMIN may create policies.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Employee Leave\",\n  \"yearly_quota\": 5,\n  \"is_paid\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Leave Policy Quota (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 200\", function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "pm.test(\"Quota updated\", function () {",
+                  "    pm.expect(pm.response.json().yearly_quota).to.eql(15);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies/{{leave_type_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies",
+                "{{leave_type_id}}"
+              ]
+            },
+            "description": "Partial update of name, yearly_quota, is_paid, description or is_active (is_active=false deactivates; there is no DELETE). Only changed fields are audited.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"yearly_quota\": 15\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy - Duplicate Name (409) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 409\", function () {",
+                  "    pm.response.to.have.status(409);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "Names are unique case-insensitively. Reuses the name created by 'Create Leave Policy - As HR'.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"{{leave_policy_name}}\",\n  \"yearly_quota\": 3,\n  \"is_paid\": true\n}"
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "POST Create Leave Policy - Negative Quota (422) (US-18)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status code is 422\", function () {",
+                  "    pm.response.to.have.status(422);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{hr_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/policies",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "policies"
+              ]
+            },
+            "description": "yearly_quota must be between 0 and 366.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Negative Leave\",\n  \"yearly_quota\": -1,\n  \"is_paid\": true\n}"
+            }
+          },
+          "response": []
+        },
         {
           "name": "POST Submit Leave Request (US-16)",
           "event": [
@@ -3487,6 +4519,310 @@
             "description": "Batch reallocation on a REJECTED leave request returns 400 Leave request is not active (US-14)."
           },
           "response": []
+        },
+        {
+          "name": "GET Pending Leave Review Queue (S4-BE-4)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/pending?status=PENDING&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "pending"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists pending requests for review. Team Leads only see members of active teams they lead; HR and Admin see all requests."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Queue request succeeds', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Queue contains paginated items', function () { var body = pm.response.json(); pm.expect(body).to.have.property('items'); pm.expect(body).to.have.property('total'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Leave Request (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "Approves a pending request, revalidates overlaps and quota, and notifies the applicant and staffing PMs.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"Approved. Coverage arranged with John Matrix.\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Leave request approved', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('APPROVED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Already Processed Leave (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "Repeat the approve request after a decision; expects 400 Request already processed.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Already processed request is rejected', function () { pm.response.to.have.status(400); pm.expect(pm.response.json().detail).to.eql('Request already processed'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Reject Leave Request (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id_to_reject}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id_to_reject}}",
+                "reject"
+              ]
+            },
+            "description": "Rejects a pending request. Remarks must contain at least 10 characters after trimming.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"Critical release on Dec 8; cannot release coverage.\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Leave request rejected', function () { pm.response.to.have.status(200); pm.expect(pm.response.json().status).to.eql('REJECTED'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Reject Leave with Blank Remarks (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{leave_request_id_to_reject}}/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{leave_request_id_to_reject}}",
+                "reject"
+              ]
+            },
+            "description": "Validation check for missing or blank rejection remarks; expects 422.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"review_remarks\": \"   \"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Blank rejection remarks are rejected', function () { pm.response.to.have.status(422); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "PUT Approve Request Outside Team Scope (S4-BE-4)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/leave/requests/{{other_team_leave_request_id}}/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "leave",
+                "requests",
+                "{{other_team_leave_request_id}}",
+                "approve"
+              ]
+            },
+            "description": "A Team Lead must receive 403 for an applicant outside the teams they lead.",
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Out-of-scope reviewer is forbidden', function () { pm.response.to.have.status(403); });"
+                ]
+              }
+            }
+          ]
         }
       ]
     },
@@ -4465,6 +5801,419 @@
             "description": "Ordinary employees cannot view tickets submitted by other employees (403 Forbidden)."
           },
           "response": []
+        },
+        {
+          "name": "GET IT Support Triage Queue (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets?status=&category=&priority=&assigned_to=&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "category",
+                  "value": ""
+                },
+                {
+                  "key": "priority",
+                  "value": ""
+                },
+                {
+                  "key": "assigned_to",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists support tickets for IT staff with filtering, pagination, and priority-first sorting."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Support Queue Metrics (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/queue/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "queue",
+                "metrics"
+              ]
+            },
+            "description": "Returns aggregate ticket counts (open, in_progress, resolved, closed, escalated, unassigned, total)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Support Ticket (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_account_id\": \"{{it_staff_account_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Assigns ticket to an IT staff member; transitions 'open' tickets to 'in_progress' and notifies assignee."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Add Internal Troubleshooting Note (US-27)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Replaced power supply unit and verified voltage rails.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/notes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "notes"
+              ]
+            },
+            "description": "Adds an internal troubleshooting note visible to IT staff and hidden from reporter."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Ticket Status (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_note\": \"Replaced faulty RAM module and ran memtest diagnostics clean.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Transitions ticket status per state machine. Requires resolution note when resolving."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Escalate Support Ticket (US-28)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Requires SysAdmin privileges to modify cluster ingress firewall rules.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/escalate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "escalate"
+              ]
+            },
+            "description": "Escalates unresolved ticket to System Administrator."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Queue as employee (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ]
+            },
+            "description": "Ordinary employees cannot view the IT triage queue (returns 403 Forbidden)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign to non-IT (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_account_id\": \"{{employee_account_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Assigning to an employee who is not IT staff returns 400 Bad Request."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Invalid transition (409)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Direct transition from open to closed returns 409 Conflict per state machine."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT SysAdmin resolves escalated",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sysadmin_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_note\": \"Root infrastructure firewall reconfigured and verified by System Administrator.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Only SYSTEM_ADMIN can transition an escalated ticket to resolved."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reporter reopens",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{reporter_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"open\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "The ticket reporter reopens their own resolved ticket back to open."
+          },
+          "response": []
         }
       ]
     },
@@ -4479,7 +6228,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -4562,7 +6311,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -4626,7 +6375,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -4641,7 +6390,7 @@
                 "system-params"
               ]
             },
-            "description": "List all global system parameters. Restricted to ADMIN."
+            "description": "List all global system parameters. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
@@ -4652,7 +6401,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               },
               {
                 "key": "Content-Type",
@@ -4676,18 +6425,49 @@
                 "session_timeout_minutes"
               ]
             },
-            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN."
+            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
         {
           "name": "POST Grant Time-Bound Elevated Access",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"grant_expires_at\", new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get(\"base_url\") + \"/api/v1/admin/users\",",
+                  "    method: \"POST\",",
+                  "    header: { \"Authorization\": \"Bearer \" + pm.environment.get(\"admin_access_token\"), \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ email: \"grant-target-\" + Date.now() + \"@example.com\", password: \"Grant@12345\", user_type: \"EMPLOYEE\" }) }",
+                  "}, function (err, res) {",
+                  "    if (!err && res.code === 201) { pm.environment.set(\"grant_target_id\", res.json().account_id); }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set(\"grant_id\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               },
               {
                 "key": "Content-Type",
@@ -4696,7 +6476,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"user_id\": \"b8c56c22-0941-4cfa-81a2-c13e4b77f154\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"2026-12-31T23:59:59Z\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
+              "raw": "{\n    \"user_id\": \"{{grant_target_id}}\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"{{grant_expires_at}}\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/elevated-access",
@@ -4710,7 +6490,7 @@
                 "elevated-access"
               ]
             },
-            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN."
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN or SYSTEM_ADMIN. Granting to yourself, or a non-ADMIN granting the ADMIN role, returns 403. The pre-request script creates a throwaway EMPLOYEE account as the grant target (saved as grant_target_id) and sets grant_expires_at to 7 days ahead; the test script saves the new grant id to grant_id for the revoke requests."
           },
           "response": []
         },
@@ -4721,7 +6501,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -4737,7 +6517,85 @@
                 "active"
               ]
             },
-            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
+            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Revoke Elevated Access (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"revoked_at is set\", function () { pm.expect(pm.response.json().revoked_at).to.not.equal(null); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/{{grant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "{{grant_id}}"
+              ]
+            },
+            "description": "Revoke an elevated access grant (run after POST Grant Time-Bound Elevated Access). Returns the grant with revoked_at set and notifies the grantee. 404 for an unknown grant; 409 if already revoked or expired. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Revoke Elevated Access - Already Revoked (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Detail says already revoked\", function () { pm.expect(pm.response.json().detail).to.include(\"already revoked\"); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/{{grant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "{{grant_id}}"
+              ]
+            },
+            "description": "Revoking the same grant again returns 409 (Grant is already revoked; an expired grant returns Grant has already expired)."
           },
           "response": []
         },
@@ -4783,7 +6641,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -4824,7 +6682,7 @@
                 "trigger"
               ]
             },
-            "description": "SYSTEM_ADMIN only. Requires pg_dump to be installed and configured on the API server. Successful response returns the backup file name, not its absolute server path."
+            "description": "ADMIN or SYSTEM_ADMIN. Requires pg_dump to be installed and configured on the API server. Successful response returns the backup file name, not its absolute server path."
           },
           "response": [
             {
@@ -4864,13 +6722,13 @@
               "body": "{\n  \"backup_id\": 1,\n  \"backup_type\": \"ON_DEMAND\",\n  \"file_path\": \"database_backup_20261117T000000Z_1.dump\",\n  \"file_size_bytes\": 1048576,\n  \"status\": \"COMPLETED\",\n  \"created_at\": \"2026-11-17T00:00:00Z\",\n  \"triggered_by_account_id\": \"0d124198-5cce-4e2c-9893-2505190340ff\",\n  \"details\": \"Database backup completed successfully.\"\n}"
             },
             {
-              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "name": "403 Forbidden - ADMIN or SYSTEM_ADMIN Required",
               "originalRequest": {
                 "method": "POST",
                 "header": [
                   {
                     "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
+                    "value": "Bearer {{admin_access_token}}"
                   }
                 ],
                 "url": {
@@ -4923,7 +6781,7 @@
                 "anomaly-alerts"
               ]
             },
-            "description": "SYSTEM_ADMIN only. Detects more than five failed logins in the configured 15-minute window and reports individual privilege elevations in the last 24 hours."
+            "description": "ADMIN or SYSTEM_ADMIN. Detects more than five failed logins in the configured 15-minute window and reports individual privilege elevations in the last 24 hours."
           },
           "response": [
             {
@@ -4962,13 +6820,13 @@
               "body": "{\n  \"window_minutes\": 15,\n  \"total_alerts\": 1,\n  \"alerts\": [\n    {\n      \"alert_type\": \"FAILED_LOGIN_BURST\",\n      \"severity\": \"HIGH\",\n      \"ip_address\": \"203.0.113.15\",\n      \"count\": 6,\n      \"first_timestamp\": \"2026-11-17T00:10:00Z\",\n      \"last_timestamp\": \"2026-11-17T00:24:00Z\",\n      \"details\": \"More than 5 failed login attempts from this IP in 15 minutes.\"\n    }\n  ],\n  \"notes\": \"Privilege elevations are listed individually over the last 24 hours; no spike threshold is configured.\"\n}"
             },
             {
-              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "name": "403 Forbidden - ADMIN or SYSTEM_ADMIN Required",
               "originalRequest": {
                 "method": "GET",
                 "header": [
                   {
                     "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
+                    "value": "Bearer {{admin_access_token}}"
                   }
                 ],
                 "url": {
@@ -4997,6 +6855,302 @@
               "body": "{\n  \"detail\": \"Forbidden\"\n}"
             }
           ]
+        },
+        {
+          "name": "POST Create Lockout Test User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"lockout_email\", \"lockout-\" + Date.now() + \"@example.com\");",
+                  "pm.environment.set(\"lockout_password\", \"Lockout@12345\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set(\"lockout_account_id\", pm.response.json().account_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{lockout_email}}\",\n    \"password\": \"{{lockout_password}}\",\n    \"user_type\": \"EMPLOYEE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Creates a throwaway EMPLOYEE account used by the lockout requests below, so a seeded demo account is never locked. Saves lockout_account_id, lockout_email and lockout_password to the environment. Requires admin_access_token (set by POST Login as Admin)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login - Account Locked (423)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var attempts = 0;",
+                  "function wrongLogin() {",
+                  "    if (attempts >= 5) { return; }",
+                  "    attempts++;",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"base_url\") + \"/api/v1/auth/login\",",
+                  "        method: \"POST\",",
+                  "        header: { \"Content-Type\": \"application/json\" },",
+                  "        body: { mode: \"raw\", raw: JSON.stringify({ email: pm.environment.get(\"lockout_email\"), password: \"Wrong@Password1\" }) }",
+                  "    }, function () { wrongLogin(); });",
+                  "}",
+                  "wrongLogin();"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 423\", function () { pm.response.to.have.status(423); });",
+                  "pm.test(\"Detail says account locked\", function () { pm.expect(pm.response.json().detail).to.include(\"Account locked\"); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{lockout_email}}\",\n    \"password\": \"{{lockout_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Pre-request script sends 5 wrong-password logins for lockout_email (FAILED_LOGIN_THRESHOLD), which locks the account for LOCKOUT_MINUTES (15). The request then logs in with the CORRECT password and must return 423 with detail Account locked. Try again after HH:MM UTC or contact an administrator. Logins are also throttled to 20 requests/minute per IP (429 with Retry-After)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Unlock Account (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "unlock"
+              ]
+            },
+            "description": "Clears a login lockout so the user can sign in again. Returns the UserAccountResponse. 404 for an unknown account; 409 Account is not locked if there is no active lockout. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Unlock Account - Not Locked (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "unlock"
+              ]
+            },
+            "description": "Unlocking an account that is not locked returns 409 with detail Account is not locked."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Reset User Password (also clears lock)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_password\": \"Lockout@67890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "reset-password"
+              ]
+            },
+            "description": "Admin password reset (US-48). Sets a new password for the account (bcrypt, audit logged). It also clears any active login lockout and failed-attempt counter, so a locked account can sign in with the new password. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Internal Overdue Sweep Job (200 OK) (US-15, S9)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Job-Token",
+                "value": "{{job_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/internal/jobs/overdue-sweep",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "internal",
+                "jobs",
+                "overdue-sweep"
+              ]
+            },
+            "description": "Runs scheduled overdue task sweep via internal secret token."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Service Health Check (/health) (200 OK) (S9)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verifies service and database reachability (SELECT 1)."
+          },
+          "response": []
         }
       ]
     }

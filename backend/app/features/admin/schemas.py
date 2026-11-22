@@ -59,6 +59,7 @@ class BackupStatusResponse(BaseModel):
     last_successful_backup: Optional[datetime] = None
     last_failed_backup: Optional[datetime] = None
     recent_failures_count: int = 0
+    mode: Optional[str] = None
 
 
 # ==========================================

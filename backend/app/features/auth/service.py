@@ -1,5 +1,7 @@
-﻿from uuid import UUID
+﻿from datetime import datetime, timedelta, timezone
+from uuid import UUID
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from jose import JWTError
 import pyotp
@@ -10,19 +12,93 @@ from app.core.security import (
     create_refresh_token,
     create_mfa_pending_token,
     decode_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
 )
+from app.core import roles
 from app.core.audit import write_audit_log
-from app.models.enums import AuditAction, UserType
+from app.core.config import settings
+from app.core.notification_types import SECURITY_ALERT
+from app.core.scope import employee_team_ids, led_team_ids, resolve_employee
+from app.models.elevated_access_grant import ElevatedAccessGrant
+from app.models.enums import AuditAction
 from app.models.user_account import UserAccount
 from app.features.auth.repository import AuthRepository
+from app.features.notifications.service import NotificationService
 from app.features.auth.schemas import (
     LoginResponse,
+    MeResponse,
     TokenResponse,
     TokenRefreshResponse,
     UserInfoResponse,
     MfaSetupResponse,
 )
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
+def _is_platform_admin(account: UserAccount) -> bool:
+    user_type_val = account.user_type.value if hasattr(account.user_type, "value") else str(account.user_type)
+    return user_type_val in roles.PLATFORM_ADMINS
+
+
+def _raise_if_locked(
+    db: Session, account: UserAccount, email: str, ip_address: str | None, now: datetime
+) -> None:
+    """Refuse a locked account with 423 (US-48); an expired lock is cleared for a fresh round of attempts."""
+    if account.locked_until is None:
+        return
+    locked_until = _as_utc(account.locked_until)
+    if locked_until > now:
+        write_audit_log(
+            db=db,
+            action=AuditAction.LOGIN,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(account.account_id),
+            account_id=account.account_id,
+            new_value={
+                "status": "LOCKED",
+                "event": "LOGIN_LOCKED",
+                "attempted_email": email,
+                "locked_until": locked_until.isoformat(),
+            },
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Account locked. Try again after {locked_until:%H:%M} UTC or contact an administrator.",
+        )
+    account.locked_until = None
+    account.failed_login_count = 0
+
+
+def _record_failed_attempt(db: Session, account: UserAccount, now: datetime) -> dict:
+    """Count a failed password or TOTP attempt; lock and alert platform admins at the threshold.
+
+    Returns extra audit fields when the account was locked. The caller commits.
+    """
+    failed_count = AuthRepository.increment_failed_login(db, account)
+    if failed_count < settings.failed_login_threshold:
+        return {}
+    if account.locked_until is not None and _as_utc(account.locked_until) > now:
+        # A concurrent request already locked the account (and alerted the admins).
+        return {}
+    account.locked_until = now + timedelta(minutes=settings.lockout_minutes)
+    for admin in AuthRepository.list_active_platform_admins(db):
+        NotificationService.create_notification(
+            db,
+            user_id=admin.account_id,
+            type=SECURITY_ALERT,
+            title="Account locked",
+            message=(
+                f"Account {account.email} was locked after {account.failed_login_count} "
+                f"failed login attempts until {account.locked_until:%Y-%m-%d %H:%M} UTC."
+            ),
+        )
+    return {"account_locked": True, "locked_until": account.locked_until.isoformat()}
 
 
 class AuthService:
@@ -34,20 +110,30 @@ class AuthService:
     ) -> LoginResponse:
         """Authenticate user credentials and issue signed JWT access & refresh tokens or trigger MFA challenge."""
         account = AuthRepository.get_by_email(db, email=email)
+        now = datetime.now(timezone.utc)
+        if account:
+            # Locked accounts are refused without checking the password (US-48).
+            _raise_if_locked(db, account, email, ip_address, now)
+
         if not account or not verify_password(password, account.password_hash):
             # Record failed login attempt for security audit and anomaly detection
+            new_value = {
+                "status": "FAILED",
+                "attempted_email": email,
+            }
+            if account and account.is_active:
+                new_value.update(_record_failed_attempt(db, account, now))
             write_audit_log(
                 db=db,
                 action=AuditAction.LOGIN,
                 entity_name="USER_ACCOUNT",
                 entity_ref_id=str(account.account_id) if account else "UNKNOWN",
                 account_id=account.account_id if account else None,
-                new_value={
-                    "status": "FAILED",
-                    "attempted_email": email,
-                },
+                new_value=new_value,
                 ip_address=ip_address,
+                commit=False,
             )
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -60,28 +146,48 @@ class AuthService:
                 detail="Account is inactive. Contact HR.",
             )
 
-        # Check if user has MFA enabled (or is an Admin with active MFA)
-        is_admin = account.user_type == UserType.ADMIN or (
-            hasattr(account.user_type, "value") and account.user_type.value == "ADMIN"
-        )
-        is_mfa_active = bool(account.is_mfa_enabled and account.mfa_secret)
+        # Correct password: clear failed attempts (persisted by the commit on either path below)
+        account.failed_login_count = 0
+        account.locked_until = None
 
-        if is_mfa_active or (is_admin and account.is_mfa_enabled):
+        # Check if user has MFA enabled (or is a platform admin with active MFA)
+        is_platform_admin = _is_platform_admin(account)
+        is_mfa_active = bool(account.is_mfa_enabled and account.mfa_secret)
+        user_type_val = (
+            account.user_type.value
+            if hasattr(account.user_type, "value")
+            else str(account.user_type)
+        )
+
+        if is_mfa_active or (is_platform_admin and account.is_mfa_enabled):
             # Generate short-lived pending MFA token
-            user_type_val = (
-                account.user_type.value
-                if hasattr(account.user_type, "value")
-                else str(account.user_type)
-            )
             mfa_token = create_mfa_pending_token({
                 "sub": str(account.account_id),
                 "email": account.email,
                 "user_type": user_type_val,
             })
+            db.commit()
             return LoginResponse(
                 mfa_required=True,
                 mfa_token=mfa_token,
                 message="MFA verification required. Please submit your 6-digit TOTP code to /api/v1/auth/mfa/login.",
+            )
+
+        if settings.enforce_admin_mfa and is_platform_admin and not account.is_mfa_enabled:
+            # Admin MFA is enforced: only an enrolment token until TOTP is set up (US-31)
+            setup_token = create_mfa_pending_token(
+                {
+                    "sub": str(account.account_id),
+                    "email": account.email,
+                    "user_type": user_type_val,
+                },
+                token_type="mfa_setup",
+            )
+            db.commit()
+            return LoginResponse(
+                mfa_setup_required=True,
+                mfa_token=setup_token,
+                message="MFA setup required. Use this token with /api/v1/auth/mfa/setup and /api/v1/auth/mfa/verify.",
             )
 
         # Standard non-MFA login completion
@@ -117,7 +223,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
             user=UserInfoResponse.model_validate(account),
             mfa_required=False,
         )
@@ -142,18 +248,27 @@ class AuthService:
         return MfaSetupResponse(
             secret=secret,
             provisioning_uri=provisioning_uri,
-            current_otp=totp.now(),
+            # The live code is a dev convenience; never expose it in production (US-31).
+            current_otp=None if settings.is_production else totp.now(),
             message="Add secret to Google Authenticator or use current_otp to verify.",
         )
 
     @staticmethod
     def verify_and_enable_mfa(
-        db: Session, user: UserAccount, code: str, ip_address: str | None = None
+        db: Session,
+        user: UserAccount,
+        code: str,
+        ip_address: str | None = None,
+        issue_tokens: bool = False,
     ) -> dict:
         """
         Verify the 6-digit TOTP code against the generated secret.
-        On success, marks MFA as enabled.
+        On success, marks MFA as enabled. With ``issue_tokens`` (enforced admin
+        enrolment via an mfa_setup token) the login is completed and tokens returned.
         """
+        if issue_tokens:
+            _raise_if_locked(db, user, user.email, ip_address, datetime.now(timezone.utc))
+
         if not user.mfa_secret:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -190,7 +305,41 @@ class AuthService:
             ip_address=ip_address,
         )
 
-        return {"message": "MFA has been successfully verified and enabled on your account."}
+        message = "MFA has been successfully verified and enabled on your account."
+        if not issue_tokens:
+            return {"message": message}
+
+        # Enrolment completed with an mfa_setup token: finish the login like /mfa/login
+        AuthRepository.update_last_login(db, user)
+
+        user_type_str = user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type)
+        write_audit_log(
+            db=db,
+            action=AuditAction.LOGIN,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(user.account_id),
+            account_id=user.account_id,
+            new_value={
+                "email": user.email,
+                "user_type": user_type_str,
+                "mfa_verified": True,
+            },
+            ip_address=ip_address,
+        )
+
+        token_payload = {
+            "sub": str(user.account_id),
+            "email": user.email,
+            "user_type": user_type_str,
+        }
+        tokens = TokenResponse(
+            access_token=create_access_token(token_payload),
+            refresh_token=create_refresh_token(token_payload),
+            token_type="bearer",
+            expires_in=settings.access_token_expire_minutes * 60,
+            user=UserInfoResponse.model_validate(user),
+        )
+        return {"message": message, **tokens.model_dump(mode="json")}
 
     @staticmethod
     def complete_mfa_login(
@@ -229,6 +378,9 @@ class AuthService:
                 detail="Account is inactive or does not exist",
             )
 
+        now = datetime.now(timezone.utc)
+        _raise_if_locked(db, account, account.email, ip_address, now)
+
         if not account.mfa_secret:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -238,22 +390,28 @@ class AuthService:
         totp = pyotp.TOTP(account.mfa_secret)
 
         if not totp.verify(code.strip(), valid_window=2):
+            # Wrong codes count toward the lockout like wrong passwords
+            new_value = {"status": "FAILED", "attempted_email": account.email, "auth_method": "MFA"}
+            new_value.update(_record_failed_attempt(db, account, now))
             write_audit_log(
                 db=db,
                 action=AuditAction.LOGIN,
                 entity_name="USER_ACCOUNT",
                 entity_ref_id=str(account.account_id),
                 account_id=account.account_id,
-                new_value={"status": "FAILED", "attempted_email": account.email, "auth_method": "MFA"},
+                new_value=new_value,
                 ip_address=ip_address,
+                commit=False,
             )
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid 6-digit MFA code",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Successful MFA login
+        # Successful MFA login (update_last_login commits the counter reset)
+        account.failed_login_count = 0
         AuthRepository.update_last_login(db, account)
 
         write_audit_log(
@@ -286,7 +444,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
             user=UserInfoResponse.model_validate(account),
         )
 
@@ -324,10 +482,18 @@ class AuthService:
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
+        _raise_if_locked(db, account, account.email, None, datetime.now(timezone.utc))
+
         if not account.is_active:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is inactive. Contact HR.",
+            )
+
+        if settings.enforce_admin_mfa and _is_platform_admin(account) and not account.is_mfa_enabled:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="MFA setup required",
             )
 
         token_payload = {
@@ -341,5 +507,25 @@ class AuthService:
         return TokenRefreshResponse(
             access_token=new_access_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
+        )
+
+    @staticmethod
+    def get_me_info(db: Session, user: UserAccount) -> MeResponse:
+        """Current account info plus employee, team scope, and active elevated roles."""
+        employee = resolve_employee(db, user)
+        now = datetime.now(timezone.utc)
+        granted_roles = db.scalars(
+            select(ElevatedAccessGrant.granted_role).where(
+                ElevatedAccessGrant.user_id == user.account_id,
+                ElevatedAccessGrant.revoked_at.is_(None),
+                ElevatedAccessGrant.expires_at > now,
+            )
+        )
+        return MeResponse(
+            **UserInfoResponse.model_validate(user).model_dump(),
+            emp_id=employee.emp_id if employee else None,
+            led_team_ids=sorted(led_team_ids(db, employee.emp_id)) if employee else [],
+            team_ids=sorted(employee_team_ids(db, employee.emp_id)) if employee else [],
+            active_elevated_roles=sorted(set(granted_roles)),
         )
