@@ -35,7 +35,7 @@ from app.models.project_manager import ProjectManager
 from app.models.project import Project, ProjectAssignment
 from app.models.milestone import ProjectMilestone
 from app.models.task import Task
-from app.models.team import Team
+from app.models.team import Team, TeamMember
 from app.models.audit_log import AuditLog
 from app.features.employees.schemas import EmployeeWorkloadResponse
 from app.features.projects.schemas import EligibleEmployeeResponse
@@ -73,6 +73,7 @@ def db_session():
             ProjectAssignment.__table__,
             ProjectMilestone.__table__,
             Team.__table__,
+            TeamMember.__table__,
             Task.__table__,
             AuditLog.__table__,
         ],
@@ -594,12 +595,23 @@ def test_api_get_workload_200_admin(app_client, seed_data):
     assert data["utilization_pct"] == 25.0
 
 
-def test_api_get_workload_403_employee(app_client, seed_data):
-    """GET /api/v1/employees/{id}/workload: Regular Employee receives 403 Forbidden."""
+def test_api_get_workload_200_self(app_client, seed_data):
+    """GET /api/v1/employees/{id}/workload: Employee retrieves their own workload successfully (US-35)."""
     client, app, _ = app_client
     app.dependency_overrides[get_current_user] = lambda: seed_data["emp1_account"]
 
     response = client.get("/api/v1/employees/1/workload")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["employee_id"] == 1
+
+
+def test_api_get_workload_403_employee(app_client, seed_data):
+    """GET /api/v1/employees/{id}/workload: Regular Employee receives 403 Forbidden viewing another employee."""
+    client, app, _ = app_client
+    app.dependency_overrides[get_current_user] = lambda: seed_data["emp1_account"]
+
+    response = client.get("/api/v1/employees/2/workload")
     assert response.status_code == 403
 
 
@@ -613,13 +625,18 @@ def test_api_get_workload_403_client(app_client, seed_data):
 
 
 def test_api_get_workload_404_not_found(app_client, seed_data):
-    """GET /api/v1/employees/{id}/workload: Non-existent employee returns 404 Not Found."""
+    """GET /api/v1/employees/{id}/workload: Non-existent employee returns 404 for Admin, 403 for PM."""
     client, app, _ = app_client
-    app.dependency_overrides[get_current_user] = lambda: seed_data["pm1_account"]
-
+    # Admin has global workload access -> gets 404 Not Found
+    app.dependency_overrides[get_current_user] = lambda: seed_data["admin_account"]
     response = client.get("/api/v1/employees/99999/workload")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+    # PM without active staffing assignment -> gets 403 Forbidden (US-35 prevents ID enumeration)
+    app.dependency_overrides[get_current_user] = lambda: seed_data["pm1_account"]
+    res_pm = client.get("/api/v1/employees/99999/workload")
+    assert res_pm.status_code == 403
 
 
 # ==============================================================================
@@ -711,7 +728,7 @@ def test_workload_and_eligible_apis_do_not_leak_task_or_project_details(app_clie
     app.dependency_overrides[get_current_user] = lambda: seed_data["pm1_account"]
 
     # 1. Employee Workload endpoint
-    res_workload = client.get("/api/v1/employees/2/workload")
+    res_workload = client.get("/api/v1/employees/1/workload")
     assert res_workload.status_code == 200
     workload_body = res_workload.text
     # Ensure proprietary task titles or descriptions never appear
