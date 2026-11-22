@@ -68,7 +68,7 @@ class TaskCommentService:
                 Team.project_id == task.project_id,
                 TeamMember.emp_id == employee.emp_id,
             ).first() is not None
-            if is_assignee or is_project_team_member:
+            if is_assignee or is_project_team_member or is_team_lead:
                 return identity
 
         raise HTTPException(

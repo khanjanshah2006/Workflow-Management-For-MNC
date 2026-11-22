@@ -51,6 +51,8 @@ from app.models.user_account import UserAccount
 router = APIRouter(prefix="/api/v1/tasks", tags=["Tasks"])
 project_tasks_router = APIRouter(prefix="/api/v1/projects", tags=["Tasks"])
 
+TASK_COMMENT_ROLES = (roles.EMPLOYEE, roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN)
+
 
 # ── RBAC Helpers for US-13 ──────────────────────────────────────────────
 
@@ -364,7 +366,7 @@ def reassign_task(
 def create_task_comment(
     id: int,
     payload: TaskCommentCreate,
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role(TASK_COMMENT_ROLES)),
     db: Session = Depends(get_db),
 ) -> TaskCommentResponse:
     return TaskCommentService.create_comment(
@@ -384,7 +386,7 @@ def create_task_comment(
 )
 def get_task_comments(
     id: int,
-    current_user: UserAccount = Depends(require_role(["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role(TASK_COMMENT_ROLES)),
     db: Session = Depends(get_db),
 ) -> List[TaskCommentResponse]:
     return TaskCommentService.list_comments(db=db, task_id=id, current_user=current_user)

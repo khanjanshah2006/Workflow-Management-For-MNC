@@ -13,8 +13,12 @@ from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.client import Client
 from app.models.employee import Employee
 from app.models.enums import UserType
+from app.models.project import Project
+from app.models.project_manager import ProjectManager
+from app.models.task import Task
 from app.models.team import Team
 from app.models.user_account import UserAccount
 
@@ -100,11 +104,52 @@ def make_employee(db, account: UserAccount | None = None) -> Employee:
     return employee
 
 
-def make_team(db, lead: Employee | None = None) -> Team:
-    team = Team(name=f"Team {uuid4().hex[:8]}", lead_emp_id=lead.emp_id if lead else None)
+def make_project(db) -> Project:
+    """Project with its own fresh client and PM (the PM has no login account)."""
+    code = uuid4().hex[:8]
+    client = Client(company_name=f"Client {code}", contact_person="Contact", email=f"client-{code}@example.com")
+    pm = ProjectManager(
+        emp_code=f"PM-{code}",
+        full_name=f"PM {code}",
+        email=f"pm-{code}@example.com",
+        date_of_joining=date(2024, 1, 1),
+    )
+    db.add_all([client, pm])
+    db.flush()
+    project = Project(
+        client_id=client.client_id,
+        pm_id=pm.pm_id,
+        project_code=f"PRJ-{code}",
+        name=f"Project {code}",
+        start_date=date(2024, 1, 1),
+    )
+    db.add(project)
+    db.commit()
+    return project
+
+
+def make_team(db, lead: Employee | None = None, project: Project | None = None) -> Team:
+    team = Team(
+        name=f"Team {uuid4().hex[:8]}",
+        lead_emp_id=lead.emp_id if lead else None,
+        project_id=project.project_id if project else None,
+    )
     db.add(team)
     db.commit()
     return team
+
+
+def make_task(db, team: Team, assignee: Employee | None = None) -> Task:
+    """Task on ``team`` and the team's project (the team must have a project)."""
+    task = Task(
+        project_id=team.project_id,
+        team_id=team.team_id,
+        assigned_to=assignee.emp_id if assignee else None,
+        title=f"Task {uuid4().hex[:8]}",
+    )
+    db.add(task)
+    db.commit()
+    return task
 
 
 def auth_headers(account: UserAccount) -> dict[str, str]:
@@ -143,3 +188,25 @@ def test_team_lead_user_type_can_view_own_team_roster(client, db):
 
     res = client.get(f"/api/v1/teams/{team_a.team_id}/members", headers=auth_headers(orphan_lead))
     assert res.status_code == 403
+
+
+def test_team_lead_can_comment_on_team_task(client, db):
+    project = make_project(db)
+    lead = make_account(db, UserType.TEAM_LEAD)
+    team = make_team(db, lead=make_employee(db, lead), project=project)
+    task = make_task(db, team, assignee=make_employee(db, make_account(db, UserType.EMPLOYEE)))
+    other_lead = make_account(db, UserType.TEAM_LEAD)
+    make_team(db, lead=make_employee(db, other_lead), project=make_project(db))
+    url = f"/api/v1/tasks/{task.task_id}/comments"
+
+    res = client.post(url, json={"content": "Lead feedback"}, headers=auth_headers(lead))
+    assert res.status_code == 201
+    assert res.json()["author_role"] == "TEAM_LEAD"
+    comment_id = res.json()["comment_id"]
+
+    res = client.get(url, headers=auth_headers(lead))
+    assert res.status_code == 200
+    assert comment_id in [c["comment_id"] for c in res.json()]
+
+    assert client.post(url, json={"content": "Nope"}, headers=auth_headers(other_lead)).status_code == 403
+    assert client.get(url, headers=auth_headers(other_lead)).status_code == 403
