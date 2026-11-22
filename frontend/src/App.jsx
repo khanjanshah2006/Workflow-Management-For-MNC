@@ -24,6 +24,7 @@ import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
+import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
 import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
@@ -290,6 +291,14 @@ function App() {
                   }
                 />
                 {/* S4-FE-2 routes (Team Lead Leave Triage & Conflict Calendar: /team-lead/leave) */}
+                <Route
+                  path="/team-lead/leave"
+                  element={
+                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "HR", "ADMIN"]}>
+                      <TeamLeaveTriagePage />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
                 <Route

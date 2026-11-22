@@ -57,6 +57,12 @@ export const navConfig = [
     roles: ["EMPLOYEE", "TEAM_LEAD"],
   },
   {
+    path: "/team-lead/leave",
+    label: "Leave Triage",
+    icon: "⚖️",
+    roles: ["TEAM_LEAD", "HR", "ADMIN"],
+  },
+  {
     path: "/support",
     label: "IT Support",
     icon: "🛠",
