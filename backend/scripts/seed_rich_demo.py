@@ -440,7 +440,8 @@ def _seed_projects(db: Session, today: date, ctx: dict) -> dict:
     for key, name, project, lead, status, members in TEAMS:
         teams[key] = _get_or_create(
             db, Team, {"name": name},
-            project_id=projects[project].project_id, lead_emp_id=people[lead].emp_id, status=status,
+            project_id=projects[project].project_id, lead_emp_id=people[lead].emp_id,
+            dept_id=people[lead].dept_id, status=status,
             description=f"Delivery team for {projects[project].name}.",
         )
         for member in members:

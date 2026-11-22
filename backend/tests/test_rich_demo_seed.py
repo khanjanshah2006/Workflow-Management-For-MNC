@@ -20,6 +20,7 @@ from app.models.leave import LeaveRequest
 from app.models.project import Project
 from app.models.support import SupportTicket
 from app.models.task import Task
+from app.models.team import Team
 from app.models.user_account import UserAccount
 
 TODAY = date(2026, 11, 18)
@@ -71,6 +72,7 @@ def test_rich_demo_seed_is_idempotent_and_covers_every_role_and_status(db, seed)
     assert _present(db, Project.status) == {s.value for s in ProjectStatus}
     assert _present(db, SupportTicket.status) >= {"open", "in_progress", "escalated", "resolved", "closed"}
     assert db.scalar(select(func.count()).select_from(Task)) >= 100
+    assert all(team.dept_id is not None for team in db.scalars(select(Team)))
 
     def rejections(task):
         rows = db.scalars(select(AuditLog.new_value).where(
