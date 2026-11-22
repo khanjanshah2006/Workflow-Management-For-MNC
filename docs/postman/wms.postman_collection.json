@@ -116,6 +116,7 @@
                   "        console.log(\"MFA challenge required. Ephemeral mfa_token set:\", jsonData.mfa_token);",
                   "    } else {",
                   "        pm.environment.set(\"access_token\", jsonData.access_token);",
+                  "        pm.environment.set(\"admin_access_token\", jsonData.access_token);",
                   "        console.log(\"Admin access token set:\", jsonData.access_token);",
                   "    }",
                   "}"
@@ -148,7 +149,7 @@
                 "login"
               ]
             },
-            "description": "Login as Admin account. Saves access_token to environment automatically."
+            "description": "Login as Admin account. Saves access_token to environment automatically. Failed-login lockout: 5 wrong passwords lock the account for 15 minutes, after which logins (even with the right password) return 423 Account locked. /auth/login and /auth/mfa/login are throttled to 20 requests/minute per IP (429 with Retry-After). When ENFORCE_ADMIN_MFA=true, an ADMIN/SYSTEM_ADMIN without MFA gets mfa_setup_required=true and an mfa_token with no access_token; that mfa_token only works on /auth/mfa/setup and /auth/mfa/verify, and verify then returns normal tokens."
           },
           "response": []
         },
@@ -5182,7 +5183,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -5265,7 +5266,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -5329,7 +5330,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -5355,7 +5356,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               },
               {
                 "key": "Content-Type",
@@ -5385,12 +5386,43 @@
         },
         {
           "name": "POST Grant Time-Bound Elevated Access",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"grant_expires_at\", new Date(Date.now() + 7 * 24 * 3600 * 1000).toISOString());",
+                  "pm.sendRequest({",
+                  "    url: pm.environment.get(\"base_url\") + \"/api/v1/admin/users\",",
+                  "    method: \"POST\",",
+                  "    header: { \"Authorization\": \"Bearer \" + pm.environment.get(\"admin_access_token\"), \"Content-Type\": \"application/json\" },",
+                  "    body: { mode: \"raw\", raw: JSON.stringify({ email: \"grant-target-\" + Date.now() + \"@example.com\", password: \"Grant@12345\", user_type: \"EMPLOYEE\" }) }",
+                  "}, function (err, res) {",
+                  "    if (!err && res.code === 201) { pm.environment.set(\"grant_target_id\", res.json().account_id); }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set(\"grant_id\", pm.response.json().id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "POST",
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               },
               {
                 "key": "Content-Type",
@@ -5399,7 +5431,7 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n    \"user_id\": \"b8c56c22-0941-4cfa-81a2-c13e4b77f154\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"2026-12-31T23:59:59Z\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
+              "raw": "{\n    \"user_id\": \"{{grant_target_id}}\",\n    \"granted_role\": \"PM\",\n    \"expires_at\": \"{{grant_expires_at}}\",\n    \"reason\": \"Temporary project manager escalation during emergency sprint\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/v1/admin/elevated-access",
@@ -5413,7 +5445,7 @@
                 "elevated-access"
               ]
             },
-            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN or SYSTEM_ADMIN."
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN or SYSTEM_ADMIN. Granting to yourself, or a non-ADMIN granting the ADMIN role, returns 403. The pre-request script creates a throwaway EMPLOYEE account as the grant target (saved as grant_target_id) and sets grant_expires_at to 7 days ahead; the test script saves the new grant id to grant_id for the revoke requests."
           },
           "response": []
         },
@@ -5424,7 +5456,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -5441,6 +5473,84 @@
               ]
             },
             "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Revoke Elevated Access (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"revoked_at is set\", function () { pm.expect(pm.response.json().revoked_at).to.not.equal(null); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/{{grant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "{{grant_id}}"
+              ]
+            },
+            "description": "Revoke an elevated access grant (run after POST Grant Time-Bound Elevated Access). Returns the grant with revoked_at set and notifies the grantee. 404 for an unknown grant; 409 if already revoked or expired. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "DELETE Revoke Elevated Access - Already Revoked (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });",
+                  "pm.test(\"Detail says already revoked\", function () { pm.expect(pm.response.json().detail).to.include(\"already revoked\"); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/elevated-access/{{grant_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "elevated-access",
+                "{{grant_id}}"
+              ]
+            },
+            "description": "Revoking the same grant again returns 409 (Grant is already revoked; an expired grant returns Grant has already expired)."
           },
           "response": []
         },
@@ -5486,7 +5596,7 @@
             "header": [
               {
                 "key": "Authorization",
-                "value": "Bearer {{access_token}}"
+                "value": "Bearer {{admin_access_token}}"
               }
             ],
             "url": {
@@ -5573,7 +5683,7 @@
                 "header": [
                   {
                     "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
+                    "value": "Bearer {{admin_access_token}}"
                   }
                 ],
                 "url": {
@@ -5671,7 +5781,7 @@
                 "header": [
                   {
                     "key": "Authorization",
-                    "value": "Bearer {{access_token}}"
+                    "value": "Bearer {{admin_access_token}}"
                   }
                 ],
                 "url": {
@@ -5700,6 +5810,251 @@
               "body": "{\n  \"detail\": \"Forbidden\"\n}"
             }
           ]
+        },
+        {
+          "name": "POST Create Lockout Test User",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.environment.set(\"lockout_email\", \"lockout-\" + Date.now() + \"@example.com\");",
+                  "pm.environment.set(\"lockout_password\", \"Lockout@12345\");"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 201\", function () { pm.response.to.have.status(201); });",
+                  "if (pm.response.code === 201) {",
+                  "    pm.environment.set(\"lockout_account_id\", pm.response.json().account_id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{lockout_email}}\",\n    \"password\": \"{{lockout_password}}\",\n    \"user_type\": \"EMPLOYEE\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ]
+            },
+            "description": "Creates a throwaway EMPLOYEE account used by the lockout requests below, so a seeded demo account is never locked. Saves lockout_account_id, lockout_email and lockout_password to the environment. Requires admin_access_token (set by POST Login as Admin)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Login - Account Locked (423)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "var attempts = 0;",
+                  "function wrongLogin() {",
+                  "    if (attempts >= 5) { return; }",
+                  "    attempts++;",
+                  "    pm.sendRequest({",
+                  "        url: pm.environment.get(\"base_url\") + \"/api/v1/auth/login\",",
+                  "        method: \"POST\",",
+                  "        header: { \"Content-Type\": \"application/json\" },",
+                  "        body: { mode: \"raw\", raw: JSON.stringify({ email: pm.environment.get(\"lockout_email\"), password: \"Wrong@Password1\" }) }",
+                  "    }, function () { wrongLogin(); });",
+                  "}",
+                  "wrongLogin();"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 423\", function () { pm.response.to.have.status(423); });",
+                  "pm.test(\"Detail says account locked\", function () { pm.expect(pm.response.json().detail).to.include(\"Account locked\"); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"email\": \"{{lockout_email}}\",\n    \"password\": \"{{lockout_password}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/auth/login",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Pre-request script sends 5 wrong-password logins for lockout_email (FAILED_LOGIN_THRESHOLD), which locks the account for LOCKOUT_MINUTES (15). The request then logs in with the CORRECT password and must return 423 with detail Account locked. Try again after HH:MM UTC or contact an administrator. Logins are also throttled to 20 requests/minute per IP (429 with Retry-After)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Unlock Account (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "unlock"
+              ]
+            },
+            "description": "Clears a login lockout so the user can sign in again. Returns the UserAccountResponse. 404 for an unknown account; 409 Account is not locked if there is no active lockout. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Unlock Account - Not Locked (409)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 409\", function () { pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/unlock",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "unlock"
+              ]
+            },
+            "description": "Unlocking an account that is not locked returns 409 with detail Account is not locked."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Reset User Password (also clears lock)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{admin_access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"new_password\": \"Lockout@67890\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/admin/users/{{lockout_account_id}}/reset-password",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                "{{lockout_account_id}}",
+                "reset-password"
+              ]
+            },
+            "description": "Admin password reset (US-48). Sets a new password for the account (bcrypt, audit logged). It also clears any active login lockout and failed-attempt counter, so a locked account can sign in with the new password. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
         }
       ]
     }
