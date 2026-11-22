@@ -88,10 +88,16 @@ class TestBackupAndAnomalyAlerts(unittest.TestCase):
         self.db.commit()
         return row
 
-    def test_admin_role_is_forbidden(self):
+    def test_admin_role_is_allowed_and_it_support_forbidden(self):
         response = self.client.get(
             "/api/v1/admin/anomaly-alerts",
             headers=self.headers(self.general_admin),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.make_user(UserType.IT_SUPPORT)),
         )
         self.assertEqual(response.status_code, 403)
 

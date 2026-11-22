@@ -13,9 +13,10 @@ from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
 from app.main import app
+from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.employee import Employee
-from app.models.enums import UserType
+from app.models.enums import AuditAction, UserType
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
 from app.models.task import Task
@@ -230,3 +231,35 @@ def test_my_tasks_without_employee_row_returns_empty_page(client, db):
         res = client.get("/api/v1/tasks/my-tasks", headers=auth_headers(make_account(db, user_type)))
         assert res.status_code == 200
         assert res.json() == {"items": [], "total": 0, "page": 1, "limit": 20}
+
+
+def test_sysadmin_can_manage_users_and_security(client, db):
+    sysadmin = make_account(db, UserType.SYSTEM_ADMIN)
+    headers = auth_headers(sysadmin)
+    for path in (
+        "/api/v1/admin/users",
+        "/api/v1/admin/system-params",
+        "/api/v1/admin/elevated-access/active",
+        "/api/v1/admin/anomaly-alerts",
+        "/api/v1/admin/system/backup-status",
+    ):
+        assert client.get(path, headers=headers).status_code == 200, path
+
+    email = f"new-{uuid4().hex[:8]}@example.com"
+    res = client.post(
+        "/api/v1/admin/users",
+        json={"email": email, "password": "Secret123!", "user_type": "EMPLOYEE"},
+        headers=headers,
+    )
+    assert res.status_code == 201
+    audit = db.query(AuditLog).filter(
+        AuditLog.entity_name == "USER_ACCOUNT",
+        AuditLog.entity_ref_id == res.json()["account_id"],
+    ).one()
+    assert audit.action == AuditAction.CREATE
+    assert audit.account_id == sysadmin.account_id
+
+    admin = make_account(db, UserType.ADMIN)
+    assert client.get("/api/v1/admin/users", headers=auth_headers(admin)).status_code == 200
+    employee = make_account(db, UserType.EMPLOYEE)
+    assert client.get("/api/v1/admin/users", headers=auth_headers(employee)).status_code == 403

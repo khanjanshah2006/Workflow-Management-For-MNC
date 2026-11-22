@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.rbac import require_role
 from app.db.session import get_db
 from app.features.admin.schemas import (
@@ -34,9 +35,8 @@ from app.models.user_account import UserAccount
 
 router = APIRouter(prefix="/api/v1/admin", tags=["Admin User Management"])
 
-# Strict RBAC guard: Admin access only
-admin_guard = require_role(["ADMIN"])
-system_admin_guard = require_role(["SYSTEM_ADMIN"])
+# Strict RBAC guard: platform admins (ADMIN or SYSTEM_ADMIN) only
+platform_admin_guard = require_role(roles.PLATFORM_ADMINS)
 
 
 @router.get(
@@ -53,7 +53,7 @@ def list_users(
     page: int = Query(1, ge=1, description="Page number (1-indexed)"),
     limit: int = Query(20, ge=1, le=100, description="Items per page (max 100)"),
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> UserAccountPaginationResponse:
     filters = UserAccountFilter(
         search=search,
@@ -76,7 +76,7 @@ def create_user(
     payload: UserAccountCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> UserAccountResponse:
     client_ip = request.client.host if request.client else None
     try:
@@ -100,7 +100,7 @@ def create_user(
 def get_user(
     account_id: UUID,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> UserAccountResponse:
     try:
         return AdminService.get_account(db=db, account_id=account_id)
@@ -120,7 +120,7 @@ def update_user_status(
     payload: UserAccountStatusUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> UserAccountResponse:
     client_ip = request.client.host if request.client else None
     try:
@@ -147,7 +147,7 @@ def update_user_role(
     payload: UserRoleUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> UserAccountResponse:
     client_ip = request.client.host if request.client else None
     try:
@@ -173,7 +173,7 @@ def reset_user_password(
     payload: AdminPasswordReset,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> dict:
     client_ip = request.client.host if request.client else None
     try:
@@ -197,7 +197,7 @@ def reset_user_password(
 )
 def get_backup_status(
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> BackupStatusResponse:
     return AdminService.get_backup_status(db=db)
 
@@ -211,11 +211,11 @@ def get_backup_status(
     response_model=List[SystemParameterResponse],
     status_code=status.HTTP_200_OK,
     summary="List all system configuration parameters (US-46)",
-    description="Retrieve all operational system parameters (session timeout, upload limits, etc.). Restricted to ADMIN.",
+    description="Retrieve all operational system parameters (session timeout, upload limits, etc.). Restricted to ADMIN or SYSTEM_ADMIN.",
 )
 def list_system_parameters(
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> List[SystemParameterResponse]:
     return AdminService.list_system_parameters(db=db)
 
@@ -225,14 +225,14 @@ def list_system_parameters(
     response_model=SystemParameterResponse,
     status_code=status.HTTP_200_OK,
     summary="Update system configuration parameter (US-46)",
-    description="Update a system configuration parameter with strict value_type validation and audit logging. Restricted to ADMIN.",
+    description="Update a system configuration parameter with strict value_type validation and audit logging. Restricted to ADMIN or SYSTEM_ADMIN.",
 )
 def update_system_parameter(
     key: str,
     payload: SystemParameterUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> SystemParameterResponse:
     client_ip = request.client.host if request.client else None
     try:
@@ -258,13 +258,13 @@ def update_system_parameter(
     response_model=ElevatedAccessGrantResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Grant time-bound elevated access (US-45)",
-    description="Grants temporary role privilege to a user account with explicit expiration and business justification. Restricted to ADMIN.",
+    description="Grants temporary role privilege to a user account with explicit expiration and business justification. Restricted to ADMIN or SYSTEM_ADMIN.",
 )
 def grant_elevated_access(
     payload: ElevatedAccessGrantCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> ElevatedAccessGrantResponse:
     client_ip = request.client.host if request.client else None
     try:
@@ -285,11 +285,11 @@ def grant_elevated_access(
     response_model=List[ElevatedAccessGrantResponse],
     status_code=status.HTTP_200_OK,
     summary="List active elevated access grants (US-45)",
-    description="Retrieve all unexpired, unrevoked elevated access grants across the system. Restricted to ADMIN.",
+    description="Retrieve all unexpired, unrevoked elevated access grants across the system. Restricted to ADMIN or SYSTEM_ADMIN.",
 )
 def list_active_elevated_grants(
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> List[ElevatedAccessGrantResponse]:
     return AdminService.list_active_elevated_grants(db=db)
 
@@ -306,12 +306,12 @@ def list_active_elevated_grants(
     response_model=BackupTriggerResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Trigger an on-demand database backup (US-50)",
-    description="SYSTEM_ADMIN only. Creates a timestamped database backup and records it in the backup and audit logs.",
+    description="ADMIN or SYSTEM_ADMIN. Creates a timestamped database backup and records it in the backup and audit logs.",
 )
 def trigger_backup(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(system_admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> BackupTriggerResponse:
     client_ip = request.client.host if request.client else None
     return AdminService.trigger_backup(db, current_user, client_ip)
@@ -322,10 +322,10 @@ def trigger_backup(
     response_model=AnomalyAlertsResponse,
     status_code=status.HTTP_200_OK,
     summary="Retrieve recent security anomaly alerts (US-49)",
-    description="SYSTEM_ADMIN only. Detects failed-login bursts and unexpected privilege promotions.",
+    description="ADMIN or SYSTEM_ADMIN. Detects failed-login bursts and unexpected privilege promotions.",
 )
 def get_anomaly_alerts(
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(system_admin_guard),
+    current_user: UserAccount = Depends(platform_admin_guard),
 ) -> AnomalyAlertsResponse:
     return AdminService.get_anomaly_alerts(db)
