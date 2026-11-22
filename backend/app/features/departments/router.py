@@ -13,6 +13,11 @@ from app.features.departments.schemas import (
     DepartmentResponse,
     DepartmentUpdate,
     TeamMemberOut,
+    DepartmentTeamCreate,
+    DepartmentTeamUpdate,
+    DepartmentTeamMemberAdd,
+    DepartmentTeamResponse,
+    DepartmentTeamListItem,
 )
 
 router = APIRouter(prefix="/api/v1/departments", tags=["Departments"])
@@ -126,6 +131,115 @@ def update_department(
 
 
 # ==========================================
+# Department Team Endpoints (US-05, Issue #141)
+# ==========================================
+
+
+@router.post(
+    "/{dept_id}/teams",
+    response_model=DepartmentTeamResponse,
+    status_code=status.HTTP_201_CREATED,
+    summary="Create department team (US-05)",
+    description="Creates a new team under the specified department with designated lead and initial members. Restricted to HR and ADMIN roles.",
+)
+def create_department_team(
+    dept_id: int,
+    payload: DepartmentTeamCreate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(
+        require_role((roles.HR, roles.ADMIN))
+    ),
+) -> DepartmentTeamResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        team, lead, members = service.create_department_team(
+            db=db,
+            dept_id=dept_id,
+            team_in=payload,
+            actor_account_id=current_user.account_id,
+            ip_address=client_ip,
+        )
+        return DepartmentTeamResponse(
+            team_id=team.team_id,
+            dept_id=team.dept_id,
+            project_id=team.project_id,
+            name=team.name,
+            description=team.description,
+            lead_emp_id=team.lead_emp_id,
+            lead_name=lead.full_name if lead else None,
+            status=team.status,
+            created_at=team.created_at,
+            member_count=len(members),
+            members=[
+                TeamMemberOut(
+                    employee_id=m.emp_id,
+                    emp_code=m.emp_code,
+                    full_name=m.full_name,
+                    email=m.email,
+                    designation=m.designation,
+                )
+                for m in members
+            ],
+        )
+    except (service.DepartmentNotFoundError, service.EmployeeNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except service.EmployeeInactiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except service.TeamNameAlreadyExistsInDepartmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{dept_id}/teams",
+    response_model=list[DepartmentTeamListItem],
+    summary="List department teams (US-05)",
+    description="Retrieve teams in a department with lead name and member count. Defaults to ACTIVE teams only; ?include_disbanded=true includes disbanded teams.",
+)
+def list_department_teams(
+    dept_id: int,
+    include_disbanded: bool = Query(False, description="Whether to include disbanded teams"),
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+) -> list[DepartmentTeamListItem]:
+    try:
+        items = service.list_department_teams(
+            db=db,
+            dept_id=dept_id,
+            include_disbanded=include_disbanded,
+        )
+        return [
+            DepartmentTeamListItem(
+                team_id=t.team_id,
+                dept_id=t.dept_id,
+                project_id=t.project_id,
+                name=t.name,
+                description=t.description,
+                lead_emp_id=t.lead_emp_id,
+                lead_name=lead_name,
+                status=t.status,
+                created_at=t.created_at,
+                member_count=count,
+            )
+            for t, lead_name, count in items
+        ]
+    except service.DepartmentNotFoundError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+# ==========================================
 # Team Endpoints (US-37)
 # ==========================================
 
@@ -212,4 +326,163 @@ def get_team_tasks(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=str(exc),
         ) from exc
+
+
+@team_router.put(
+    "/{team_id}",
+    response_model=DepartmentTeamResponse,
+    summary="Update team (US-05, Issue #141)",
+    description="Partial update of name, description, lead_emp_id, and status. Restricted to HR and ADMIN roles.",
+)
+def update_team(
+    team_id: int,
+    payload: DepartmentTeamUpdate,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(
+        require_role((roles.HR, roles.ADMIN))
+    ),
+) -> DepartmentTeamResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        team, lead, members = service.update_team(
+            db=db,
+            team_id=team_id,
+            team_in=payload,
+            actor_account_id=current_user.account_id,
+            ip_address=client_ip,
+        )
+        return DepartmentTeamResponse(
+            team_id=team.team_id,
+            dept_id=team.dept_id,
+            project_id=team.project_id,
+            name=team.name,
+            description=team.description,
+            lead_emp_id=team.lead_emp_id,
+            lead_name=lead.full_name if lead else None,
+            status=team.status,
+            created_at=team.created_at,
+            member_count=len(members),
+            members=[
+                TeamMemberOut(
+                    employee_id=m.emp_id,
+                    emp_code=m.emp_code,
+                    full_name=m.full_name,
+                    email=m.email,
+                    designation=m.designation,
+                )
+                for m in members
+            ],
+        )
+    except (service.TeamNotFoundError, service.EmployeeNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except service.EmployeeInactiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except service.TeamNameAlreadyExistsInDepartmentError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+
+@team_router.post(
+    "/{team_id}/members",
+    response_model=DepartmentTeamResponse,
+    summary="Add members to team (US-05, Issue #141)",
+    description="Idempotently add members to team. Restricted to HR and ADMIN roles.",
+)
+def add_team_members(
+    team_id: int,
+    payload: DepartmentTeamMemberAdd,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(
+        require_role((roles.HR, roles.ADMIN))
+    ),
+) -> DepartmentTeamResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        team, lead, members = service.add_team_members(
+            db=db,
+            team_id=team_id,
+            members_in=payload,
+            actor_account_id=current_user.account_id,
+            ip_address=client_ip,
+        )
+        return DepartmentTeamResponse(
+            team_id=team.team_id,
+            dept_id=team.dept_id,
+            project_id=team.project_id,
+            name=team.name,
+            description=team.description,
+            lead_emp_id=team.lead_emp_id,
+            lead_name=lead.full_name if lead else None,
+            status=team.status,
+            created_at=team.created_at,
+            member_count=len(members),
+            members=[
+                TeamMemberOut(
+                    employee_id=m.emp_id,
+                    emp_code=m.emp_code,
+                    full_name=m.full_name,
+                    email=m.email,
+                    designation=m.designation,
+                )
+                for m in members
+            ],
+        )
+    except (service.TeamNotFoundError, service.EmployeeNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except service.EmployeeInactiveError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@team_router.delete(
+    "/{team_id}/members/{emp_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    summary="Remove member from team (US-05, Issue #141)",
+    description="Remove employee from team members. Removing lead returns 409 Conflict. Restricted to HR and ADMIN roles.",
+)
+def remove_team_member(
+    team_id: int,
+    emp_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(
+        require_role((roles.HR, roles.ADMIN))
+    ),
+) -> Response:
+    client_ip = request.client.host if request.client else None
+    try:
+        service.remove_team_member(
+            db=db,
+            team_id=team_id,
+            emp_id=emp_id,
+            actor_account_id=current_user.account_id,
+            ip_address=client_ip,
+        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except (service.TeamNotFoundError, service.EmployeeNotFoundError, service.TeamMemberNotFoundError) as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+    except service.CannotRemoveLeadError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
 
