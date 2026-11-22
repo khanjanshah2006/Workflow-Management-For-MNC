@@ -146,6 +146,7 @@ def setup_workload_scenario(db):
 
     hr_user = make_user(db, UserType.HR, "hr@company.com")
     admin_user = make_user(db, UserType.ADMIN, "admin@company.com")
+    sysadmin_user = make_user(db, UserType.SYSTEM_ADMIN, "sysadmin@company.com")
 
     # Target employee
     target_user = make_user(db, UserType.EMPLOYEE, "target@company.com")
@@ -231,6 +232,7 @@ def setup_workload_scenario(db):
         "unrelated_user": unrelated_user,
         "hr_user": hr_user,
         "admin_user": admin_user,
+        "sysadmin_user": sysadmin_user,
         "pm_managing_user": pm_managing_user,
         "pm_other_user": pm_other_user,
         "tl_lead_user": tl_lead_user,
@@ -295,6 +297,21 @@ def test_workload_visible_only_to_allowed_viewers(client, db):
     app.dependency_overrides[get_current_user] = lambda: scenario["client_user"]
     res_client = client.get(url)
     assert res_client.status_code == 403
+
+    # 10. System Admin -> 403 Forbidden (SYSTEM_ADMIN excluded per US-35)
+    app.dependency_overrides[get_current_user] = lambda: scenario["sysadmin_user"]
+    res_sysadmin = client.get(url)
+    assert res_sysadmin.status_code == 403
+
+    # 11. Unauthorized caller querying non-existent employee gets 403 (checked before 404)
+    app.dependency_overrides[get_current_user] = lambda: scenario["unrelated_user"]
+    res_nonexistent_unrel = client.get("/api/v1/employees/999999/workload")
+    assert res_nonexistent_unrel.status_code == 403
+
+    # 12. Authorized caller querying non-existent employee gets 404
+    app.dependency_overrides[get_current_user] = lambda: scenario["hr_user"]
+    res_nonexistent_hr = client.get("/api/v1/employees/999999/workload")
+    assert res_nonexistent_hr.status_code == 404
 
 
 def test_workload_released_employee_not_visible_to_pm(client, db):

@@ -1,5 +1,5 @@
 import uuid
-from sqlalchemy import Column, String, Boolean, DateTime, func, Enum
+from sqlalchemy import Column, String, Boolean, DateTime, Integer, func, Enum
 from sqlalchemy.dialects.postgresql import UUID
 from app.db.base import Base
 from app.models.enums import UserType
@@ -16,4 +16,6 @@ class UserAccount(Base):
     last_login_at = Column(DateTime(timezone=True), nullable=True)
     mfa_secret = Column(String(64), nullable=True)
     is_mfa_enabled = Column(Boolean, default=False, nullable=False)
+    failed_login_count = Column(Integer, default=0, server_default="0", nullable=False)
+    locked_until = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

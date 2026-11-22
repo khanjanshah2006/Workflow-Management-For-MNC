@@ -3,8 +3,9 @@ from fastapi import APIRouter, Depends, Query, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core import roles
 from app.core.rbac import require_role
-from app.models.enums import SkillRequestStatus
+from app.models.enums import SkillChangeStatus
 from app.models.user_account import UserAccount
 from app.features.profile.schemas import (
     ProfileResponse,
@@ -20,27 +21,12 @@ from app.features.profile.service import ProfileService
 router = APIRouter(prefix="/api/v1/profile", tags=["Profile"])
 skill_requests_router = APIRouter(prefix="/api/v1/skill-requests", tags=["Skill Requests"])
 
-INTERNAL_EMPLOYEE_ROLES = [
-    "EMPLOYEE",
-    "PM",
-    "PROJECT_MANAGER",
-    "HR",
-    "HR_MANAGER",
-    "ADMIN",
-    "IT_SUPPORT",
-    "SYSTEM_ADMIN",
-    "TEAM_LEAD",
-]
-
-SKILL_REVIEWER_ROLES = [
-    "HR",
-    "HR_MANAGER",
-    "ADMIN",
-    "SYSTEM_ADMIN",
-    "TEAM_LEAD",
-]
-
-
+SKILL_REVIEWER_ROLES = (
+    roles.HR,
+    roles.TEAM_LEAD,
+    roles.ADMIN,
+    roles.SYSTEM_ADMIN,
+)
 @router.get(
     "/me",
     response_model=ProfileResponse,
@@ -49,7 +35,7 @@ SKILL_REVIEWER_ROLES = [
     description="Retrieve the authenticated employee's full organizational profile, department, and manager/lead details.",
 )
 def get_my_profile(
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
@@ -69,7 +55,7 @@ def get_my_profile(
 def update_my_profile(
     payload: ProfileUpdateRequest,
     request: Request,
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
@@ -93,7 +79,7 @@ def update_my_profile(
     description="Retrieve technical and domain skills assigned to the authenticated employee with proficiency levels and experience.",
 )
 def get_my_skills(
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> List[SkillResponse]:
     """
@@ -114,7 +100,7 @@ def get_my_skills(
 )
 def propose_skill_change(
     payload: SkillChangeRequestCreate,
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> SkillChangeRequestOut:
     """
@@ -132,7 +118,7 @@ def propose_skill_change(
     description="Retrieve all skill change requests submitted by the current employee, newest first.",
 )
 def list_my_skill_requests(
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> List[SkillChangeRequestOut]:
     """Fetch all skill proposals submitted by the authenticated employee."""
@@ -149,7 +135,7 @@ def list_my_skill_requests(
     description="HR and Admins see all requests; Team Leads see requests from their led team members. Paginated.",
 )
 def list_skill_requests_queue(
-    status: Optional[SkillRequestStatus] = Query(None, description="Optional status filter (e.g. PENDING)"),
+    status: Optional[SkillChangeStatus] = Query(None, description="Optional status filter (e.g. PENDING)"),
     page: int = Query(1, ge=1, description="Page number"),
     limit: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: UserAccount = Depends(require_role(SKILL_REVIEWER_ROLES)),

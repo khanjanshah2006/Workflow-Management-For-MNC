@@ -16,9 +16,16 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from fastapi import HTTPException, status
 
+from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
-from app.db.session import engine, DATABASE_URL as SESSION_DATABASE_URL
+from app.core.config import settings
+from app.core.notification_types import (
+    ACCOUNT_UNLOCKED,
+    ELEVATED_ACCESS_GRANTED,
+    ELEVATED_ACCESS_REVOKED,
+)
+from app.db.session import engine
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
     AdminPasswordReset,
@@ -34,6 +41,7 @@ from app.features.admin.schemas import (
     UserAccountPaginationResponse,
     UserAccountResponse,
 )
+from app.features.notifications.service import NotificationService
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.models.system_backup_log import SystemBackupLog
@@ -71,6 +79,27 @@ class InvalidExpirationError(Exception):
     pass
 
 
+class AdminPermissionError(Exception):
+    pass
+
+
+class AccountNotLockedError(Exception):
+    pass
+
+
+class GrantNotFoundError(Exception):
+    pass
+
+
+class GrantNotActiveError(Exception):
+    pass
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+
+
 class AdminService:
     """Service layer orchestrating administrator operations on user accounts."""
 
@@ -101,6 +130,8 @@ class AdminService:
         admin_user: UserAccount,
         ip_address: Optional[str] = None,
     ) -> UserAccountResponse:
+        if payload.user_type.value == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
         existing = AdminRepository.get_by_email(db, email=payload.email)
         if existing:
             raise EmailAlreadyExistsError(f"User with email '{payload.email}' already exists.")
@@ -171,6 +202,10 @@ class AdminService:
         user = AdminRepository.get_by_id(db, account_id=account_id)
         if not user:
             raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
+        if account_id == admin_user.account_id:
+            raise AdminPermissionError("You cannot change your own role")
+        if new_role.value == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
 
         old_role = user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type)
         updated_user = AdminRepository.update_role(db=db, user=user, new_role=new_role)
@@ -201,6 +236,10 @@ class AdminService:
         if not user:
             raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
 
+        was_locked = bool(user.locked_until and _as_utc(user.locked_until) > datetime.now(timezone.utc))
+        # A reset also clears any lockout; persisted by update_password's commit.
+        user.failed_login_count = 0
+        user.locked_until = None
         pwd_hash = hash_password(new_password)
         AdminRepository.update_password(db=db, user=user, password_hash=pwd_hash)
 
@@ -212,11 +251,54 @@ class AdminService:
             entity_ref_id=str(user.account_id),
             account_id=admin_user.account_id,
             old_value=None,
-            new_value={"action": "admin_password_reset", "email": user.email},
+            new_value={"action": "admin_password_reset", "email": user.email, "unlocked": was_locked},
             ip_address=ip_address,
         )
 
         return {"message": "Password reset successfully", "email": user.email}
+
+    @staticmethod
+    def unlock_account(
+        db: Session,
+        account_id: UUID,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> UserAccountResponse:
+        user = AdminRepository.get_by_id(db, account_id=account_id)
+        if not user:
+            raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
+        if user.locked_until is None or _as_utc(user.locked_until) <= datetime.now(timezone.utc):
+            raise AccountNotLockedError("Account is not locked")
+
+        old_value = {
+            "locked_until": _as_utc(user.locked_until).isoformat(),
+            "failed_login_count": user.failed_login_count,
+        }
+        user.failed_login_count = 0
+        user.locked_until = None
+
+        NotificationService.create_notification(
+            db,
+            user_id=user.account_id,
+            type=ACCOUNT_UNLOCKED,
+            title="Account unlocked",
+            message="An administrator unlocked your account. You can sign in again.",
+        )
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(user.account_id),
+            account_id=admin_user.account_id,
+            old_value=old_value,
+            new_value={"event": "ACCOUNT_UNLOCKED", "locked_until": None, "failed_login_count": 0},
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(user)
+
+        return UserAccountResponse.model_validate(user)
 
     @staticmethod
     def get_backup_status(db: Session) -> BackupStatusResponse:
@@ -352,6 +434,10 @@ class AdminService:
         user = AdminRepository.get_by_id(db, account_id=payload.user_id)
         if not user:
             raise UserNotFoundError(f"User account with ID '{payload.user_id}' not found.")
+        if payload.user_id == admin_user.account_id:
+            raise AdminPermissionError("You cannot grant elevated access to yourself")
+        if payload.granted_role.strip().upper() == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
 
         # 2. Expiration validation (must be in the future)
         now = datetime.now(timezone.utc)
@@ -372,6 +458,17 @@ class AdminService:
             reason=payload.reason,
         )
 
+        NotificationService.create_notification(
+            db,
+            user_id=grant.user_id,
+            type=ELEVATED_ACCESS_GRANTED,
+            title="Elevated access granted",
+            message=(
+                f"You have been granted temporary {grant.granted_role} access "
+                f"until {expires_at:%Y-%m-%d %H:%M} UTC."
+            ),
+        )
+
         # 4. Audit log creation
         write_audit_log(
             db=db,
@@ -387,7 +484,56 @@ class AdminService:
                 "reason": grant.reason,
             },
             ip_address=ip_address,
+            commit=False,
         )
+        db.commit()
+
+        return ElevatedAccessGrantResponse.model_validate(grant)
+
+    @staticmethod
+    def revoke_elevated_grant(
+        db: Session,
+        grant_id: int,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> ElevatedAccessGrantResponse:
+        """Revoke an active elevated access grant immediately (US-45)."""
+        grant = AdminRepository.get_elevated_grant_by_id(db, grant_id)
+        if not grant:
+            raise GrantNotFoundError(f"Elevated access grant '{grant_id}' not found.")
+        now = datetime.now(timezone.utc)
+        if grant.revoked_at is not None:
+            raise GrantNotActiveError("Grant is already revoked")
+        if _as_utc(grant.expires_at) <= now:
+            raise GrantNotActiveError("Grant has already expired")
+
+        AdminRepository.revoke_elevated_grant(db, grant, revoked_at=now)
+
+        NotificationService.create_notification(
+            db,
+            user_id=grant.user_id,
+            type=ELEVATED_ACCESS_REVOKED,
+            title="Elevated access revoked",
+            message=f"Your temporary {grant.granted_role} access has been revoked by an administrator.",
+        )
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="ELEVATED_ACCESS_GRANT",
+            entity_ref_id=str(grant.id),
+            account_id=admin_user.account_id,
+            old_value={"revoked_at": None},
+            new_value={
+                "event": "ELEVATED_ACCESS_REVOKED",
+                "revoked_at": now.isoformat(),
+                "revoked_by": str(admin_user.account_id),
+                "granted_role": grant.granted_role,
+                "user_id": str(grant.user_id),
+            },
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
 
         return ElevatedAccessGrantResponse.model_validate(grant)
 
@@ -402,14 +548,14 @@ class AdminService:
 
     def trigger_backup(db: Session, actor, ip_address: str | None = None):
         log = AdminRepository.create_backup_log(db, actor.account_id)
-        backup_dir = Path(os.getenv("BACKUP_DIR", "./backups")).expanduser().resolve()
+        backup_dir = Path(settings.backup_dir).expanduser().resolve()
         filename = f"database_backup_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}_{log.backup_id}.dump"
         target = backup_dir / filename
-        database_url = os.getenv("DATABASE_URL") or SESSION_DATABASE_URL or ""
+        database_url = settings.database_url
 
         try:
             backup_dir.mkdir(parents=True, exist_ok=True)
-            timeout = int(os.getenv("BACKUP_TIMEOUT_SECONDS", "300"))
+            timeout = settings.backup_timeout_seconds
             if database_url.startswith("sqlite"):
                 url = make_url(database_url)
                 source_path = Path(url.database or "")
@@ -426,7 +572,7 @@ class AdminService:
                 if not database_url:
                     raise RuntimeError("DATABASE_URL is not configured")
                 url = make_url(database_url)
-                configured_dump = os.getenv("PG_DUMP_PATH")
+                configured_dump = settings.pg_dump_path
                 pg_dump = configured_dump or shutil.which("pg_dump")
                 if pg_dump:
                     pg_dump = str(pg_dump).strip().strip('"').strip("'")
@@ -514,8 +660,8 @@ class AdminService:
     @staticmethod
     def get_anomaly_alerts(db: Session):
         now = datetime.now(timezone.utc)
-        failed_window = int(os.getenv("FAILED_LOGIN_WINDOW_MINUTES", "15"))
-        threshold = int(os.getenv("FAILED_LOGIN_THRESHOLD", "5"))
+        failed_window = settings.failed_login_window_minutes
+        threshold = settings.failed_login_threshold
         rows = AdminRepository.audit_rows_since(db, now - timedelta(minutes=failed_window))
 
         ip_groups = defaultdict(list)
@@ -587,6 +733,32 @@ class AdminService:
                     status="ACTIVE",
                     details=desc,
                 ))
+
+        # Currently locked accounts are listed regardless of the failed-login window (US-49).
+        for account in AdminRepository.list_locked_accounts(db, now):
+            locked_at = account.locked_until - timedelta(minutes=settings.lockout_minutes)
+            desc = (
+                f"Account locked after {account.failed_login_count} failed logins "
+                f"until {account.locked_until:%H:%M} UTC."
+            )
+            alerts.append(AnomalyAlert(
+                id=f"ALT-LOCK-{account.account_id.hex[:8]}",
+                title=f"Account Locked ({account.email})",
+                description=desc,
+                alert_type="ACCOUNT_LOCKED",
+                severity="HIGH",
+                account_id=account.account_id,
+                target_account_id=account.account_id,
+                attempted_email=account.email,
+                target_account=account.email,
+                count=account.failed_login_count,
+                attempts_count=account.failed_login_count,
+                first_timestamp=locked_at,
+                last_timestamp=account.locked_until,
+                timestamp=locked_at,
+                status="ACTIVE",
+                details=desc,
+            ))
 
         # Role elevations are reviewed over 24 hours; no volume threshold is assumed.
         elevation_rows = AdminRepository.audit_rows_since(db, now - timedelta(hours=24))

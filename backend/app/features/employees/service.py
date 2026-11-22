@@ -278,16 +278,14 @@ class EmployeeService:
         US-35: Determine if current_user is authorized to view target employee's workload.
         Allowed viewers:
           - Self (caller's emp_id == target_emp_id)
-          - HR / HR_MANAGER / ADMIN / SYSTEM_ADMIN
+          - HR and ADMIN (Note: SYSTEM_ADMIN is excluded from workload visibility)
           - PM managing a project the employee is actively staffed on
           - Team Lead of an active team the employee belongs to
         Everyone else is denied (returns False).
         """
-        if current_user.user_type in (
-            UserType.HR, "HR", "HR_MANAGER",
-            UserType.ADMIN, "ADMIN",
-            UserType.SYSTEM_ADMIN, "SYSTEM_ADMIN",
-        ):
+        from app.core import roles
+
+        if current_user.user_type in (roles.HR, roles.ADMIN):
             return True
 
         caller_emp = scope.resolve_employee(db, current_user)

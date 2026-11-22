@@ -8,7 +8,7 @@ from app.models.employee import Employee
 from app.models.department import Department
 from app.models.team import Team, TeamMember
 from app.models.skill import Skill, EmployeeSkill, SkillChangeRequest
-from app.models.enums import SkillProficiency, SkillRequestAction, SkillRequestStatus
+from app.models.enums import SkillProficiency, SkillChangeAction, SkillChangeStatus
 from app.core import scope
 
 
@@ -154,7 +154,7 @@ class ProfileRepository:
         """
         filters = [
             SkillChangeRequest.emp_id == emp_id,
-            SkillChangeRequest.status == SkillRequestStatus.PENDING,
+            SkillChangeRequest.status == SkillChangeStatus.PENDING,
         ]
         if skill_id is not None:
             stmt = select(SkillChangeRequest).where(*filters, SkillChangeRequest.skill_id == skill_id)
@@ -178,12 +178,12 @@ class ProfileRepository:
     def create_skill_change_request(
         db: Session,
         emp_id: int,
-        action: SkillRequestAction,
+        action: SkillChangeAction,
         skill_id: Optional[int] = None,
         proposed_skill_name: Optional[str] = None,
         proficiency: Optional[SkillProficiency] = None,
         years_of_experience: int = 0,
-        justification: Optional[str] = None,
+        justification: str = "",
     ) -> SkillChangeRequest:
         """Create and flush a new SkillChangeRequest."""
         req = SkillChangeRequest(
@@ -193,8 +193,8 @@ class ProfileRepository:
             proposed_skill_name=proposed_skill_name.strip() if proposed_skill_name else None,
             proficiency=proficiency,
             years_of_experience=years_of_experience,
-            justification=justification.strip() if justification else None,
-            status=SkillRequestStatus.PENDING,
+            justification=justification.strip() if justification else "",
+            status=SkillChangeStatus.PENDING,
         )
         db.add(req)
         db.flush()
@@ -241,7 +241,7 @@ class ProfileRepository:
     @staticmethod
     def count_review_requests(
         db: Session,
-        status_filter: Optional[SkillRequestStatus] = None,
+        status_filter: Optional[SkillChangeStatus] = None,
         allowed_emp_ids: Optional[List[int]] = None,
     ) -> int:
         """Count total skill requests matching status and reviewer scope."""
@@ -255,7 +255,7 @@ class ProfileRepository:
     @staticmethod
     def list_review_requests(
         db: Session,
-        status_filter: Optional[SkillRequestStatus] = None,
+        status_filter: Optional[SkillChangeStatus] = None,
         allowed_emp_ids: Optional[List[int]] = None,
         page: int = 1,
         limit: int = 20,

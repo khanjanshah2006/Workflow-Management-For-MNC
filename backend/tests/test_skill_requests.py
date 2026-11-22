@@ -32,8 +32,8 @@ from app.models.enums import (
     AuditAction,
     CommonStatus,
     SkillProficiency,
-    SkillRequestAction,
-    SkillRequestStatus,
+    SkillChangeAction,
+    SkillChangeStatus,
     TeamStatus,
     UserType,
 )
@@ -260,6 +260,7 @@ def test_reject_requires_remarks(client, db):
             "skill_id": data["py_skill"].skill_id,
             "proficiency": "EXPERT",
             "years_of_experience": 5,
+            "justification": "5 years Python experience",
         },
     )
     assert res.status_code == 201
@@ -286,6 +287,16 @@ def test_reject_requires_remarks(client, db):
     ).all()
     assert any("rejected" in n.message.lower() for n in notifs)
 
+    # Verify rejection logged with AuditAction.UPDATE
+    rej_audit = db.scalar(
+        select(AuditLog).where(
+            AuditLog.entity_name == "SKILL_CHANGE_REQUEST",
+            AuditLog.action == AuditAction.UPDATE,
+            AuditLog.entity_ref_id == str(request_id),
+        )
+    )
+    assert rej_audit is not None
+
 
 def test_team_lead_scope_for_skill_requests(client, db):
     """
@@ -298,7 +309,12 @@ def test_team_lead_scope_for_skill_requests(client, db):
     app.dependency_overrides[get_current_user] = lambda: data["emp1_user"]
     res1 = client.post(
         "/api/v1/profile/me/skill-requests",
-        json={"action": "ADD", "proposed_skill_name": "Docker", "proficiency": "BEGINNER"},
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "Docker",
+            "proficiency": "BEGINNER",
+            "justification": "Docker containerization",
+        },
     )
     req1_id = res1.json()["request_id"]
 
@@ -306,7 +322,12 @@ def test_team_lead_scope_for_skill_requests(client, db):
     app.dependency_overrides[get_current_user] = lambda: data["emp2_user"]
     res2 = client.post(
         "/api/v1/profile/me/skill-requests",
-        json={"action": "ADD", "proposed_skill_name": "Kotlin", "proficiency": "INTERMEDIATE"},
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "Kotlin",
+            "proficiency": "INTERMEDIATE",
+            "justification": "Kotlin Android dev",
+        },
     )
     req2_id = res2.json()["request_id"]
 
@@ -339,6 +360,7 @@ def test_duplicate_pending_returns_409(client, db):
         "action": "ADD",
         "proposed_skill_name": "Rust",
         "proficiency": "BEGINNER",
+        "justification": "Rust systems programming",
     }
     res1 = client.post("/api/v1/profile/me/skill-requests", json=payload)
     assert res1.status_code == 201
@@ -354,6 +376,7 @@ def test_unauthorized_decider_returns_403(client, db):
     TL2 cannot decide Emp 1's request.
     Regular employee cannot decide requests.
     Team Lead cannot decide their own skill proposal.
+    HR cannot decide their own skill proposal.
     """
     data = setup_org_structure(db)
 
@@ -361,7 +384,12 @@ def test_unauthorized_decider_returns_403(client, db):
     app.dependency_overrides[get_current_user] = lambda: data["emp1_user"]
     res = client.post(
         "/api/v1/profile/me/skill-requests",
-        json={"action": "ADD", "proposed_skill_name": "Go", "proficiency": "BEGINNER"},
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "Go",
+            "proficiency": "BEGINNER",
+            "justification": "Go concurrency",
+        },
     )
     req_id = res.json()["request_id"]
 
@@ -379,12 +407,33 @@ def test_unauthorized_decider_returns_403(client, db):
     app.dependency_overrides[get_current_user] = lambda: data["tl1_user"]
     tl_req = client.post(
         "/api/v1/profile/me/skill-requests",
-        json={"action": "ADD", "proposed_skill_name": "Management", "proficiency": "EXPERT"},
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "Management",
+            "proficiency": "EXPERT",
+            "justification": "Lead management track",
+        },
     ).json()["request_id"]
 
     # TL1 tries to approve own request -> 403
     self_approve = client.put(f"/api/v1/skill-requests/{tl_req}/approve", json={})
     assert self_approve.status_code == 403
+
+    # HR submits their own proposal
+    app.dependency_overrides[get_current_user] = lambda: data["hr_user"]
+    hr_req = client.post(
+        "/api/v1/profile/me/skill-requests",
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "People Operations",
+            "proficiency": "EXPERT",
+            "justification": "HR leadership",
+        },
+    ).json()["request_id"]
+
+    # HR tries to approve own request -> 403 Forbidden (no self-approval)
+    hr_self_approve = client.put(f"/api/v1/skill-requests/{hr_req}/approve", json={})
+    assert hr_self_approve.status_code == 403
 
 
 def test_deciding_already_decided_returns_409(client, db):
@@ -394,7 +443,12 @@ def test_deciding_already_decided_returns_409(client, db):
 
     req_id = client.post(
         "/api/v1/profile/me/skill-requests",
-        json={"action": "ADD", "proposed_skill_name": "Redis", "proficiency": "INTERMEDIATE"},
+        json={
+            "action": "ADD",
+            "proposed_skill_name": "Redis",
+            "proficiency": "INTERMEDIATE",
+            "justification": "Redis caching layer",
+        },
     ).json()["request_id"]
 
     # HR approves

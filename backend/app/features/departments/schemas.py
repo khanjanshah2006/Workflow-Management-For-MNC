@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from app.models.enums import TeamStatus
+
 
 class DepartmentBase(BaseModel):
     name: str = Field(
@@ -155,4 +157,121 @@ class TeamMemberOut(BaseModel):
         description="Employee designation or functional role",
         examples=["Senior Backend Engineer"],
     )
+
+
+# ==========================================
+# Department Team Schemas (US-05, Issue #141)
+# ==========================================
+
+
+class DepartmentTeamCreate(BaseModel):
+    """Payload to create a new department team with designated lead and initial members."""
+    name: str = Field(
+        ...,
+        min_length=2,
+        max_length=150,
+        description="Team name (unique per department, case-insensitive)",
+        examples=["Payments Squad"],
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Scope of team responsibility",
+        examples=["Card and wallet integrations"],
+    )
+    lead_emp_id: int = Field(
+        ...,
+        description="Employee ID designated as team lead (must be active)",
+        examples=[21],
+    )
+    member_emp_ids: list[int] = Field(
+        default_factory=list,
+        description="List of employee IDs assigned as team members",
+        examples=[[16, 18, 19]],
+    )
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_and_strip_name(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("Team name cannot be blank or whitespace-only")
+        return v
+
+
+class DepartmentTeamUpdate(BaseModel):
+    """Payload for partial update of a team."""
+    name: str | None = Field(
+        default=None,
+        min_length=2,
+        max_length=150,
+        description="Updated team name (unique per department)",
+    )
+    description: str | None = Field(
+        default=None,
+        max_length=500,
+        description="Updated team description",
+    )
+    lead_emp_id: int | None = Field(
+        default=None,
+        description="New team lead employee ID",
+    )
+    status: TeamStatus | None = Field(
+        default=None,
+        description="Updated team status (ACTIVE or DISBANDED)",
+    )
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def validate_and_strip_name(cls, v: Any) -> Any:
+        if v is not None and isinstance(v, str):
+            v = v.strip()
+            if not v:
+                raise ValueError("Team name cannot be blank or whitespace-only")
+        return v
+
+
+class DepartmentTeamMemberAdd(BaseModel):
+    """Payload to add members to a team."""
+    emp_ids: list[int] = Field(
+        ...,
+        min_length=1,
+        description="List of employee IDs to add as members",
+        examples=[[16, 18]],
+    )
+
+
+class DepartmentTeamResponse(BaseModel):
+    """Detailed view of a department team including lead name and member roster."""
+    model_config = ConfigDict(from_attributes=True)
+
+    team_id: int
+    dept_id: int | None = None
+    project_id: int | None = None
+    name: str
+    description: str | None = None
+    lead_emp_id: int | None = None
+    lead_name: str | None = None
+    status: TeamStatus
+    created_at: datetime
+    member_count: int = 0
+    members: list[TeamMemberOut] = Field(default_factory=list)
+
+
+class DepartmentTeamListItem(BaseModel):
+    """Summary view of a department team in department listings."""
+    model_config = ConfigDict(from_attributes=True)
+
+    team_id: int
+    dept_id: int | None = None
+    project_id: int | None = None
+    name: str
+    description: str | None = None
+    lead_emp_id: int | None = None
+    lead_name: str | None = None
+    status: TeamStatus
+    created_at: datetime
+    member_count: int = 0
+
 

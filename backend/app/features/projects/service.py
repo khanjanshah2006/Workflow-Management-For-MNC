@@ -11,6 +11,7 @@ from app.models.client import Client
 from app.models.employee import Employee
 from app.models.department import Department
 from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction, MilestoneStatus, CommonStatus
+from app.core import roles
 from app.core.audit import write_audit_log
 from app.features.projects.repository import ProjectRepository
 from app.features.employees.repository import EmployeeRepository
@@ -173,7 +174,7 @@ class ProjectService:
         role = current_user.user_type.value if hasattr(current_user.user_type, "value") else str(current_user.user_type)
         role = role.upper()
 
-        if role in ["PM", "PROJECT_MANAGER"]:
+        if role == roles.PM:
             pm = ProjectRepository.get_pm_by_account_id(db, current_user.account_id)
             if not pm or pm.pm_id != project.pm_id:
                 raise UnauthorizedProjectAccessError("You are not authorized to access this project's milestones")

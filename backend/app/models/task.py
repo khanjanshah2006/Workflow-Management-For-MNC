@@ -78,6 +78,7 @@ class TaskSubmission(Base):
     file_url = Column(String(500), nullable=True)
     file_name = Column(String(255), nullable=True)
     file_size_bytes = Column(Integer, nullable=True)
+    file_id = Column(Integer, ForeignKey("stored_file.file_id", ondelete="SET NULL"), nullable=True)
     submitted_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     task = relationship("Task", back_populates="submissions")

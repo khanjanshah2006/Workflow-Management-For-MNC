@@ -9,6 +9,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.security import create_access_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
@@ -87,10 +88,16 @@ class TestBackupAndAnomalyAlerts(unittest.TestCase):
         self.db.commit()
         return row
 
-    def test_admin_role_is_forbidden(self):
+    def test_admin_role_is_allowed_and_it_support_forbidden(self):
         response = self.client.get(
             "/api/v1/admin/anomaly-alerts",
             headers=self.headers(self.general_admin),
+        )
+        self.assertEqual(response.status_code, 200)
+
+        response = self.client.get(
+            "/api/v1/admin/anomaly-alerts",
+            headers=self.headers(self.make_user(UserType.IT_SUPPORT)),
         )
         self.assertEqual(response.status_code, 403)
 
@@ -146,10 +153,13 @@ class TestBackupAndAnomalyAlerts(unittest.TestCase):
         self.assertEqual(alerts[0]["severity"], "CRITICAL")
 
     def test_missing_pg_dump_records_failed_backup(self):
-        with patch.dict(os.environ, {
-            "DATABASE_URL": "postgresql://postgres:secret@localhost:5432/testdb",
-            "BACKUP_DIR": os.path.join(os.getcwd(), "test-backups"),
-        }), patch("app.features.admin.service.shutil.which", return_value=None):
+        with patch.object(
+            settings, "database_url_raw", "postgresql://postgres:secret@localhost:5432/testdb"
+        ), patch.object(
+            settings, "backup_dir", os.path.join(os.getcwd(), "test-backups")
+        ), patch.object(
+            settings, "pg_dump_path", ""
+        ), patch("app.features.admin.service.shutil.which", return_value=None):
             response = self.client.post(
                 "/api/v1/admin/backup/trigger",
                 headers=self.headers(self.admin),

@@ -4,7 +4,7 @@ from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core import scope
+from app.core import roles, scope
 from app.core.audit import write_audit_log
 from app.core.notification_types import SKILL_REQUEST_CREATED, SKILL_REQUEST_DECIDED
 from app.features.notifications.service import NotificationService
@@ -12,8 +12,8 @@ from app.models.enums import (
     AuditAction,
     CommonStatus,
     SkillProficiency,
-    SkillRequestAction,
-    SkillRequestStatus,
+    SkillChangeAction,
+    SkillChangeStatus,
     UserType,
 )
 from app.models.user_account import UserAccount
@@ -32,6 +32,8 @@ from app.features.profile.schemas import (
     SkillChangeRequestOut,
     PaginatedSkillChangeRequestsOut,
 )
+
+NO_EMPLOYEE_PROFILE = "No employee profile for this account"
 
 
 class ProfileService:
@@ -74,7 +76,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         return cls._build_profile_response(db, employee)
@@ -95,7 +97,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         # Capture old values for audit logging
@@ -147,7 +149,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         skills_data = ProfileRepository.get_employee_skills(db, employee.emp_id)
@@ -171,11 +173,13 @@ class ProfileService:
             skill_name=skill_name or (req.skill.name if getattr(req, "skill", None) else None),
             proposed_skill_name=req.proposed_skill_name,
             proficiency=req.proficiency,
-            years_of_experience=req.years_of_experience,
+            years_of_experience=req.years_of_experience or 0,
             justification=req.justification,
             status=req.status,
-            remarks=req.remarks,
-            reviewed_by_account_id=req.reviewed_by_account_id,
+            review_remarks=req.review_remarks,
+            remarks=req.review_remarks,
+            reviewer_account_id=req.reviewer_account_id,
+            reviewed_by_account_id=req.reviewer_account_id,
             reviewed_at=req.reviewed_at,
             created_at=req.created_at,
         )
@@ -200,7 +204,7 @@ class ProfileService:
             )
 
         # Validate action requirements
-        if data.action == SkillRequestAction.ADD:
+        if data.action == SkillChangeAction.ADD:
             if not data.skill_id and (not data.proposed_skill_name or not data.proposed_skill_name.strip()):
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -225,7 +229,7 @@ class ProfileService:
                         detail="Skill is already assigned to your profile; submit an UPDATE proposal instead",
                     )
 
-        elif data.action == SkillRequestAction.UPDATE:
+        elif data.action == SkillChangeAction.UPDATE:
             if not data.skill_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -243,7 +247,7 @@ class ProfileService:
                     detail="Skill is not currently assigned to your profile",
                 )
 
-        elif data.action == SkillRequestAction.REMOVE:
+        elif data.action == SkillChangeAction.REMOVE:
             if not data.skill_id:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -277,7 +281,7 @@ class ProfileService:
             skill_id=data.skill_id,
             proposed_skill_name=data.proposed_skill_name,
             proficiency=data.proficiency,
-            years_of_experience=data.years_of_experience,
+            years_of_experience=data.years_of_experience or 0,
             justification=data.justification,
         )
 
@@ -296,13 +300,14 @@ class ProfileService:
                 "proficiency": req.proficiency.value if req.proficiency else None,
                 "years_of_experience": req.years_of_experience,
                 "justification": req.justification,
+                "status": req.status.value,
             },
             commit=False,
         )
 
         # Notify HR accounts and applicant's active Team Lead(s)
         hr_stmt = select(UserAccount.account_id).where(
-            UserAccount.user_type.in_([UserType.HR, "HR", "HR_MANAGER"]),
+            UserAccount.user_type == roles.HR,
             UserAccount.is_active.is_(True),
         )
         hr_account_ids = list(db.scalars(hr_stmt))
@@ -356,7 +361,7 @@ class ProfileService:
         cls,
         db: Session,
         current_user: UserAccount,
-        status_filter: Optional[SkillRequestStatus] = None,
+        status_filter: Optional[SkillChangeStatus] = None,
         page: int = 1,
         limit: int = 20,
     ) -> PaginatedSkillChangeRequestsOut:
@@ -365,9 +370,9 @@ class ProfileService:
         HR and Admin roles see all requests; Team Leads see requests from members of active teams they lead.
         """
         is_hr_or_admin = current_user.user_type in (
-            UserType.HR, "HR", "HR_MANAGER",
-            UserType.ADMIN, "ADMIN",
-            UserType.SYSTEM_ADMIN, "SYSTEM_ADMIN",
+            roles.HR,
+            roles.ADMIN,
+            roles.SYSTEM_ADMIN,
         )
 
         allowed_emp_ids: Optional[List[int]] = None
@@ -416,6 +421,7 @@ class ProfileService:
         """
         Approve a pending skill change request and apply the changes to employee_skill (US-34).
         Authorized for HR/Admin or the Team Lead of the applicant.
+        Self-decision is strictly prohibited for all roles.
         """
         item = ProfileRepository.get_skill_change_request_with_details(db, request_id)
         if not item:
@@ -425,32 +431,34 @@ class ProfileService:
             )
         req, emp_name, skill_name = item
 
-        if req.status != SkillRequestStatus.PENDING:
+        if req.status != SkillChangeStatus.PENDING:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Skill request is already {req.status.value.lower()}",
             )
 
-        is_hr_or_admin = current_user.user_type in (
-            UserType.HR, "HR", "HR_MANAGER",
-            UserType.ADMIN, "ADMIN",
-            UserType.SYSTEM_ADMIN, "SYSTEM_ADMIN",
-        )
+        # Self-decision prevention applies to all users (including HR and Admin)
         reviewer_emp = scope.resolve_employee(db, current_user)
+        if reviewer_emp and reviewer_emp.emp_id == req.emp_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You cannot review or decide your own skill proposal",
+            )
+
+        is_hr_or_admin = current_user.user_type in (
+            roles.HR,
+            roles.ADMIN,
+            roles.SYSTEM_ADMIN,
+        )
         if not is_hr_or_admin:
             if not reviewer_emp or not scope.is_team_lead_of(db, reviewer_emp.emp_id, req.emp_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You are not authorized to decide this skill request",
                 )
-            if reviewer_emp.emp_id == req.emp_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You cannot decide your own skill proposal",
-                )
 
         # Apply skill modifications to employee_skill table
-        if req.action == SkillRequestAction.ADD:
+        if req.action == SkillChangeAction.ADD:
             skill_id = req.skill_id
             if not skill_id and req.proposed_skill_name:
                 existing_skill = ProfileRepository.get_skill_by_name(db, req.proposed_skill_name)
@@ -465,47 +473,48 @@ class ProfileService:
             if emp_skill:
                 if req.proficiency:
                     emp_skill.proficiency = req.proficiency
-                emp_skill.years_of_experience = req.years_of_experience
+                emp_skill.years_of_experience = req.years_of_experience or 0
             else:
                 ProfileRepository.create_employee_skill(
                     db=db,
                     emp_id=req.emp_id,
                     skill_id=skill_id,
                     proficiency=req.proficiency or SkillProficiency.BEGINNER,
-                    years_of_experience=req.years_of_experience,
+                    years_of_experience=req.years_of_experience or 0,
                 )
 
-        elif req.action == SkillRequestAction.UPDATE:
+        elif req.action == SkillChangeAction.UPDATE:
             emp_skill = ProfileRepository.get_employee_skill(db, req.emp_id, req.skill_id)
             if emp_skill:
                 if req.proficiency:
                     emp_skill.proficiency = req.proficiency
-                emp_skill.years_of_experience = req.years_of_experience
+                emp_skill.years_of_experience = req.years_of_experience or 0
             else:
                 ProfileRepository.create_employee_skill(
                     db=db,
                     emp_id=req.emp_id,
                     skill_id=req.skill_id,
                     proficiency=req.proficiency or SkillProficiency.BEGINNER,
-                    years_of_experience=req.years_of_experience,
+                    years_of_experience=req.years_of_experience or 0,
                 )
 
-        elif req.action == SkillRequestAction.REMOVE:
+        elif req.action == SkillChangeAction.REMOVE:
             emp_skill = ProfileRepository.get_employee_skill(db, req.emp_id, req.skill_id)
             if emp_skill:
                 ProfileRepository.delete_employee_skill(db, emp_skill)
 
         # Update request state
-        req.status = SkillRequestStatus.APPROVED
-        req.remarks = payload.remarks.strip() if payload.remarks else None
-        req.reviewed_by_account_id = current_user.account_id
+        remarks_val = payload.get_remarks()
+        req.status = SkillChangeStatus.APPROVED
+        req.review_remarks = remarks_val.strip() if remarks_val else None
+        req.reviewer_account_id = current_user.account_id
         req.reviewed_at = datetime.now(timezone.utc)
 
         # Notify applicant
         applicant = db.scalar(select(Employee).where(Employee.emp_id == req.emp_id))
         if applicant and applicant.account_id:
             display_skill = req.proposed_skill_name or skill_name or "Skill"
-            remarks_suffix = f" Remarks: {req.remarks}" if req.remarks else ""
+            remarks_suffix = f" Remarks: {req.review_remarks}" if req.review_remarks else ""
             NotificationService.create_notification(
                 db=db,
                 user_id=applicant.account_id,
@@ -522,8 +531,8 @@ class ProfileService:
             entity_name="SKILL_CHANGE_REQUEST",
             entity_ref_id=str(req.request_id),
             account_id=current_user.account_id,
-            old_value={"status": SkillRequestStatus.PENDING.value},
-            new_value={"status": req.status.value, "remarks": req.remarks},
+            old_value={"status": SkillChangeStatus.PENDING.value},
+            new_value={"status": req.status.value, "remarks": req.review_remarks},
             commit=False,
         )
 
@@ -547,6 +556,7 @@ class ProfileService:
         """
         Reject a pending skill change request with mandatory remarks (US-34).
         Authorized for HR/Admin or the Team Lead of the applicant.
+        Self-decision is strictly prohibited for all roles.
         """
         item = ProfileRepository.get_skill_change_request_with_details(db, request_id)
         if not item:
@@ -556,39 +566,42 @@ class ProfileService:
             )
         req, emp_name, skill_name = item
 
-        if not payload.remarks or not payload.remarks.strip():
+        remarks_val = payload.get_remarks()
+        if not remarks_val or not remarks_val.strip():
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Remarks are mandatory when rejecting a skill proposal",
             )
 
-        if req.status != SkillRequestStatus.PENDING:
+        if req.status != SkillChangeStatus.PENDING:
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
                 detail=f"Skill request is already {req.status.value.lower()}",
             )
 
-        is_hr_or_admin = current_user.user_type in (
-            UserType.HR, "HR", "HR_MANAGER",
-            UserType.ADMIN, "ADMIN",
-            UserType.SYSTEM_ADMIN, "SYSTEM_ADMIN",
-        )
+        # Self-decision prevention applies to all users (including HR and Admin)
         reviewer_emp = scope.resolve_employee(db, current_user)
+        if reviewer_emp and reviewer_emp.emp_id == req.emp_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="You cannot review or decide your own skill proposal",
+            )
+
+        is_hr_or_admin = current_user.user_type in (
+            roles.HR,
+            roles.ADMIN,
+            roles.SYSTEM_ADMIN,
+        )
         if not is_hr_or_admin:
             if not reviewer_emp or not scope.is_team_lead_of(db, reviewer_emp.emp_id, req.emp_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You are not authorized to decide this skill request",
                 )
-            if reviewer_emp.emp_id == req.emp_id:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You cannot decide your own skill proposal",
-                )
 
-        req.status = SkillRequestStatus.REJECTED
-        req.remarks = payload.remarks.strip()
-        req.reviewed_by_account_id = current_user.account_id
+        req.status = SkillChangeStatus.REJECTED
+        req.review_remarks = remarks_val.strip()
+        req.reviewer_account_id = current_user.account_id
         req.reviewed_at = datetime.now(timezone.utc)
 
         applicant = db.scalar(select(Employee).where(Employee.emp_id == req.emp_id))
@@ -599,18 +612,19 @@ class ProfileService:
                 user_id=applicant.account_id,
                 type=SKILL_REQUEST_DECIDED,
                 title="Skill Change Proposal Rejected",
-                message=f"Your skill proposal ({req.action.value}: {display_skill}) has been rejected. Remarks: {req.remarks}",
+                message=f"Your skill proposal ({req.action.value}: {display_skill}) has been rejected. Remarks: {req.review_remarks}",
                 link="/profile/me/skills",
             )
 
+        # Audit action UPDATE on reject (AuditAction.REJECT has no migration on Postgres)
         write_audit_log(
             db=db,
-            action=AuditAction.REJECT,
+            action=AuditAction.UPDATE,
             entity_name="SKILL_CHANGE_REQUEST",
             entity_ref_id=str(req.request_id),
             account_id=current_user.account_id,
-            old_value={"status": SkillRequestStatus.PENDING.value},
-            new_value={"status": req.status.value, "remarks": req.remarks},
+            old_value={"status": SkillChangeStatus.PENDING.value},
+            new_value={"status": req.status.value, "remarks": req.review_remarks},
             commit=False,
         )
 

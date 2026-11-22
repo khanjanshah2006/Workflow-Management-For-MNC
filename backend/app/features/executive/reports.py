@@ -27,6 +27,7 @@ from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
+from app.core.config import settings
 from app.features.executive.schemas import (
     ExecutiveReportCreateRequest,
     ExecutiveReportResponse,
@@ -57,7 +58,7 @@ from app.models.user_account import UserAccount
 
 def get_reports_dir() -> Path:
     """Return the absolute path to the reports storage directory, creating it if needed."""
-    env_dir = os.getenv("REPORTS_DIR")
+    env_dir = settings.reports_dir
     if env_dir:
         path = Path(env_dir)
     else:

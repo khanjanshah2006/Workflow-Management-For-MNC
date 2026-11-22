@@ -625,13 +625,18 @@ def test_api_get_workload_403_client(app_client, seed_data):
 
 
 def test_api_get_workload_404_not_found(app_client, seed_data):
-    """GET /api/v1/employees/{id}/workload: Non-existent employee returns 404 Not Found."""
+    """GET /api/v1/employees/{id}/workload: Non-existent employee returns 404 for Admin, 403 for PM."""
     client, app, _ = app_client
-    app.dependency_overrides[get_current_user] = lambda: seed_data["pm1_account"]
-
+    # Admin has global workload access -> gets 404 Not Found
+    app.dependency_overrides[get_current_user] = lambda: seed_data["admin_account"]
     response = client.get("/api/v1/employees/99999/workload")
     assert response.status_code == 404
     assert "not found" in response.json()["detail"].lower()
+
+    # PM without active staffing assignment -> gets 403 Forbidden (US-35 prevents ID enumeration)
+    app.dependency_overrides[get_current_user] = lambda: seed_data["pm1_account"]
+    res_pm = client.get("/api/v1/employees/99999/workload")
+    assert res_pm.status_code == 403
 
 
 # ==============================================================================

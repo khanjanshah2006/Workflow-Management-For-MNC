@@ -13,7 +13,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.rbac import require_role
 from app.db.base import Base
-from app.features.tasks.router import create_task_comment, get_task_comments, router as tasks_router
+from app.features.tasks.router import TASK_COMMENT_ROLES, create_task_comment, get_task_comments, router as tasks_router
 from app.features.tasks.schemas import TaskCommentCreate
 from app.models.client import Client
 from app.models.department import Department
@@ -47,7 +47,7 @@ class APITestClient:
             raw_id = unquote(url.split("/")[-2])
             task_id = int(raw_id)
             user = self.actor["user"]
-            require_role(user, allowed=["EMPLOYEE", "PM", "ADMIN", "SYSTEM_ADMIN"])
+            require_role(user, allowed=TASK_COMMENT_ROLES)
             if method == "POST":
                 body = TaskCommentCreate.model_validate(payload)
                 result = create_task_comment(task_id, body, user, self.db)

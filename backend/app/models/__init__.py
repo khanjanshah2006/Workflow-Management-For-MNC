@@ -1,4 +1,4 @@
-from app.db.base import Base
+﻿from app.db.base import Base
 from app.models.enums import (
     UserType,
     CommonStatus,
@@ -11,8 +11,8 @@ from app.models.enums import (
     FeedbackDecision,
     LeaveStatus,
     SkillProficiency,
-    SkillRequestAction,
-    SkillRequestStatus,
+    SkillChangeAction,
+    SkillChangeStatus,
     AuditAction,
     ReportFormat,
 )
@@ -36,6 +36,7 @@ from app.models.system_parameter import SystemParameter
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.system_backup_log import SystemBackupLog
 from app.models.executive_report import ExecutiveReport
+from app.models.stored_file import StoredFile
 
 __all__ = [
     "Base",
@@ -50,8 +51,8 @@ __all__ = [
     "FeedbackDecision",
     "LeaveStatus",
     "SkillProficiency",
-    "SkillRequestAction",
-    "SkillRequestStatus",
+    "SkillChangeAction",
+    "SkillChangeStatus",
     "AuditAction",
     "ReportFormat",
     "UserAccount",
@@ -84,4 +85,5 @@ __all__ = [
     "ElevatedAccessGrant",
     "SystemBackupLog",
     "ExecutiveReport",
+    "StoredFile",
 ]
