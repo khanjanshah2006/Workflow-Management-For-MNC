@@ -1,4 +1,5 @@
 from datetime import date, datetime, timedelta, timezone
+from types import SimpleNamespace
 from uuid import uuid4
 
 import pyotp
@@ -18,7 +19,9 @@ from app.core.notification_types import (
 from app.core.security import create_access_token, create_mfa_pending_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
-from app.features.auth.rate_limit import LOGIN_RATE_LIMIT
+from app.features.auth import rate_limit
+from app.features.auth.rate_limit import LOGIN_RATE_LIMIT, SlidingWindowLimiter
+from app.features.auth.repository import AuthRepository
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.elevated_access_grant import ElevatedAccessGrant
@@ -568,6 +571,61 @@ def test_unknown_email_never_gets_423(client):
         assert login(client, email, "WrongPass!").status_code == 401, attempt
 
 
+def test_inactive_account_wrong_password_does_not_lock(client, db):
+    admin = make_account(db, UserType.ADMIN)
+    account = make_account(db)
+    account.is_active = False
+    db.commit()
+
+    for attempt in range(settings.failed_login_threshold):
+        assert login(client, account.email, "WrongPass!").status_code == 401, attempt
+
+    db.expire_all()
+    assert account.failed_login_count == 0
+    assert account.locked_until is None
+    assert (
+        db.query(Notification)
+        .filter(
+            Notification.account_id == admin.account_id,
+            Notification.type == SECURITY_ALERT,
+            Notification.message.contains(account.email),
+        )
+        .count()
+        == 0
+    )
+
+
+def test_wrong_password_after_expired_lock_starts_fresh_count(client, db):
+    account = make_account(db)
+    account.failed_login_count = settings.failed_login_threshold
+    account.locked_until = datetime.now(timezone.utc) - timedelta(minutes=1)
+    db.commit()
+
+    assert login(client, account.email, "WrongPass!").status_code == 401
+    db.expire_all()
+    assert account.failed_login_count == 1
+    assert account.locked_until is None
+
+
+def test_increment_failed_login_is_atomic(session_factory, db):
+    account = make_account(db)
+    first, second = session_factory(), session_factory()
+    try:
+        # Both sessions hold the account with failed_login_count == 0 in memory.
+        stale_a = first.get(UserAccount, account.account_id)
+        stale_b = second.get(UserAccount, account.account_id)
+        assert AuthRepository.increment_failed_login(first, stale_a) == 1
+        first.commit()
+        assert AuthRepository.increment_failed_login(second, stale_b) == 2
+        second.commit()
+    finally:
+        first.close()
+        second.close()
+
+    db.expire_all()
+    assert account.failed_login_count == 2
+
+
 # ==============================================================================
 # Login rate limit (per path and client IP)
 # ==============================================================================
@@ -586,6 +644,20 @@ def test_login_rate_limit_returns_429(client):
     # /mfa/login has its own bucket.
     res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": "not-a-token", "code": "123456"})
     assert res.status_code != 429
+
+
+def test_limiter_sweep_drops_stale_keys(monkeypatch):
+    clock = [1000.0]
+    monkeypatch.setattr(rate_limit, "time", SimpleNamespace(monotonic=lambda: clock[0]))
+    monkeypatch.setattr(rate_limit, "SWEEP_EVERY", 3)
+    limiter = SlidingWindowLimiter(limit=5, window_seconds=60)
+
+    assert limiter.check(("/login", "10.0.0.1")) is None
+    assert limiter.check(("/login", "10.0.0.2")) is None
+    clock[0] += 61
+    assert limiter.check(("/login", "10.0.0.3")) is None  # 3rd check triggers the sweep
+
+    assert set(limiter._hits) == {("/login", "10.0.0.3")}
 
 
 def test_mfa_setup_hides_current_otp_in_production(client, db, monkeypatch):

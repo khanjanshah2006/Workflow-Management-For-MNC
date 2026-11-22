@@ -80,8 +80,11 @@ def _record_failed_attempt(db: Session, account: UserAccount, now: datetime) -> 
 
     Returns extra audit fields when the account was locked. The caller commits.
     """
-    account.failed_login_count = (account.failed_login_count or 0) + 1
-    if account.failed_login_count < settings.failed_login_threshold:
+    failed_count = AuthRepository.increment_failed_login(db, account)
+    if failed_count < settings.failed_login_threshold:
+        return {}
+    if account.locked_until is not None and _as_utc(account.locked_until) > now:
+        # A concurrent request already locked the account (and alerted the admins).
         return {}
     account.locked_until = now + timedelta(minutes=settings.lockout_minutes)
     for admin in AuthRepository.list_active_platform_admins(db):
@@ -118,7 +121,7 @@ class AuthService:
                 "status": "FAILED",
                 "attempted_email": email,
             }
-            if account:
+            if account and account.is_active:
                 new_value.update(_record_failed_attempt(db, account, now))
             write_audit_log(
                 db=db,

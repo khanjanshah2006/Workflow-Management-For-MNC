@@ -32,6 +32,21 @@ class AuthRepository:
         )
 
     @staticmethod
+    def increment_failed_login(db: Session, account: UserAccount) -> int:
+        """Atomically add one failed login in the database and return the new count.
+
+        Pending in-memory changes (e.g. an expired-lock reset) are flushed first, because
+        the refresh below reloads the counter and lock columns from the row.
+        """
+        db.flush()
+        db.query(UserAccount).filter(UserAccount.account_id == account.account_id).update(
+            {UserAccount.failed_login_count: func.coalesce(UserAccount.failed_login_count, 0) + 1},
+            synchronize_session=False,
+        )
+        db.refresh(account, ["failed_login_count", "locked_until"])
+        return account.failed_login_count
+
+    @staticmethod
     def update_last_login(db: Session, account: UserAccount) -> None:
         """Update last_login_at timestamp on existing entity without redundant query."""
         account.last_login_at = func.now()
