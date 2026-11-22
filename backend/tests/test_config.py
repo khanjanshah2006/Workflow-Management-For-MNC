@@ -105,3 +105,14 @@ def test_samesite_none_requires_secure():
 def test_docs_can_be_disabled():
     assert Settings.from_env({"ENABLE_DOCS": "false"}).enable_docs is False
     assert Settings.from_env({}).enable_docs is True
+
+
+def test_role_groups_match_user_types():
+    from app.core import roles
+    from app.models.enums import UserType
+
+    all_roles = {r.value for r in UserType}
+    assert set(roles.INTERNAL) == all_roles - {roles.CLIENT}
+    assert set(roles.PLATFORM_ADMINS) == {"ADMIN", "SYSTEM_ADMIN"}
+    assert set(roles.IT_STAFF) == {"IT_SUPPORT", "SYSTEM_ADMIN"}
+    assert all(isinstance(r, str) and r in all_roles for r in roles.INTERNAL)
