@@ -4,7 +4,7 @@ from typing import Any, List, Optional
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.core import scope
+from app.core import roles, scope
 from app.core.audit import write_audit_log
 from app.core.notification_types import TASK_DEADLINE_EXTENDED
 from app.features.leave.repository import LeaveRepository
@@ -77,7 +77,7 @@ class LeaveReallocationService:
 
         current_emp = scope.resolve_employee(db, current_user)
         is_admin = effective_role in ("ADMIN", "SYSTEM_ADMIN")
-        is_pm = effective_role in ("PM", "PROJECT_MANAGER")
+        is_pm = effective_role == roles.PM
         is_team_lead = effective_role == "TEAM_LEAD"
 
         if not is_team_lead and current_emp and effective_role == "EMPLOYEE":

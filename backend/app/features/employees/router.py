@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response,
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core import roles
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.models.user_account import UserAccount
@@ -81,7 +82,7 @@ def get_employee(
 def get_employee_workload(
     id: int,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["PM", "PROJECT_MANAGER", "ADMIN"])),
+    current_user: UserAccount = Depends(require_role([roles.PM, roles.ADMIN])),
 ) -> EmployeeWorkloadResponse:
     try:
         return EmployeeService.get_employee_workload(db=db, emp_id=id)
@@ -97,13 +98,13 @@ def get_employee_workload(
     response_model=EmployeeDetailResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Register a new employee and user account (US-04)",
-    description="Onboard an employee, auto-generate EMP-XXXX code, and link user account. Restricted to HR_MANAGER and ADMIN roles.",
+    description="Onboard an employee, auto-generate EMP-XXXX code, and link user account. Restricted to HR and ADMIN roles.",
 )
 def create_employee(
     payload: EmployeeCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN", "SYSTEM_ADMIN"])),
+    current_user: UserAccount = Depends(require_role([roles.HR, roles.ADMIN, roles.SYSTEM_ADMIN])),
 ) -> EmployeeDetailResponse:
     client_ip = request.client.host if request.client else None
     requested_role = payload.user_type or UserType.EMPLOYEE
@@ -133,14 +134,14 @@ def create_employee(
     "/{emp_id}/status",
     response_model=EmployeeDetailResponse,
     summary="Update employee employment status (US-04)",
-    description="Change status between ACTIVE and INACTIVE, and sync account login status. Restricted to HR_MANAGER and ADMIN.",
+    description="Change status between ACTIVE and INACTIVE, and sync account login status. Restricted to HR and ADMIN.",
 )
 def update_employee_status(
     emp_id: int,
     payload: EmployeeStatusUpdate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role(["HR", "HR_MANAGER", "ADMIN"])),
+    current_user: UserAccount = Depends(require_role([roles.HR, roles.ADMIN])),
 ) -> EmployeeDetailResponse:
     client_ip = request.client.host if request.client else None
     try:

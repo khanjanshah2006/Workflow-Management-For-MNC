@@ -8,6 +8,7 @@ from fastapi import HTTPException, UploadFile, status
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.notification_types import TASK_ASSIGNED, TASK_REASSIGNED
 from app.features.notifications.service import NotificationService
@@ -98,7 +99,7 @@ class TaskService:
         ).upper()
 
         # Admin and Project Manager have management authority
-        if user_type_val in ("ADMIN", "PM", "PROJECT_MANAGER"):
+        if user_type_val in (roles.ADMIN, roles.PM):
             return
 
         # Check elevated active grants if baseline is employee
@@ -117,7 +118,7 @@ class TaskService:
         )
         if active_grant:
             elevated_role = active_grant.granted_role.strip().upper()
-            if elevated_role in ("ADMIN", "PM", "PROJECT_MANAGER", "TEAM_LEAD"):
+            if elevated_role in (roles.ADMIN, roles.PM, roles.TEAM_LEAD):
                 return
 
         # Check if user is a designated TEAM_LEAD or an EMPLOYEE who leads the task's team/project
@@ -1078,7 +1079,7 @@ class TaskReviewService:
         is_authorized = False
         if user_type_str in ("ADMIN", "SYSTEM_ADMIN"):
             is_authorized = True
-        elif user_type_str in ("PM", "PROJECT_MANAGER"):
+        elif user_type_str == roles.PM:
             pm = db.query(ProjectManager).filter(ProjectManager.account_id == current_user.account_id).first()
             project = db.query(Project).filter(Project.project_id == task.project_id).first()
             if pm and project and project.pm_id == pm.pm_id:

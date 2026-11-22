@@ -4,10 +4,9 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_db
 from app.features.departments import service
-from app.features.departments.dependencies import (
-    get_current_user,
-    require_roles,
-)
+from app.core import roles
+from app.core.deps import get_current_user
+from app.core.rbac import require_role
 from app.models.user_account import UserAccount
 from app.features.departments.schemas import (
     DepartmentCreate,
@@ -63,14 +62,14 @@ def get_department(
     response_model=DepartmentResponse,
     status_code=status.HTTP_201_CREATED,
     summary="Create department",
-    description="Create a new department. Restricted to HR_MANAGER and ADMIN roles.",
+    description="Create a new department. Restricted to HR and ADMIN roles.",
 )
 def create_department(
     payload: DepartmentCreate,
     request: Request,
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(
-        require_roles(["HR_MANAGER", "ADMIN"])
+        require_role((roles.HR, roles.ADMIN))
     ),
 ) -> DepartmentResponse:
     client_ip = request.client.host if request.client else None
@@ -93,7 +92,7 @@ def create_department(
     "/{dept_id}",
     response_model=DepartmentResponse,
     summary="Update department",
-    description="Update an existing department. Restricted to HR_MANAGER and ADMIN roles.",
+    description="Update an existing department. Restricted to HR and ADMIN roles.",
 )
 def update_department(
     dept_id: int,
@@ -101,7 +100,7 @@ def update_department(
     request: Request,
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(
-        require_roles(["HR_MANAGER", "ADMIN"])
+        require_role((roles.HR, roles.ADMIN))
     ),
 ) -> DepartmentResponse:
     client_ip = request.client.host if request.client else None

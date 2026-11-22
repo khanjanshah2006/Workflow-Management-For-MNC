@@ -3,6 +3,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.deps import get_current_user
 from app.core.rbac import require_role
 from app.db.session import get_db
@@ -67,7 +68,7 @@ def _check_review_queue_access(
         user_type_raw.value if hasattr(user_type_raw, "value") else str(user_type_raw or "")
     ).upper()
 
-    if user_type_str in ["TEAM_LEAD", "PM", "ADMIN", "SYSTEM_ADMIN", "PROJECT_MANAGER"]:
+    if user_type_str in [roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN]:
         return current_user
 
     if getattr(current_user, "is_team_lead", False) or getattr(current_user, "role", "").upper() == "TEAM_LEAD":
@@ -550,7 +551,7 @@ def review_task(
     payload: TaskReviewDecisionSchema,
     request: Request,
     current_user: UserAccount = Depends(
-        require_role(["TEAM_LEAD", "PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN", "EMPLOYEE"])
+        require_role([roles.TEAM_LEAD, roles.PM, roles.ADMIN, roles.SYSTEM_ADMIN, roles.EMPLOYEE])
     ),
     db: Session = Depends(get_db),
 ) -> TaskReviewResponse:

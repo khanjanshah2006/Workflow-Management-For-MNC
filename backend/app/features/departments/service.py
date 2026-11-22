@@ -9,6 +9,7 @@ from app.models.employee import Employee
 from app.models.team import Team
 from app.models.user_account import UserAccount
 from app.models.audit_log import AuditLog
+from app.core import roles
 from app.models.enums import AuditAction, UserType
 from app.features.departments import repository
 from app.features.departments.schemas import DepartmentCreate, DepartmentUpdate
@@ -230,7 +231,7 @@ def _assert_team_access(
     ).upper()
 
     # HR, Admin, PM have unrestricted read access to team rosters
-    if user_type_val in ("HR", "HR_MANAGER", "ADMIN", "PM", "PROJECT_MANAGER"):
+    if user_type_val in (roles.HR, roles.ADMIN, roles.PM):
         return
 
     # Employee must be the designated Team Lead for this specific team
