@@ -10,9 +10,9 @@ from app.core.security import (
     create_refresh_token,
     create_mfa_pending_token,
     decode_token,
-    ACCESS_TOKEN_EXPIRE_MINUTES,
 )
 from app.core.audit import write_audit_log
+from app.core.config import settings
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.features.auth.repository import AuthRepository
@@ -117,7 +117,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
             user=UserInfoResponse.model_validate(account),
             mfa_required=False,
         )
@@ -286,7 +286,7 @@ class AuthService:
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
             user=UserInfoResponse.model_validate(account),
         )
 
@@ -341,5 +341,5 @@ class AuthService:
         return TokenRefreshResponse(
             access_token=new_access_token,
             token_type="bearer",
-            expires_in=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            expires_in=settings.access_token_expire_minutes * 60,
         )

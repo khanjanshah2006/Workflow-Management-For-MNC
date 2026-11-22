@@ -17,4 +17,5 @@ class ExecutiveReport(Base):
     include_department_breakdown = Column(Boolean, default=False, nullable=False)
     file_path = Column(String(500), nullable=False)
     file_size_bytes = Column(Integer, nullable=False)
+    file_id = Column(Integer, ForeignKey("stored_file.file_id", ondelete="SET NULL"), nullable=True)
     generated_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

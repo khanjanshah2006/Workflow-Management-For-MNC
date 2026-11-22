@@ -24,6 +24,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.db.base import Base
 from app.db.session import get_db
@@ -76,7 +77,7 @@ def db_session():
 @pytest.fixture
 def test_setup(db_session, tmp_path, monkeypatch):
     """Seed test entities and isolate reports directory to tmp_path."""
-    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "reports_dir", str(tmp_path))
 
     # 1. Department
     dept = Department(dept_id=1, name="Core Engineering", description="Engineering division")

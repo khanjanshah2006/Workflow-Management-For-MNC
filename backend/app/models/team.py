@@ -9,6 +9,7 @@ class Team(Base):
     team_id = Column(Integer, primary_key=True, autoincrement=True)
     project_id = Column(Integer, ForeignKey("project.project_id", ondelete="SET NULL"), nullable=True, index=True)
     lead_emp_id = Column(Integer, ForeignKey("employee.emp_id", ondelete="SET NULL"), nullable=True, index=True)
+    dept_id = Column(Integer, ForeignKey("department.dept_id", ondelete="SET NULL"), nullable=True, index=True)
     name = Column(String(150), nullable=False)
     description = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
