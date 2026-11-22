@@ -8,7 +8,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
-from app.core.notification_types import SECURITY_ALERT
+from app.core.notification_types import ACCOUNT_UNLOCKED, SECURITY_ALERT
 from app.core.security import create_access_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
@@ -123,7 +123,11 @@ def test_lockout_after_threshold_returns_423(client, db):
 
     alert = (
         db.query(Notification)
-        .filter(Notification.account_id == admin.account_id, Notification.type == SECURITY_ALERT)
+        .filter(
+            Notification.account_id == admin.account_id,
+            Notification.type == SECURITY_ALERT,
+            Notification.message.contains(account.email),
+        )
         .one()
     )
     assert account.email in alert.message
@@ -216,6 +220,75 @@ def test_lockout_notifies_admins_and_appears_in_alerts(client, db):
     target.locked_until = None
     db.commit()
     assert locked_alerts() == []
+
+
+def test_unlock_and_reset_password_clear_lock(client, db):
+    admin = make_account(db, UserType.ADMIN)
+    system_admin = make_account(db, UserType.SYSTEM_ADMIN)
+    employee = make_account(db, UserType.EMPLOYEE)
+    target = make_account(db)
+
+    def lock_target():
+        for _ in range(settings.failed_login_threshold):
+            assert login(client, target.email, "WrongPass!").status_code == 401
+        db.expire_all()
+        assert target.locked_until is not None
+
+    lock_target()
+    unlock_url = f"/api/v1/admin/users/{target.account_id}/unlock"
+
+    assert client.post(unlock_url, headers=auth_headers(employee)).status_code == 403
+    assert client.post(f"/api/v1/admin/users/{uuid4()}/unlock", headers=auth_headers(admin)).status_code == 404
+
+    res = client.post(unlock_url, headers=auth_headers(admin))
+    assert res.status_code == 200
+    db.expire_all()
+    assert target.failed_login_count == 0
+    assert target.locked_until is None
+    assert login(client, target.email, PASSWORD).status_code == 200
+
+    unlock_rows = [
+        row
+        for row in db.query(AuditLog).filter(
+            AuditLog.action == AuditAction.UPDATE,
+            AuditLog.entity_ref_id == str(target.account_id),
+            AuditLog.account_id == admin.account_id,
+        )
+        if '"ACCOUNT_UNLOCKED"' in (row.new_value or "")
+    ]
+    assert len(unlock_rows) == 1
+    assert (
+        db.query(Notification)
+        .filter(Notification.account_id == target.account_id, Notification.type == ACCOUNT_UNLOCKED)
+        .count()
+        == 1
+    )
+
+    res = client.post(unlock_url, headers=auth_headers(admin))
+    assert res.status_code == 409
+    assert res.json()["detail"] == "Account is not locked"
+
+    # An admin password reset clears the lock too.
+    lock_target()
+    res = client.post(
+        f"/api/v1/admin/users/{target.account_id}/reset-password",
+        json={"new_password": "BrandNew123!"},
+        headers=auth_headers(system_admin),
+    )
+    assert res.status_code == 200
+    db.expire_all()
+    assert target.failed_login_count == 0
+    assert target.locked_until is None
+    reset_row = (
+        db.query(AuditLog)
+        .filter(
+            AuditLog.entity_ref_id == str(target.account_id),
+            AuditLog.account_id == system_admin.account_id,
+        )
+        .one()
+    )
+    assert '"unlocked": true' in reset_row.new_value
+    assert login(client, target.email, "BrandNew123!").status_code == 200
 
 
 # ==============================================================================

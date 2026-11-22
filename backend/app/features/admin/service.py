@@ -20,6 +20,7 @@ from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
 from app.core.config import settings
+from app.core.notification_types import ACCOUNT_UNLOCKED
 from app.db.session import engine
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
@@ -36,6 +37,7 @@ from app.features.admin.schemas import (
     UserAccountPaginationResponse,
     UserAccountResponse,
 )
+from app.features.notifications.service import NotificationService
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.models.system_backup_log import SystemBackupLog
@@ -75,6 +77,15 @@ class InvalidExpirationError(Exception):
 
 class AdminPermissionError(Exception):
     pass
+
+
+class AccountNotLockedError(Exception):
+    pass
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class AdminService:
@@ -213,6 +224,10 @@ class AdminService:
         if not user:
             raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
 
+        was_locked = bool(user.locked_until and _as_utc(user.locked_until) > datetime.now(timezone.utc))
+        # A reset also clears any lockout; persisted by update_password's commit.
+        user.failed_login_count = 0
+        user.locked_until = None
         pwd_hash = hash_password(new_password)
         AdminRepository.update_password(db=db, user=user, password_hash=pwd_hash)
 
@@ -224,11 +239,54 @@ class AdminService:
             entity_ref_id=str(user.account_id),
             account_id=admin_user.account_id,
             old_value=None,
-            new_value={"action": "admin_password_reset", "email": user.email},
+            new_value={"action": "admin_password_reset", "email": user.email, "unlocked": was_locked},
             ip_address=ip_address,
         )
 
         return {"message": "Password reset successfully", "email": user.email}
+
+    @staticmethod
+    def unlock_account(
+        db: Session,
+        account_id: UUID,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> UserAccountResponse:
+        user = AdminRepository.get_by_id(db, account_id=account_id)
+        if not user:
+            raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
+        if user.locked_until is None or _as_utc(user.locked_until) <= datetime.now(timezone.utc):
+            raise AccountNotLockedError("Account is not locked")
+
+        old_value = {
+            "locked_until": _as_utc(user.locked_until).isoformat(),
+            "failed_login_count": user.failed_login_count,
+        }
+        user.failed_login_count = 0
+        user.locked_until = None
+
+        NotificationService.create_notification(
+            db,
+            user_id=user.account_id,
+            type=ACCOUNT_UNLOCKED,
+            title="Account unlocked",
+            message="An administrator unlocked your account. You can sign in again.",
+        )
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(user.account_id),
+            account_id=admin_user.account_id,
+            old_value=old_value,
+            new_value={"event": "ACCOUNT_UNLOCKED", "locked_until": None, "failed_login_count": 0},
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        db.refresh(user)
+
+        return UserAccountResponse.model_validate(user)
 
     @staticmethod
     def get_backup_status(db: Session) -> BackupStatusResponse:
