@@ -923,6 +923,380 @@
               "_postman_previewlanguage": "json"
             }
           ]
+        },
+        {
+          "name": "POST Create Department Team as HR (201) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": [\n    16,\n    18,\n    19\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Create a new team under a department. Promotes lead to TEAM_LEAD if account is EMPLOYEE."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"project_id\": null,\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"lead_name\": \"Sarah Connor\",\n  \"status\": \"ACTIVE\",\n  \"created_at\": \"2026-11-22T10:00:00Z\",\n  \"member_count\": 4,\n  \"members\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team as Employee (403) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rogue Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Employee role is forbidden from creating department teams."
+          },
+          "response": [
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team - Duplicate Name (409) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Team names are unique per department (case-insensitive)."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Team with name 'Payments Squad' already exists in department 1\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET List Department Teams (US-05)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams?include_disbanded=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ],
+              "query": [
+                {
+                  "key": "include_disbanded",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "US-05: List teams in department with lead name and member count."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"team_id\": 1,\n    \"dept_id\": 1,\n    \"project_id\": null,\n    \"name\": \"Payments Squad\",\n    \"description\": \"Card and wallet integrations\",\n    \"lead_emp_id\": 21,\n    \"lead_name\": \"Sarah Connor\",\n    \"status\": \"ACTIVE\",\n    \"created_at\": \"2026-11-22T10:00:00Z\",\n    \"member_count\": 4\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "PUT Change Team Lead & Status (US-05)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_emp_id\": 22\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}"
+              ]
+            },
+            "description": "US-05: Partial update of team. Lead change promotes new lead and demotes previous lead if no other team."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 22,\n  \"lead_name\": \"John Reese\",\n  \"status\": \"ACTIVE\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Add Members to Team (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emp_ids\": [\n    23,\n    24\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "US-05: Idempotent addition of team members."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"member_count\": 6\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Regular Member (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{emp_id}}"
+              ]
+            },
+            "description": "US-05: Remove regular employee from team."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Lead Member (409 Conflict) (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{lead_emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{lead_emp_id}}"
+              ]
+            },
+            "description": "US-05: Removing lead returns 409 Conflict. Must change lead first."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Cannot remove lead employee from team. Change the lead first.\"\n}"
+            }
+          ]
         }
       ]
     },
