@@ -604,6 +604,32 @@ class AdminService:
                     details=desc,
                 ))
 
+        # Currently locked accounts are listed regardless of the failed-login window (US-49).
+        for account in AdminRepository.list_locked_accounts(db, now):
+            locked_at = account.locked_until - timedelta(minutes=settings.lockout_minutes)
+            desc = (
+                f"Account locked after {account.failed_login_count} failed logins "
+                f"until {account.locked_until:%H:%M} UTC."
+            )
+            alerts.append(AnomalyAlert(
+                id=f"ALT-LOCK-{account.account_id.hex[:8]}",
+                title=f"Account Locked ({account.email})",
+                description=desc,
+                alert_type="ACCOUNT_LOCKED",
+                severity="HIGH",
+                account_id=account.account_id,
+                target_account_id=account.account_id,
+                attempted_email=account.email,
+                target_account=account.email,
+                count=account.failed_login_count,
+                attempts_count=account.failed_login_count,
+                first_timestamp=locked_at,
+                last_timestamp=account.locked_until,
+                timestamp=locked_at,
+                status="ACTIVE",
+                details=desc,
+            ))
+
         # Role elevations are reviewed over 24 hours; no volume threshold is assumed.
         elevation_rows = AdminRepository.audit_rows_since(db, now - timedelta(hours=24))
         rank = {"ADMIN": 1, "SYSTEM_ADMIN": 2}

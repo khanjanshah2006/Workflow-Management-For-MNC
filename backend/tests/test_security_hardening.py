@@ -9,7 +9,7 @@ from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
 from app.core.notification_types import SECURITY_ALERT
-from app.core.security import hash_password
+from app.core.security import create_access_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.features.auth.rate_limit import LOGIN_RATE_LIMIT
@@ -93,6 +93,15 @@ def as_utc(value: datetime) -> datetime:
     return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
+def auth_headers(account: UserAccount) -> dict[str, str]:
+    token = create_access_token(data={
+        "sub": str(account.account_id),
+        "email": account.email,
+        "user_type": account.user_type.value,
+    })
+    return {"Authorization": f"Bearer {token}"}
+
+
 # ==============================================================================
 # Account lockout (US-48, US-49)
 # ==============================================================================
@@ -158,6 +167,55 @@ def test_successful_login_resets_counter(client, db):
     db.refresh(account)
     assert account.failed_login_count == 0
     assert account.locked_until is None
+
+
+def test_lockout_notifies_admins_and_appears_in_alerts(client, db):
+    admin = make_account(db, UserType.ADMIN)
+    system_admin = make_account(db, UserType.SYSTEM_ADMIN)
+    inactive_admin = make_account(db, UserType.ADMIN)
+    inactive_admin.is_active = False
+    employee = make_account(db, UserType.EMPLOYEE)
+    target = make_account(db)
+    db.commit()
+
+    for _ in range(settings.failed_login_threshold):
+        assert login(client, target.email, "WrongPass!").status_code == 401
+
+    def alerts_for(recipient: UserAccount) -> int:
+        return (
+            db.query(Notification)
+            .filter(
+                Notification.account_id == recipient.account_id,
+                Notification.type == SECURITY_ALERT,
+                Notification.message.contains(target.email),
+            )
+            .count()
+        )
+
+    assert alerts_for(admin) == 1
+    assert alerts_for(system_admin) == 1
+    assert alerts_for(inactive_admin) == 0
+    assert alerts_for(employee) == 0
+
+    def locked_alerts() -> list[dict]:
+        res = client.get("/api/v1/admin/anomaly-alerts", headers=auth_headers(admin))
+        assert res.status_code == 200
+        return [
+            alert
+            for alert in res.json()["alerts"]
+            if alert["alert_type"] == "ACCOUNT_LOCKED" and alert["target_account"] == target.email
+        ]
+
+    alerts = locked_alerts()
+    assert len(alerts) == 1
+    assert alerts[0]["id"] == f"ALT-LOCK-{target.account_id.hex[:8]}"
+    assert alerts[0]["severity"] == "HIGH"
+    assert alerts[0]["count"] == settings.failed_login_threshold
+
+    db.refresh(target)
+    target.locked_until = None
+    db.commit()
+    assert locked_alerts() == []
 
 
 # ==============================================================================
