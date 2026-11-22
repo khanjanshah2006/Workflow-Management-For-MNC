@@ -128,7 +128,7 @@ def get_ticket_or_404(db: Session, ticket_id: int) -> SupportTicket:
 
 
 def enrich_ticket_names(db: Session, ticket: SupportTicket) -> SupportTicket:
-    """Helper to populate reporter_name and assignee_name onto the ticket instance."""
+    """Helper to populate reporter_name, assignee_name, and activity actor_names onto ticket."""
     reporter_emp = (
         db.query(Employee).filter(Employee.account_id == ticket.reporter_id).first()
         if ticket.reporter_id
@@ -142,6 +142,19 @@ def enrich_ticket_names(db: Session, ticket: SupportTicket) -> SupportTicket:
 
     ticket.reporter_name = reporter_emp.full_name if reporter_emp else None
     ticket.assignee_name = assignee_emp.full_name if assignee_emp else None
+
+    # Populate actor_name for activities
+    if hasattr(ticket, "activities") and ticket.activities:
+        actor_ids = {a.actor_id for a in ticket.activities if a.actor_id}
+        if actor_ids:
+            employees = db.query(Employee).filter(Employee.account_id.in_(actor_ids)).all()
+            emp_map = {e.account_id: e.full_name for e in employees}
+            user_accounts = db.query(UserAccount).filter(UserAccount.account_id.in_(actor_ids)).all()
+            acc_map = {u.account_id: u.email for u in user_accounts}
+            for act in ticket.activities:
+                if act.actor_id:
+                    act.actor_name = emp_map.get(act.actor_id) or acc_map.get(act.actor_id)
+
     return ticket
 
 
@@ -239,6 +252,8 @@ def create_ticket(db: Session, payload: TicketCreateIn, current_user: Any) -> Su
         actor_id=actor_account_id,
         action="CREATED",
         note=f"Ticket {ticket.ticket_number} created by employee",
+        old_status=None,
+        new_status="open",
         created_at=now_utc,
     )
     db.add(activity)
@@ -325,7 +340,10 @@ def get_queue_tickets(
                 target_uuid = uuid.UUID(assigned_to_filter.strip())
                 query = query.filter(SupportTicket.assigned_to == target_uuid)
             except ValueError:
-                pass
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail="Invalid assigned_to filter: must be 'me', 'unassigned', or a valid UUID",
+                )
 
     total = query.with_entities(func.count(SupportTicket.id)).scalar() or 0
 
@@ -502,6 +520,8 @@ def add_ticket_note(
         activity_type="NOTE_ADDED",
         details=payload.note,
         actor_account_id=getattr(current_user, "account_id", None),
+        old_status=ticket.status,
+        new_status=ticket.status,
     )
 
     # Audit log
@@ -547,7 +567,7 @@ def update_ticket_status(
     current_status = str(ticket.status).strip().lower()
 
     # 2. 403 / RBAC check
-    is_staff = current_role in {"IT_SUPPORT", "SYSTEM_ADMIN", "ADMIN"}
+    is_staff = current_role in {"IT_SUPPORT", "SYSTEM_ADMIN"}
     is_reporter = actor_account_id and str(ticket.reporter_id) == str(actor_account_id)
 
     if not is_staff:
@@ -573,7 +593,7 @@ def update_ticket_status(
     # 4. State transitions validation (403 / 409)
     if current_status == "escalated":
         # Only SYSTEM_ADMIN can transition an escalated ticket
-        if current_role not in {"SYSTEM_ADMIN", "ADMIN"}:
+        if current_role != "SYSTEM_ADMIN":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Only System Administrators can update escalated tickets",

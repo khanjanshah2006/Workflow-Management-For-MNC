@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any, List, Optional
+from typing import Any, List, Optional, Literal
 from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field, AliasChoices, model_validator
 
@@ -71,6 +71,7 @@ class TicketActivityOut(BaseModel):
     ticket_id: int
     actor_id: Optional[UUID] = None
     performed_by: Optional[UUID] = None
+    actor_name: Optional[str] = None
     action: str
     activity_type: str
     note: Optional[str] = None
@@ -139,7 +140,10 @@ class TicketNoteRequest(BaseModel):
 
 class TicketStatusUpdateRequest(BaseModel):
     """Payload for PUT /api/v1/support/tickets/{id}/status."""
-    status: str = Field(..., description="Target status: open, in_progress, resolved, closed")
+    status: Literal["open", "in_progress", "resolved", "closed", "escalated"] = Field(
+        ...,
+        description="Target status: open, in_progress, resolved, closed, escalated",
+    )
     resolution_note: Optional[str] = Field(
         None,
         validation_alias=AliasChoices("resolution_note", "resolution_notes"),

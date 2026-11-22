@@ -632,3 +632,91 @@ def test_notifications_on_create_assign_resolve(client, db_session, seed_data):
         .first()
     )
     assert resolved_notif is not None
+
+
+# =============================================================================
+# 8. test_admin_gets_403_on_escalated_and_status_update
+# =============================================================================
+
+def test_admin_gets_403_on_escalated_and_status_update(client, db_session, seed_data):
+    admin_acc = UserAccount(
+        account_id=uuid.UUID("d0000001-0000-0000-0000-000000000001"),
+        email="admin@company.com",
+        password_hash="pw_admin",
+        user_type=UserType.ADMIN,
+        is_active=True,
+    )
+    db_session.add(admin_acc)
+    db_session.commit()
+
+    admin_headers = {"X-User-Id": str(admin_acc.account_id)}
+
+    # Create escalated ticket
+    ticket = SupportTicket(
+        ticket_number="TKT-501",
+        subject="Critical infrastructure deadlock",
+        description="Core routers out of sync",
+        category="network",
+        priority="CRITICAL",
+        status="escalated",
+        escalation_reason="Requires SysAdmin intervention",
+        reporter_id=seed_data["emp1"].account_id,
+        assigned_to=seed_data["it1"].account_id,
+    )
+    db_session.add(ticket)
+    db_session.commit()
+    db_session.refresh(ticket)
+
+    # 1. Plain ADMIN attempting to resolve an escalated ticket returns 403 Forbidden
+    res_admin_escalated = client.put(
+        f"/api/v1/support/tickets/{ticket.id}/status",
+        json={"status": "resolved", "resolution_note": "Closed by admin"},
+        headers=admin_headers,
+    )
+    assert res_admin_escalated.status_code == 403
+
+    # 2. Plain ADMIN attempting to update any other ticket status returns 403 Forbidden
+    ticket_open = SupportTicket(
+        ticket_number="TKT-502",
+        subject="Regular monitor issue",
+        description="Flickering screen",
+        category="hardware",
+        priority="LOW",
+        status="open",
+        reporter_id=seed_data["emp1"].account_id,
+    )
+    db_session.add(ticket_open)
+    db_session.commit()
+    db_session.refresh(ticket_open)
+
+    res_admin_open = client.put(
+        f"/api/v1/support/tickets/{ticket_open.id}/status",
+        json={"status": "in_progress"},
+        headers=admin_headers,
+    )
+    assert res_admin_open.status_code == 403
+
+
+# =============================================================================
+# 9. test_invalid_filter_and_status_validation
+# =============================================================================
+
+def test_invalid_filter_and_status_validation(client, seed_data):
+    it1_headers = {"X-User-Id": str(seed_data["it1"].account_id)}
+
+    # assigned_to=foo returns 400 Bad Request
+    res_bad_assignee = client.get(
+        "/api/v1/support/tickets?assigned_to=foo",
+        headers=it1_headers,
+    )
+    assert res_bad_assignee.status_code == 400
+    assert "Invalid assigned_to filter" in res_bad_assignee.json()["detail"]
+
+    # status="banana" returns 422 Unprocessable Entity
+    res_bad_status = client.put(
+        "/api/v1/support/tickets/1/status",
+        json={"status": "banana"},
+        headers=it1_headers,
+    )
+    assert res_bad_status.status_code == 422
+
