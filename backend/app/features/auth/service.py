@@ -43,6 +43,61 @@ def _is_platform_admin(account: UserAccount) -> bool:
     return user_type_val in roles.PLATFORM_ADMINS
 
 
+def _raise_if_locked(
+    db: Session, account: UserAccount, email: str, ip_address: str | None, now: datetime
+) -> None:
+    """Refuse a locked account with 423 (US-48); an expired lock is cleared for a fresh round of attempts."""
+    if account.locked_until is None:
+        return
+    locked_until = _as_utc(account.locked_until)
+    if locked_until > now:
+        write_audit_log(
+            db=db,
+            action=AuditAction.LOGIN,
+            entity_name="USER_ACCOUNT",
+            entity_ref_id=str(account.account_id),
+            account_id=account.account_id,
+            new_value={
+                "status": "LOCKED",
+                "event": "LOGIN_LOCKED",
+                "attempted_email": email,
+                "locked_until": locked_until.isoformat(),
+            },
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_423_LOCKED,
+            detail=f"Account locked. Try again after {locked_until:%H:%M} UTC or contact an administrator.",
+        )
+    account.locked_until = None
+    account.failed_login_count = 0
+
+
+def _record_failed_attempt(db: Session, account: UserAccount, now: datetime) -> dict:
+    """Count a failed password or TOTP attempt; lock and alert platform admins at the threshold.
+
+    Returns extra audit fields when the account was locked. The caller commits.
+    """
+    account.failed_login_count = (account.failed_login_count or 0) + 1
+    if account.failed_login_count < settings.failed_login_threshold:
+        return {}
+    account.locked_until = now + timedelta(minutes=settings.lockout_minutes)
+    for admin in AuthRepository.list_active_platform_admins(db):
+        NotificationService.create_notification(
+            db,
+            user_id=admin.account_id,
+            type=SECURITY_ALERT,
+            title="Account locked",
+            message=(
+                f"Account {account.email} was locked after {account.failed_login_count} "
+                f"failed login attempts until {account.locked_until:%Y-%m-%d %H:%M} UTC."
+            ),
+        )
+    return {"account_locked": True, "locked_until": account.locked_until.isoformat()}
+
+
 class AuthService:
     """Service encapsulating authentication logic, token lifecycle, and TOTP MFA."""
 
@@ -53,33 +108,9 @@ class AuthService:
         """Authenticate user credentials and issue signed JWT access & refresh tokens or trigger MFA challenge."""
         account = AuthRepository.get_by_email(db, email=email)
         now = datetime.now(timezone.utc)
-        if account and account.locked_until is not None:
-            locked_until = _as_utc(account.locked_until)
-            if locked_until > now:
-                # Locked accounts are refused without checking the password (US-48).
-                write_audit_log(
-                    db=db,
-                    action=AuditAction.LOGIN,
-                    entity_name="USER_ACCOUNT",
-                    entity_ref_id=str(account.account_id),
-                    account_id=account.account_id,
-                    new_value={
-                        "status": "LOCKED",
-                        "event": "LOGIN_LOCKED",
-                        "attempted_email": email,
-                        "locked_until": locked_until.isoformat(),
-                    },
-                    ip_address=ip_address,
-                    commit=False,
-                )
-                db.commit()
-                raise HTTPException(
-                    status_code=status.HTTP_423_LOCKED,
-                    detail=f"Account locked. Try again after {locked_until:%H:%M} UTC or contact an administrator.",
-                )
-            # Lock expired: start a fresh round of attempts.
-            account.locked_until = None
-            account.failed_login_count = 0
+        if account:
+            # Locked accounts are refused without checking the password (US-48).
+            _raise_if_locked(db, account, email, ip_address, now)
 
         if not account or not verify_password(password, account.password_hash):
             # Record failed login attempt for security audit and anomaly detection
@@ -88,22 +119,7 @@ class AuthService:
                 "attempted_email": email,
             }
             if account:
-                account.failed_login_count = (account.failed_login_count or 0) + 1
-                if account.failed_login_count >= settings.failed_login_threshold:
-                    account.locked_until = now + timedelta(minutes=settings.lockout_minutes)
-                    new_value["account_locked"] = True
-                    new_value["locked_until"] = account.locked_until.isoformat()
-                    for admin in AuthRepository.list_active_platform_admins(db):
-                        NotificationService.create_notification(
-                            db,
-                            user_id=admin.account_id,
-                            type=SECURITY_ALERT,
-                            title="Account locked",
-                            message=(
-                                f"Account {account.email} was locked after {account.failed_login_count} "
-                                f"failed login attempts until {account.locked_until:%Y-%m-%d %H:%M} UTC."
-                            ),
-                        )
+                new_value.update(_record_failed_attempt(db, account, now))
             write_audit_log(
                 db=db,
                 action=AuditAction.LOGIN,
@@ -247,6 +263,9 @@ class AuthService:
         On success, marks MFA as enabled. With ``issue_tokens`` (enforced admin
         enrolment via an mfa_setup token) the login is completed and tokens returned.
         """
+        if issue_tokens:
+            _raise_if_locked(db, user, user.email, ip_address, datetime.now(timezone.utc))
+
         if not user.mfa_secret:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -356,6 +375,9 @@ class AuthService:
                 detail="Account is inactive or does not exist",
             )
 
+        now = datetime.now(timezone.utc)
+        _raise_if_locked(db, account, account.email, ip_address, now)
+
         if not account.mfa_secret:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -365,22 +387,28 @@ class AuthService:
         totp = pyotp.TOTP(account.mfa_secret)
 
         if not totp.verify(code.strip(), valid_window=2):
+            # Wrong codes count toward the lockout like wrong passwords
+            new_value = {"status": "FAILED", "attempted_email": account.email, "auth_method": "MFA"}
+            new_value.update(_record_failed_attempt(db, account, now))
             write_audit_log(
                 db=db,
                 action=AuditAction.LOGIN,
                 entity_name="USER_ACCOUNT",
                 entity_ref_id=str(account.account_id),
                 account_id=account.account_id,
-                new_value={"status": "FAILED", "attempted_email": account.email, "auth_method": "MFA"},
+                new_value=new_value,
                 ip_address=ip_address,
+                commit=False,
             )
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid 6-digit MFA code",
                 headers={"WWW-Authenticate": "Bearer"},
             )
 
-        # Successful MFA login
+        # Successful MFA login (update_last_login commits the counter reset)
+        account.failed_login_count = 0
         AuthRepository.update_last_login(db, account)
 
         write_audit_log(
@@ -450,6 +478,8 @@ class AuthService:
                 detail="User not found",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+
+        _raise_if_locked(db, account, account.email, None, datetime.now(timezone.utc))
 
         if not account.is_active:
             raise HTTPException(

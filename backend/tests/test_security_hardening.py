@@ -461,6 +461,114 @@ def test_admin_without_mfa_gets_setup_required_when_enforced(client, db, monkeyp
 
 
 # ==============================================================================
+# Lockout on the MFA and refresh paths (US-48)
+# ==============================================================================
+
+def make_mfa_account(db, user_type: UserType = UserType.EMPLOYEE) -> tuple[UserAccount, str]:
+    account = make_account(db, user_type)
+    secret = pyotp.random_base32()
+    account.mfa_secret = secret
+    account.is_mfa_enabled = True
+    db.commit()
+    return account, secret
+
+
+def wrong_code(secret: str) -> str:
+    """A 6-digit code outside the +/-2 step window the server accepts."""
+    totp = pyotp.TOTP(secret)
+    now = datetime.now(timezone.utc)
+    valid = {totp.at(now + timedelta(seconds=30 * step)) for step in range(-3, 4)}
+    return next(code for code in ("000000", "111111", "222222") if code not in valid)
+
+
+def lock_by_password(client, account: UserAccount):
+    for _ in range(settings.failed_login_threshold):
+        assert login(client, account.email, "WrongPass!").status_code == 401
+
+
+def test_mfa_login_refused_while_locked(client, db):
+    account, secret = make_mfa_account(db)
+    res = login(client, account.email, PASSWORD)
+    assert res.status_code == 200
+    mfa_token = res.json()["mfa_token"]
+
+    lock_by_password(client, account)
+    res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": mfa_token, "code": pyotp.TOTP(secret).now()})
+    assert res.status_code == 423
+    assert res.json()["detail"].startswith("Account locked. Try again after ")
+    assert "access_token" not in res.json()
+
+
+def test_wrong_totp_codes_count_toward_lockout(client, db):
+    admin = make_account(db, UserType.ADMIN)
+    account, secret = make_mfa_account(db)
+    res = login(client, account.email, PASSWORD)
+    mfa_token = res.json()["mfa_token"]
+
+    for attempt in range(1, settings.failed_login_threshold + 1):
+        res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": mfa_token, "code": wrong_code(secret)})
+        assert res.status_code == 401, attempt
+
+    db.expire_all()
+    assert account.failed_login_count == settings.failed_login_threshold
+    assert account.locked_until is not None
+    assert (
+        db.query(Notification)
+        .filter(
+            Notification.account_id == admin.account_id,
+            Notification.type == SECURITY_ALERT,
+            Notification.message.contains(account.email),
+        )
+        .count()
+        == 1
+    )
+
+    res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": mfa_token, "code": pyotp.TOTP(secret).now()})
+    assert res.status_code == 423
+
+
+def test_correct_totp_resets_counter(client, db):
+    account, secret = make_mfa_account(db)
+    mfa_token = login(client, account.email, PASSWORD).json()["mfa_token"]
+    for _ in range(2):
+        client.post("/api/v1/auth/mfa/login", json={"mfa_token": mfa_token, "code": wrong_code(secret)})
+
+    res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": mfa_token, "code": pyotp.TOTP(secret).now()})
+    assert res.status_code == 200
+    db.expire_all()
+    assert account.failed_login_count == 0
+
+
+def test_refresh_refused_while_locked(client, db):
+    account = make_account(db)
+    refresh_token = login(client, account.email, PASSWORD).json()["refresh_token"]
+
+    lock_by_password(client, account)
+    res = client.post("/api/v1/auth/refresh", json={"refresh_token": refresh_token})
+    assert res.status_code == 423
+
+
+def test_enrolment_token_refused_while_locked(client, db, monkeypatch):
+    monkeypatch.setattr(settings, "enforce_admin_mfa", True)
+    admin = make_account(db, UserType.ADMIN)
+    setup_token = login(client, admin.email, PASSWORD).json()["mfa_token"]
+    headers = {"Authorization": f"Bearer {setup_token}"}
+    secret = client.post("/api/v1/auth/mfa/setup", headers=headers).json()["secret"]
+
+    lock_by_password(client, admin)
+    res = client.post("/api/v1/auth/mfa/verify", json={"code": pyotp.TOTP(secret).now()}, headers=headers)
+    assert res.status_code == 423
+    db.expire_all()
+    assert admin.is_mfa_enabled is False
+
+
+def test_unknown_email_never_gets_423(client):
+    email = f"ghost-{uuid4().hex[:8]}@example.com"
+    for attempt in range(settings.failed_login_threshold + 2):
+        assert login(client, email, "WrongPass!").status_code == 401, attempt
+
+
+# ==============================================================================
 # Login rate limit (per path and client IP)
 # ==============================================================================
 
@@ -478,6 +586,7 @@ def test_login_rate_limit_returns_429(client):
     # /mfa/login has its own bucket.
     res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": "not-a-token", "code": "123456"})
     assert res.status_code != 429
+
 
 def test_mfa_setup_hides_current_otp_in_production(client, db, monkeypatch):
     account = make_account(db, UserType.EMPLOYEE)
