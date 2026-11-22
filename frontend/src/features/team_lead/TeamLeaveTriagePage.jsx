@@ -75,6 +75,11 @@ export default function TeamLeaveTriagePage() {
     const targetId = Number(requestIdParam);
     if (!targetId) return;
 
+    // Wait for the queue so a request that is in it opens with its full details (incl. reason)
+    if (isLoading) return;
+
+    let cancelled = false;
+
     // First check if the item is already loaded in the items list
     const found = items.find((item) => item.leave_id === targetId);
     if (found) {
@@ -86,7 +91,7 @@ export default function TeamLeaveTriagePage() {
       // If not in current page/filter, query conflict details directly to open drawer
       getLeaveConflicts(targetId)
         .then((report) => {
-          if (report) {
+          if (report && !cancelled) {
             setSelectedRequest({
               leave_id: report.leave_id,
               employee_id: report.employee_id,
@@ -95,7 +100,7 @@ export default function TeamLeaveTriagePage() {
               start_date: report.start_date,
               end_date: report.end_date,
               total_days: report.total_days,
-              reason: report.reason || "Review requested via notification deep-link.",
+              reason: report.reason || null,
               status: report.status || "PENDING",
             });
             setIsDrawerOpen(true);
@@ -105,7 +110,11 @@ export default function TeamLeaveTriagePage() {
           console.warn("Failed to load request from notification link:", err?.message);
         });
     }
-  }, [requestIdParam, items]);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [requestIdParam, items, isLoading]);
 
   const handleOpenReview = (request) => {
     setSelectedRequest(request);
