@@ -522,14 +522,14 @@ def test_audit_log_created_on_report_generation(client, test_setup, db_session):
 
 
 def test_download_missing_file_returns_404(client, test_setup, db_session):
-    """Verify HTTP 404 when report does not exist or file is deleted from disk."""
+    """Verify HTTP 404 when report does not exist or legacy report has missing disk file."""
     headers = {"Authorization": f"Bearer {test_setup['token_exec']}"}
 
     # 1. Nonexistent report ID
     resp_missing_id = client.get("/api/v1/executive/reports/99999/download", headers=headers)
     assert resp_missing_id.status_code == 404
 
-    # 2. Report exists in DB, but file removed from disk
+    # 2. In S9, generated reports are stored in DB, so removing file from disk survives (200 OK)
     gen_resp = client.post(
         "/api/v1/executive/reports/generate",
         headers=headers,
@@ -544,12 +544,29 @@ def test_download_missing_file_returns_404(client, test_setup, db_session):
 
     # Delete file from disk
     files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.pdf"))
-    assert len(files) == 1
-    os.remove(files[0])
+    if files:
+        os.remove(files[0])
 
-    resp_deleted_file = client.get(f"/api/v1/executive/reports/{report_id}/download", headers=headers)
-    assert resp_deleted_file.status_code == 404
-    assert "no longer exists on disk" in resp_deleted_file.json()["detail"].lower()
+    resp_survives = client.get(f"/api/v1/executive/reports/{report_id}/download", headers=headers)
+    assert resp_survives.status_code == 200
+    assert resp_survives.content.startswith(b"%PDF")
+
+    # 3. Legacy report without file_id and missing disk file returns 404
+    from app.models.enums import ReportFormat
+    legacy_report = ExecutiveReport(
+        report_title="Legacy Missing",
+        period_start=date(2026, 10, 1),
+        period_end=date(2026, 12, 31),
+        report_format=ReportFormat.PDF,
+        file_path="/nonexistent/path/legacy.pdf",
+        file_size_bytes=100,
+        file_id=None,
+    )
+    db_session.add(legacy_report)
+    db_session.commit()
+
+    resp_legacy = client.get(f"/api/v1/executive/reports/{legacy_report.report_id}/download", headers=headers)
+    assert resp_legacy.status_code == 404
 
 
 def test_get_reports_history_and_detail(client, test_setup):

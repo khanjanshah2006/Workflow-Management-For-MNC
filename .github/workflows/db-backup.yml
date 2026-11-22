@@ -1,0 +1,32 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  backup:
+    name: Database Backup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Install PostgreSQL Client
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client
+
+      - name: Run pg_dump
+        run: |
+          BACKUP_FILE="db_backup_$(date +%Y%m%d_%H%M%S).dump"
+          echo "BACKUP_FILE=$BACKUP_FILE" >> $GITHUB_ENV
+          pg_dump "${{ secrets.PROD_DATABASE_URL }}" --format=custom --file="$BACKUP_FILE"
+
+      - name: Upload backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.BACKUP_FILE }}
+          path: "*.dump"
+          retention-days: 7
