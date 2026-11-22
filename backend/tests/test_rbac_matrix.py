@@ -106,16 +106,18 @@ def make_employee(db, account: UserAccount | None = None) -> Employee:
     return employee
 
 
-def make_project(db) -> Project:
-    """Project with its own fresh client and PM (the PM has no login account)."""
+def make_project(db, pm: ProjectManager | None = None, client: Client | None = None) -> Project:
+    """Project for ``pm`` and ``client``; each defaults to a fresh login-less row."""
     code = uuid4().hex[:8]
-    client = Client(company_name=f"Client {code}", contact_person="Contact", email=f"client-{code}@example.com")
-    pm = ProjectManager(
-        emp_code=f"PM-{code}",
-        full_name=f"PM {code}",
-        email=f"pm-{code}@example.com",
-        date_of_joining=date(2024, 1, 1),
-    )
+    if client is None:
+        client = Client(company_name=f"Client {code}", contact_person="Contact", email=f"client-{code}@example.com")
+    if pm is None:
+        pm = ProjectManager(
+            emp_code=f"PM-{code}",
+            full_name=f"PM {code}",
+            email=f"pm-{code}@example.com",
+            date_of_joining=date(2024, 1, 1),
+        )
     db.add_all([client, pm])
     db.flush()
     project = Project(
@@ -309,3 +311,86 @@ def test_me_includes_led_team_ids(client, db):
     db.commit()
     body = client.get("/api/v1/auth/me", headers=auth_headers(employee)).json()
     assert body["active_elevated_roles"] == ["PM"]
+
+
+# ==============================================================================
+# Role x endpoint matrix
+# ==============================================================================
+
+INTERNAL_ROLES = frozenset(UserType) - {UserType.CLIENT}
+PLATFORM_ADMINS = frozenset({UserType.ADMIN, UserType.SYSTEM_ADMIN})
+
+
+@pytest.fixture(scope="module")
+def matrix_seed(session_factory):
+    """One account per role, plus a project/team/task wired to the PM, TEAM_LEAD and EMPLOYEE."""
+    db = session_factory()
+    try:
+        accounts = {user_type: make_account(db, user_type) for user_type in UserType}
+        employees = {
+            user_type: make_employee(db, accounts[user_type])
+            for user_type in UserType
+            if user_type is not UserType.CLIENT
+        }
+        pm_account = accounts[UserType.PM]
+        pm = ProjectManager(
+            account_id=pm_account.account_id,
+            emp_code=f"PM-{uuid4().hex[:8]}",
+            full_name="Matrix PM",
+            email=pm_account.email,
+            date_of_joining=date(2024, 1, 1),
+        )
+        client_account = accounts[UserType.CLIENT]
+        client_row = Client(
+            account_id=client_account.account_id,
+            company_name="Matrix Client",
+            contact_person="Contact",
+            email=client_account.email,
+        )
+        project = make_project(db, pm=pm, client=client_row)
+        team = make_team(db, lead=employees[UserType.TEAM_LEAD], project=project)
+        task = make_task(db, team, assignee=employees[UserType.EMPLOYEE])
+        yield {
+            "headers": {user_type: auth_headers(account) for user_type, account in accounts.items()},
+            "team_id": team.team_id,
+            "task_id": task.task_id,
+        }
+    finally:
+        db.close()
+
+
+# (method, path template, roles that succeed, success status)
+MATRIX = [
+    ("GET", "/api/v1/teams/{team_id}/members",
+     {UserType.HR, UserType.ADMIN, UserType.PM, UserType.TEAM_LEAD}, 200),
+    ("GET", "/api/v1/tasks/{task_id}/comments",
+     {UserType.EMPLOYEE, UserType.TEAM_LEAD, UserType.PM, UserType.ADMIN, UserType.SYSTEM_ADMIN}, 200),
+    ("GET", "/api/v1/profile/me", INTERNAL_ROLES, 200),
+    ("GET", "/api/v1/admin/users", PLATFORM_ADMINS, 200),
+    ("GET", "/api/v1/admin/system-params", PLATFORM_ADMINS, 200),
+    ("GET", "/api/v1/admin/elevated-access/active", PLATFORM_ADMINS, 200),
+    ("GET", "/api/v1/admin/anomaly-alerts", PLATFORM_ADMINS, 200),
+    ("GET", "/api/v1/admin/system/backup-status", PLATFORM_ADMINS, 200),
+    ("POST", "/api/v1/departments", {UserType.HR, UserType.ADMIN}, 201),
+    ("GET", "/api/v1/tasks/my-tasks", set(UserType), 200),
+    ("GET", "/api/v1/auth/me", set(UserType), 200),
+]
+
+MATRIX_CASES = [
+    pytest.param(method, path, allowed, success, user_type, id=f"{method} {path} as {user_type.value}")
+    for method, path, allowed, success in MATRIX
+    for user_type in UserType
+]
+
+
+@pytest.mark.parametrize("method,path,allowed,success,user_type", MATRIX_CASES)
+def test_rbac_matrix(client, matrix_seed, method, path, allowed, success, user_type):
+    url = path.format(team_id=matrix_seed["team_id"], task_id=matrix_seed["task_id"])
+    kwargs = {"headers": matrix_seed["headers"][user_type]}
+    if method == "POST":
+        kwargs["json"] = {"name": f"Dept {user_type.value} {uuid4().hex[:8]}"}
+
+    res = client.request(method, url, **kwargs)
+
+    expected = success if user_type in allowed else 403
+    assert res.status_code == expected, res.text
