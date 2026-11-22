@@ -87,6 +87,7 @@ class Settings:
     backup_timeout_seconds: int = 300
     failed_login_threshold: int = 5
     failed_login_window_minutes: int = 15
+    lockout_minutes: int = 15
     reports_dir: str = ""
 
     # Which required variables were actually present in the environment.
@@ -123,6 +124,7 @@ class Settings:
             backup_timeout_seconds=_int(e.get("BACKUP_TIMEOUT_SECONDS"), 300),
             failed_login_threshold=_int(e.get("FAILED_LOGIN_THRESHOLD"), 5),
             failed_login_window_minutes=_int(e.get("FAILED_LOGIN_WINDOW_MINUTES"), 15),
+            lockout_minutes=_int(e.get("LOCKOUT_MINUTES"), 15),
             reports_dir=e.get("REPORTS_DIR") or "",
             _provided=provided,
         )
