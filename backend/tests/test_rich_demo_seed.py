@@ -9,6 +9,7 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 import app.models  # noqa: F401
+from app.core.config import settings
 from app.db.base import Base
 from app.features.projects.risk_service import ProjectRiskService
 from app.features.tasks.overdue import OverdueService
@@ -42,7 +43,7 @@ def db():
 def seed(monkeypatch, tmp_path):
     """The seed module defaults DATABASE_URL on import; set it here so nothing leaks past the test."""
     monkeypatch.setenv("DATABASE_URL", "sqlite://")
-    monkeypatch.setenv("REPORTS_DIR", str(tmp_path))
+    monkeypatch.setattr(settings, "reports_dir", str(tmp_path))
     return importlib.import_module("scripts.seed_rich_demo").seed_rich_demo
 
 

@@ -18,7 +18,8 @@ from fastapi import HTTPException, status
 
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
-from app.db.session import engine, DATABASE_URL as SESSION_DATABASE_URL
+from app.core.config import settings
+from app.db.session import engine
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
     AdminPasswordReset,
@@ -402,14 +403,14 @@ class AdminService:
 
     def trigger_backup(db: Session, actor, ip_address: str | None = None):
         log = AdminRepository.create_backup_log(db, actor.account_id)
-        backup_dir = Path(os.getenv("BACKUP_DIR", "./backups")).expanduser().resolve()
+        backup_dir = Path(settings.backup_dir).expanduser().resolve()
         filename = f"database_backup_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}_{log.backup_id}.dump"
         target = backup_dir / filename
-        database_url = os.getenv("DATABASE_URL") or SESSION_DATABASE_URL or ""
+        database_url = settings.database_url
 
         try:
             backup_dir.mkdir(parents=True, exist_ok=True)
-            timeout = int(os.getenv("BACKUP_TIMEOUT_SECONDS", "300"))
+            timeout = settings.backup_timeout_seconds
             if database_url.startswith("sqlite"):
                 url = make_url(database_url)
                 source_path = Path(url.database or "")
@@ -426,7 +427,7 @@ class AdminService:
                 if not database_url:
                     raise RuntimeError("DATABASE_URL is not configured")
                 url = make_url(database_url)
-                configured_dump = os.getenv("PG_DUMP_PATH")
+                configured_dump = settings.pg_dump_path
                 pg_dump = configured_dump or shutil.which("pg_dump")
                 if pg_dump:
                     pg_dump = str(pg_dump).strip().strip('"').strip("'")
@@ -514,8 +515,8 @@ class AdminService:
     @staticmethod
     def get_anomaly_alerts(db: Session):
         now = datetime.now(timezone.utc)
-        failed_window = int(os.getenv("FAILED_LOGIN_WINDOW_MINUTES", "15"))
-        threshold = int(os.getenv("FAILED_LOGIN_THRESHOLD", "5"))
+        failed_window = settings.failed_login_window_minutes
+        threshold = settings.failed_login_threshold
         rows = AdminRepository.audit_rows_since(db, now - timedelta(minutes=failed_window))
 
         ip_groups = defaultdict(list)

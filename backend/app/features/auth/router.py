@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Response, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
 from app.features.auth.schemas import (
@@ -18,6 +19,22 @@ from app.features.auth.service import AuthService
 from app.models.user_account import UserAccount
 
 router = APIRouter(prefix="/api/v1/auth", tags=["Authentication"])
+
+REFRESH_COOKIE_NAME = "refresh_token"
+REFRESH_COOKIE_PATH = "/api/v1/auth"
+
+
+def set_refresh_cookie(response: Response, refresh_token: str) -> None:
+    """Set the HttpOnly refresh token cookie using the configured security flags."""
+    response.set_cookie(
+        key=REFRESH_COOKIE_NAME,
+        value=refresh_token,
+        httponly=True,
+        samesite=settings.cookie_samesite,
+        secure=settings.cookie_secure,
+        max_age=settings.refresh_cookie_max_age,
+        path=REFRESH_COOKIE_PATH,
+    )
 
 
 @router.post(
@@ -50,15 +67,7 @@ def login(
 
     # Set HttpOnly refresh token cookie on direct success
     if result.refresh_token:
-        response.set_cookie(
-            key="refresh_token",
-            value=result.refresh_token,
-            httponly=True,
-            samesite="lax",
-            secure=False,
-            max_age=7 * 24 * 3600,
-            path="/api/v1/auth",
-        )
+        set_refresh_cookie(response, result.refresh_token)
 
     return result
 
@@ -125,15 +134,7 @@ def mfa_login(
         ip_address=request.client.host if request.client else None,
     )
 
-    response.set_cookie(
-        key="refresh_token",
-        value=tokens.refresh_token,
-        httponly=True,
-        samesite="lax",
-        secure=False,
-        max_age=7 * 24 * 3600,
-        path="/api/v1/auth",
-    )
+    set_refresh_cookie(response, tokens.refresh_token)
 
     return tokens
 
@@ -174,7 +175,7 @@ def refresh_token(
     token_str = (
         payload.refresh_token
         if payload and payload.refresh_token
-        else request.cookies.get("refresh_token")
+        else request.cookies.get(REFRESH_COOKIE_NAME)
     )
 
     if not token_str:
@@ -199,5 +200,10 @@ def logout(response: Response):
     """
     Clear the HttpOnly refresh token cookie, ending the session.
     """
-    response.delete_cookie(key="refresh_token", path="/api/v1/auth")
+    response.delete_cookie(
+        key=REFRESH_COOKIE_NAME,
+        path=REFRESH_COOKIE_PATH,
+        secure=settings.cookie_secure,
+        samesite=settings.cookie_samesite,
+    )
     return {"message": "Logged out successfully"}
