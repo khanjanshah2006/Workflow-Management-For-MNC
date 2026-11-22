@@ -8,7 +8,7 @@ from app.db.session import SessionLocal
 from app.features.auth.router import router as auth_router
 from app.features.departments.router import router as department_router, team_router
 from app.features.audit import audit_router
-from app.features.profile import profile_router
+from app.features.profile import profile_router, skill_requests_router
 from app.features.projects import project_router
 from app.features.employees import employee_router
 from app.features.admin import admin_router
@@ -62,6 +62,7 @@ app.include_router(department_router)
 app.include_router(team_router)
 app.include_router(audit_router)
 app.include_router(profile_router)
+app.include_router(skill_requests_router)
 app.include_router(project_router)
 app.include_router(employee_router)
 app.include_router(admin_router)
