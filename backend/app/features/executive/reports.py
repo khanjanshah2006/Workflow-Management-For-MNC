@@ -717,15 +717,7 @@ class ExecutiveReportService:
         )
         report.file_id = stored_file.file_id
         report.file_size_bytes = stored_file.size_bytes
-
-        # Also write to local storage path if possible for backwards compatibility
-        try:
-            storage_path = get_reports_dir() / safe_filename
-            with open(storage_path, "wb") as f:
-                f.write(file_bytes)
-            report.file_path = str(storage_path)
-        except Exception:
-            report.file_path = f"stored_file:{stored_file.file_id}"
+        report.file_path = f"stored_file:{stored_file.file_id}"
 
         # 3. Write EXPORT audit log
         write_audit_log(
@@ -825,32 +817,3 @@ class ExecutiveReportService:
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Report file no longer exists on disk.",
         )
-
-    @classmethod
-    def get_report_download_info(cls, db: Session, report_id: int) -> Tuple[str, str, str]:
-        """
-        Validate report existence and disk presence.
-        Returns (absolute_file_path, media_type, sanitized_download_filename).
-        """
-        report = (
-            db.query(ExecutiveReport)
-            .filter(ExecutiveReport.report_id == report_id)
-            .first()
-        )
-        if not report:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Executive report with ID {report_id} not found.",
-            )
-
-        if not os.path.exists(report.file_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Report file no longer exists on disk.",
-            )
-
-        ext = "pdf" if report.report_format == ReportFormat.PDF else "csv"
-        media_type = "application/pdf" if ext == "pdf" else "text/csv; charset=utf-8"
-        download_name = sanitize_filename(report.report_title, ext)
-
-        return report.file_path, media_type, download_name

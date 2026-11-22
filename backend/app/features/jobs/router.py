@@ -41,8 +41,10 @@ def run_overdue_sweep_job(
             detail="Not Found",
         )
 
-    # Requires the header X-Job-Token, compared to JOB_TOKEN with hmac.compare_digest.
-    if not x_job_token or not hmac.compare_digest(x_job_token, configured_token):
+    # Requires the header X-Job-Token, compared to JOB_TOKEN with hmac.compare_digest on encoded bytes.
+    if not x_job_token or not hmac.compare_digest(
+        x_job_token.encode("utf-8"), configured_token.encode("utf-8")
+    ):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or missing X-Job-Token",

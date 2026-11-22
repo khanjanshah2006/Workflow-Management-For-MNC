@@ -339,12 +339,10 @@ def test_generate_pdf_report_valid_pdf_buffer(client, test_setup):
     assert data["file_size_bytes"] > 0
     assert data["download_url"] == f"/api/v1/executive/reports/{data['report_id']}/download"
 
-    # Verify file content on disk starts with %PDF
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.pdf"))
-    assert len(files) == 1
-    content = files[0].read_bytes()
-    assert content.startswith(b"%PDF")
+    # Verify file content starts with %PDF via download endpoint
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    assert dl_resp.content.startswith(b"%PDF")
 
 
 def test_generate_csv_report_correct_headers_and_rows(client, test_setup):
@@ -368,11 +366,9 @@ def test_generate_csv_report_correct_headers_and_rows(client, test_setup):
     data = response.json()
     assert data["format"] == "CSV"
 
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.csv"))
-    assert len(files) == 1
-
-    lines = files[0].read_text(encoding="utf-8").strip().split("\n")
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    lines = dl_resp.text.strip().split("\n")
     expected_header = (
         "project_code,project_name,department,status,tasks_completed,"
         "milestones_due,milestones_completed,deliverables_submitted,"
@@ -402,9 +398,9 @@ def test_metrics_respect_period_boundaries(client, test_setup):
     assert response.status_code == 201
     data = response.json()
 
-    report_id = data["report_id"]
-    files = list(test_setup["tmp_path"].glob(f"exec_report_{report_id}_*.csv"))
-    csv_text = files[0].read_text(encoding="utf-8")
+    dl_resp = client.get(data["download_url"], headers=headers)
+    assert dl_resp.status_code == 200
+    csv_text = dl_resp.text
 
     # PRJ-OLD ended in 2025 and must not be in this report
     assert "PRJ-OLD" not in csv_text

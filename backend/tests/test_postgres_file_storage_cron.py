@@ -310,6 +310,36 @@ def test_submission_file_stored_in_db_and_downloadable(client, test_setup, db_se
     assert 'attachment; filename="deliverable_evidence.pdf"' in dl_resp.headers["content-disposition"]
 
 
+def test_submission_download_non_latin_filename(client, test_setup, db_session):
+    """Test that downloading a file with non-Latin characters (e.g. 报告.pdf) does not 500 (UnicodeEncodeError) and provides ASCII fallback + UTF-8 filename*."""
+    headers = {"Authorization": f"Bearer {test_setup['token_emp1']}"}
+    sample_content = b"%PDF-1.4 Non-Latin Filename Test Deliverable Content"
+    fake_file = io.BytesIO(sample_content)
+
+    response = client.post(
+        f"/api/v1/tasks/{test_setup['task'].task_id}/submit",
+        headers=headers,
+        data={"remarks": "Submitting task with non-Latin filename"},
+        files={"file": ("报告.pdf", fake_file, "application/pdf")},
+    )
+
+    assert response.status_code == 201, response.text
+    sub_data = response.json()
+    submission_id = sub_data["submission_id"]
+    assert sub_data["file_name"] == "报告.pdf"
+
+    # Download route GET /api/v1/tasks/{id}/submissions/{submission_id}/file
+    download_url = f"/api/v1/tasks/{test_setup['task'].task_id}/submissions/{submission_id}/file"
+    dl_resp = client.get(download_url, headers=headers)
+    assert dl_resp.status_code == 200
+    assert dl_resp.content == sample_content
+
+    # Check Content-Disposition header format
+    cd_header = dl_resp.headers["content-disposition"]
+    assert 'attachment; filename="attachment.pdf"' in cd_header
+    assert "filename*=UTF-8''%E6%8A%A5%E5%91%8A.pdf" in cd_header
+
+
 def test_submission_upload_size_limit(client, test_setup, monkeypatch):
     """Test that file uploads exceeding MAX_UPLOAD_MB (default 5MB) are rejected with 400 Bad Request."""
     headers = {"Authorization": f"Bearer {test_setup['token_emp1']}"}
@@ -449,6 +479,10 @@ def test_job_endpoint_requires_token_and_hidden_when_unset(client, monkeypatch):
     # Wrong header -> 401
     resp_wrong_token = client.post(url, headers={"X-Job-Token": "wrong-token"})
     assert resp_wrong_token.status_code == 401
+
+    # Non-ASCII header -> 401 (not 500 TypeError / crash)
+    resp_non_ascii_token = client.post(url, headers={"X-Job-Token": "token-accentué".encode("latin-1")})
+    assert resp_non_ascii_token.status_code == 401
 
     # Valid header -> 200 OK and returns {flagged, notified}
     resp_valid = client.post(url, headers={"X-Job-Token": secret_token})

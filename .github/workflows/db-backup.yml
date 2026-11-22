@@ -15,8 +15,21 @@ jobs:
     steps:
       - name: Install PostgreSQL Client
         run: |
+          sudo install -d /etc/apt/keyrings
+          curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc | sudo gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+          echo "deb [signed-by=/etc/apt/keyrings/postgresql.gpg] http://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
+
+          # Detect server major version and install matching client to avoid pg_dump version mismatch
+          PG_VERSION=$(psql "${{ secrets.PROD_DATABASE_URL }}" -t -A -c "SHOW server_version;" 2>/dev/null | awk -F'.' '{print $1}' | tr -d '[:space:]')
+          if [ -n "$PG_VERSION" ] && [ "$PG_VERSION" -ge 12 ] 2>/dev/null; then
+            echo "Detected PostgreSQL server major version: $PG_VERSION"
+            sudo apt-get install -y -qq "postgresql-client-$PG_VERSION"
+            if [ -d "/usr/lib/postgresql/$PG_VERSION/bin" ]; then
+              echo "/usr/lib/postgresql/$PG_VERSION/bin" >> $GITHUB_PATH
+            fi
+          fi
 
       - name: Run pg_dump
         run: |

@@ -43,8 +43,6 @@ from app.models.user_account import UserAccount
 logger = logging.getLogger(__name__)
 
 ALLOWED_EXTENSIONS = {".pdf", ".zip", ".tar.gz", ".png", ".jpg", ".jpeg", ".docx"}
-MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024  # 25MB
-UPLOAD_STORAGE_DIR = os.path.join("uploads", "task_submissions")
 
 
 # ==========================================
@@ -692,47 +690,6 @@ class TaskSubmissionService:
             return True
         _, ext = os.path.splitext(fn_lower)
         return ext in ALLOWED_EXTENSIONS
-
-    @classmethod
-    def _validate_and_save_file(
-        cls,
-        file: Optional[UploadFile] = None,
-        file_bytes: Optional[bytes] = None,
-        original_filename: Optional[str] = None,
-        task_id: int = 0,
-    ) -> Tuple[Optional[str], Optional[str], Optional[int]]:
-        """Validate uploaded deliverable extension and size, then persist to local storage."""
-        if not file and not file_bytes:
-            return None, None, None
-
-        filename = original_filename or (file.filename if file else "deliverable")
-        if not cls.is_allowed_filename(filename):
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="File type not allowed. Allowed types: .pdf, .zip, .tar.gz, .png, .jpg, .docx",
-            )
-
-        if file_bytes is None and file is not None:
-            file_bytes = file.file.read()
-
-        file_size = len(file_bytes) if file_bytes else 0
-        if file_size > MAX_FILE_SIZE_BYTES:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"File size exceeds the 25MB limit. Current size: {file_size} bytes",
-            )
-
-        os.makedirs(UPLOAD_STORAGE_DIR, exist_ok=True)
-
-        safe_filename = re.sub(r"[^a-zA-Z0-9_.-]", "_", os.path.basename(filename))
-        stored_filename = f"task_{task_id}_{uuid.uuid4().hex[:10]}_{safe_filename}"
-        storage_path = os.path.join(UPLOAD_STORAGE_DIR, stored_filename)
-
-        with open(storage_path, "wb") as f:
-            f.write(file_bytes)
-
-        file_url = f"/uploads/task_submissions/{stored_filename}"
-        return file_url, filename, file_size
 
     @classmethod
     def _notify_team_lead(
