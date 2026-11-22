@@ -1,5 +1,7 @@
 # Pull Request: [S1-BE-2] HR Department Teams & Team Lead Designation API (#141)
 
+Closes #141
+
 ## Story
 - **Issue:** [#141](https://github.com/khanjanshah2006/Workflow-Management-For-MNC/issues/141)
 - **Scenario:** S1 (Employee Onboarding & Team Placement)

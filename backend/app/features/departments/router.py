@@ -209,7 +209,7 @@ def list_department_teams(
     dept_id: int,
     include_disbanded: bool = Query(False, description="Whether to include disbanded teams"),
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(get_current_user),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
 ) -> list[DepartmentTeamListItem]:
     try:
         items = service.list_department_teams(

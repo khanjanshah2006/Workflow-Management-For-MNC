@@ -648,9 +648,16 @@ def update_team(
                     message=f"You are now team lead of {team.name}",
                 )
 
-        # Handle status change to DISBANDED
+        # Handle status change to DISBANDED or reactivation to ACTIVE
         if team_in.status == TeamStatus.DISBANDED and prev_status != TeamStatus.DISBANDED:
             _demote_lead_to_employee_if_no_active_teams(
+                db,
+                emp_id=team.lead_emp_id,
+                actor_account_id=actor_account_id,
+                ip_address=ip_address,
+            )
+        elif team_in.status == TeamStatus.ACTIVE and prev_status == TeamStatus.DISBANDED:
+            _promote_lead_to_team_lead(
                 db,
                 emp_id=team.lead_emp_id,
                 actor_account_id=actor_account_id,

@@ -934,3 +934,55 @@ def test_sqli_in_department_and_team_endpoints(client, test_setup):
     # 3. Team member delete path SQLi
     res3 = client.delete("/api/v1/teams/1/members/1%20UNION%20SELECT%201", headers=test_setup["hr_headers"])
     assert res3.status_code == 422
+
+
+def test_client_list_department_teams_forbidden_403(client, test_setup):
+    """CLIENT role cannot list department teams (returns 403 Forbidden)."""
+    dept_id = test_setup["dept1_id"]
+    res = client.get(
+        f"/api/v1/departments/{dept_id}/teams",
+        headers=test_setup["client_headers"],
+    )
+    assert res.status_code == 403
+
+
+def test_reactivate_disbanded_team_promotes_lead(client, test_setup, db_session):
+    """Reactivating a disbanded team re-promotes lead to TEAM_LEAD if their account is EMPLOYEE."""
+    dept_id = test_setup["dept1_id"]
+    lead_id = test_setup["emp1_id"]
+    lead_acc_id = test_setup["emp_acc1_id"]
+
+    # 1. Create team -> lead promoted to TEAM_LEAD
+    res_create = client.post(
+        f"/api/v1/departments/{dept_id}/teams",
+        json={"name": "Reactivate Test Squad", "lead_emp_id": lead_id, "member_emp_ids": []},
+        headers=test_setup["hr_headers"],
+    )
+    assert res_create.status_code == 201
+    team_id = res_create.json()["team_id"]
+
+    account = db_session.query(UserAccount).filter(UserAccount.account_id == lead_acc_id).first()
+    assert account.user_type == UserType.TEAM_LEAD
+
+    # 2. Disband team -> lead demoted to EMPLOYEE
+    res_disband = client.put(
+        f"/api/v1/teams/{team_id}",
+        json={"status": "DISBANDED"},
+        headers=test_setup["hr_headers"],
+    )
+    assert res_disband.status_code == 200
+
+    account = db_session.query(UserAccount).filter(UserAccount.account_id == lead_acc_id).first()
+    assert account.user_type == UserType.EMPLOYEE
+
+    # 3. Reactivate team (DISBANDED -> ACTIVE) -> lead promoted back to TEAM_LEAD
+    res_reactivate = client.put(
+        f"/api/v1/teams/{team_id}",
+        json={"status": "ACTIVE"},
+        headers=test_setup["hr_headers"],
+    )
+    assert res_reactivate.status_code == 200
+
+    account = db_session.query(UserAccount).filter(UserAccount.account_id == lead_acc_id).first()
+    assert account.user_type == UserType.TEAM_LEAD
+
