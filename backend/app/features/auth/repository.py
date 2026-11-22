@@ -1,7 +1,6 @@
 from uuid import UUID
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from app.core.roles import PLATFORM_ADMINS
 from app.models.user_account import UserAccount
 
 
@@ -21,30 +20,6 @@ class AuthRepository:
     def get_by_id(db: Session, account_id: UUID) -> UserAccount | None:
         """Fetch user account by UUID primary key."""
         return db.query(UserAccount).filter(UserAccount.account_id == account_id).first()
-
-    @staticmethod
-    def list_active_platform_admins(db: Session) -> list[UserAccount]:
-        """Active ADMIN and SYSTEM_ADMIN accounts (recipients of security alerts)."""
-        return (
-            db.query(UserAccount)
-            .filter(UserAccount.user_type.in_(PLATFORM_ADMINS), UserAccount.is_active.is_(True))
-            .all()
-        )
-
-    @staticmethod
-    def increment_failed_login(db: Session, account: UserAccount) -> int:
-        """Atomically add one failed login in the database and return the new count.
-
-        Pending in-memory changes (e.g. an expired-lock reset) are flushed first, because
-        the refresh below reloads the counter and lock columns from the row.
-        """
-        db.flush()
-        db.query(UserAccount).filter(UserAccount.account_id == account.account_id).update(
-            {UserAccount.failed_login_count: func.coalesce(UserAccount.failed_login_count, 0) + 1},
-            synchronize_session=False,
-        )
-        db.refresh(account, ["failed_login_count", "locked_until"])
-        return account.failed_login_count
 
     @staticmethod
     def update_last_login(db: Session, account: UserAccount) -> None:

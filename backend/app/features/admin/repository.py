@@ -134,7 +134,7 @@ class AdminRepository:
             reason=reason.strip(),
         )
         db.add(grant)
-        db.flush()
+        db.commit()
         db.refresh(grant)
         return grant
 
@@ -162,7 +162,7 @@ class AdminRepository:
     ) -> ElevatedAccessGrant:
         """Mark an elevated grant as revoked immediately."""
         grant.revoked_at = revoked_at
-        db.flush()
+        db.commit()
         db.refresh(grant)
         return grant
 
@@ -206,14 +206,5 @@ class AdminRepository:
             db.query(AuditLog)
             .filter(AuditLog.created_at >= since)
             .order_by(AuditLog.created_at.asc())
-            .all()
-        )
-
-    @staticmethod
-    def list_locked_accounts(db: Session, now: datetime) -> List[UserAccount]:
-        return (
-            db.query(UserAccount)
-            .filter(UserAccount.locked_until > now)
-            .order_by(UserAccount.locked_until.asc())
             .all()
         )

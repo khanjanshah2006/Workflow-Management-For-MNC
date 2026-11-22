@@ -45,7 +45,6 @@ class LoginResponse(BaseModel):
     expires_in: Optional[int] = None
     user: Optional[UserInfoResponse] = None
     mfa_required: bool = False
-    mfa_setup_required: bool = False
     mfa_token: Optional[str] = None
     message: Optional[str] = None
 

@@ -23,12 +23,9 @@ from app.features.admin.schemas import (
     UserRoleUpdate,
 )
 from app.features.admin.service import (
-    AccountNotLockedError,
     AdminPermissionError,
     AdminService,
     EmailAlreadyExistsError,
-    GrantNotActiveError,
-    GrantNotFoundError,
     InvalidExpirationError,
     InvalidParameterValueError,
     SystemParameterNotFoundError,
@@ -196,33 +193,6 @@ def reset_user_password(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
 
 
-@router.post(
-    "/users/{account_id}/unlock",
-    response_model=UserAccountResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Unlock a locked user account (US-48)",
-    description="ADMIN or SYSTEM_ADMIN. Clears the failed-login lockout and notifies the user.",
-)
-def unlock_user_account(
-    account_id: UUID,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(platform_admin_guard),
-) -> UserAccountResponse:
-    client_ip = request.client.host if request.client else None
-    try:
-        return AdminService.unlock_account(
-            db=db,
-            account_id=account_id,
-            admin_user=current_user,
-            ip_address=client_ip,
-        )
-    except UserNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except AccountNotLockedError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
-
-
 @router.get(
     "/system/backup-status",
     response_model=BackupStatusResponse,
@@ -329,33 +299,6 @@ def list_active_elevated_grants(
     current_user: UserAccount = Depends(platform_admin_guard),
 ) -> List[ElevatedAccessGrantResponse]:
     return AdminService.list_active_elevated_grants(db=db)
-
-
-@router.delete(
-    "/elevated-access/{grant_id}",
-    response_model=ElevatedAccessGrantResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Revoke an elevated access grant (US-45)",
-    description="ADMIN or SYSTEM_ADMIN. Revokes an active grant immediately and notifies the grantee.",
-)
-def revoke_elevated_grant(
-    grant_id: int,
-    request: Request,
-    db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(platform_admin_guard),
-) -> ElevatedAccessGrantResponse:
-    client_ip = request.client.host if request.client else None
-    try:
-        return AdminService.revoke_elevated_grant(
-            db=db,
-            grant_id=grant_id,
-            admin_user=current_user,
-            ip_address=client_ip,
-        )
-    except GrantNotFoundError as exc:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
-    except GrantNotActiveError as exc:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 

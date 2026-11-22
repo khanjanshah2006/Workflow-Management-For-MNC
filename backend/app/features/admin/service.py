@@ -20,11 +20,6 @@ from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
 from app.core.config import settings
-from app.core.notification_types import (
-    ACCOUNT_UNLOCKED,
-    ELEVATED_ACCESS_GRANTED,
-    ELEVATED_ACCESS_REVOKED,
-)
 from app.db.session import engine
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
@@ -41,7 +36,6 @@ from app.features.admin.schemas import (
     UserAccountPaginationResponse,
     UserAccountResponse,
 )
-from app.features.notifications.service import NotificationService
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.models.system_backup_log import SystemBackupLog
@@ -81,23 +75,6 @@ class InvalidExpirationError(Exception):
 
 class AdminPermissionError(Exception):
     pass
-
-
-class AccountNotLockedError(Exception):
-    pass
-
-
-class GrantNotFoundError(Exception):
-    pass
-
-
-class GrantNotActiveError(Exception):
-    pass
-
-
-def _as_utc(value: datetime) -> datetime:
-    """SQLite returns naive datetimes; treat them as UTC."""
-    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class AdminService:
@@ -236,10 +213,6 @@ class AdminService:
         if not user:
             raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
 
-        was_locked = bool(user.locked_until and _as_utc(user.locked_until) > datetime.now(timezone.utc))
-        # A reset also clears any lockout; persisted by update_password's commit.
-        user.failed_login_count = 0
-        user.locked_until = None
         pwd_hash = hash_password(new_password)
         AdminRepository.update_password(db=db, user=user, password_hash=pwd_hash)
 
@@ -251,54 +224,11 @@ class AdminService:
             entity_ref_id=str(user.account_id),
             account_id=admin_user.account_id,
             old_value=None,
-            new_value={"action": "admin_password_reset", "email": user.email, "unlocked": was_locked},
+            new_value={"action": "admin_password_reset", "email": user.email},
             ip_address=ip_address,
         )
 
         return {"message": "Password reset successfully", "email": user.email}
-
-    @staticmethod
-    def unlock_account(
-        db: Session,
-        account_id: UUID,
-        admin_user: UserAccount,
-        ip_address: Optional[str] = None,
-    ) -> UserAccountResponse:
-        user = AdminRepository.get_by_id(db, account_id=account_id)
-        if not user:
-            raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
-        if user.locked_until is None or _as_utc(user.locked_until) <= datetime.now(timezone.utc):
-            raise AccountNotLockedError("Account is not locked")
-
-        old_value = {
-            "locked_until": _as_utc(user.locked_until).isoformat(),
-            "failed_login_count": user.failed_login_count,
-        }
-        user.failed_login_count = 0
-        user.locked_until = None
-
-        NotificationService.create_notification(
-            db,
-            user_id=user.account_id,
-            type=ACCOUNT_UNLOCKED,
-            title="Account unlocked",
-            message="An administrator unlocked your account. You can sign in again.",
-        )
-        write_audit_log(
-            db=db,
-            action=AuditAction.UPDATE,
-            entity_name="USER_ACCOUNT",
-            entity_ref_id=str(user.account_id),
-            account_id=admin_user.account_id,
-            old_value=old_value,
-            new_value={"event": "ACCOUNT_UNLOCKED", "locked_until": None, "failed_login_count": 0},
-            ip_address=ip_address,
-            commit=False,
-        )
-        db.commit()
-        db.refresh(user)
-
-        return UserAccountResponse.model_validate(user)
 
     @staticmethod
     def get_backup_status(db: Session) -> BackupStatusResponse:
@@ -458,17 +388,6 @@ class AdminService:
             reason=payload.reason,
         )
 
-        NotificationService.create_notification(
-            db,
-            user_id=grant.user_id,
-            type=ELEVATED_ACCESS_GRANTED,
-            title="Elevated access granted",
-            message=(
-                f"You have been granted temporary {grant.granted_role} access "
-                f"until {expires_at:%Y-%m-%d %H:%M} UTC."
-            ),
-        )
-
         # 4. Audit log creation
         write_audit_log(
             db=db,
@@ -484,56 +403,7 @@ class AdminService:
                 "reason": grant.reason,
             },
             ip_address=ip_address,
-            commit=False,
         )
-        db.commit()
-
-        return ElevatedAccessGrantResponse.model_validate(grant)
-
-    @staticmethod
-    def revoke_elevated_grant(
-        db: Session,
-        grant_id: int,
-        admin_user: UserAccount,
-        ip_address: Optional[str] = None,
-    ) -> ElevatedAccessGrantResponse:
-        """Revoke an active elevated access grant immediately (US-45)."""
-        grant = AdminRepository.get_elevated_grant_by_id(db, grant_id)
-        if not grant:
-            raise GrantNotFoundError(f"Elevated access grant '{grant_id}' not found.")
-        now = datetime.now(timezone.utc)
-        if grant.revoked_at is not None:
-            raise GrantNotActiveError("Grant is already revoked")
-        if _as_utc(grant.expires_at) <= now:
-            raise GrantNotActiveError("Grant has already expired")
-
-        AdminRepository.revoke_elevated_grant(db, grant, revoked_at=now)
-
-        NotificationService.create_notification(
-            db,
-            user_id=grant.user_id,
-            type=ELEVATED_ACCESS_REVOKED,
-            title="Elevated access revoked",
-            message=f"Your temporary {grant.granted_role} access has been revoked by an administrator.",
-        )
-        write_audit_log(
-            db=db,
-            action=AuditAction.UPDATE,
-            entity_name="ELEVATED_ACCESS_GRANT",
-            entity_ref_id=str(grant.id),
-            account_id=admin_user.account_id,
-            old_value={"revoked_at": None},
-            new_value={
-                "event": "ELEVATED_ACCESS_REVOKED",
-                "revoked_at": now.isoformat(),
-                "revoked_by": str(admin_user.account_id),
-                "granted_role": grant.granted_role,
-                "user_id": str(grant.user_id),
-            },
-            ip_address=ip_address,
-            commit=False,
-        )
-        db.commit()
 
         return ElevatedAccessGrantResponse.model_validate(grant)
 
@@ -733,32 +603,6 @@ class AdminService:
                     status="ACTIVE",
                     details=desc,
                 ))
-
-        # Currently locked accounts are listed regardless of the failed-login window (US-49).
-        for account in AdminRepository.list_locked_accounts(db, now):
-            locked_at = account.locked_until - timedelta(minutes=settings.lockout_minutes)
-            desc = (
-                f"Account locked after {account.failed_login_count} failed logins "
-                f"until {account.locked_until:%H:%M} UTC."
-            )
-            alerts.append(AnomalyAlert(
-                id=f"ALT-LOCK-{account.account_id.hex[:8]}",
-                title=f"Account Locked ({account.email})",
-                description=desc,
-                alert_type="ACCOUNT_LOCKED",
-                severity="HIGH",
-                account_id=account.account_id,
-                target_account_id=account.account_id,
-                attempted_email=account.email,
-                target_account=account.email,
-                count=account.failed_login_count,
-                attempts_count=account.failed_login_count,
-                first_timestamp=locked_at,
-                last_timestamp=account.locked_until,
-                timestamp=locked_at,
-                status="ACTIVE",
-                details=desc,
-            ))
 
         # Role elevations are reviewed over 24 hours; no volume threshold is assumed.
         elevation_rows = AdminRepository.audit_rows_since(db, now - timedelta(hours=24))

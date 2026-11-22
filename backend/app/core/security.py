@@ -50,12 +50,12 @@ def create_refresh_token(data: dict[str, Any], expires_delta: Union[timedelta, N
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
-def create_mfa_pending_token(data: dict[str, Any], token_type: str = "mfa_pending") -> str:
-    """Create an ephemeral JWT token for two-factor challenge or enrolment (5 minutes expiration)."""
+def create_mfa_pending_token(data: dict[str, Any]) -> str:
+    """Create an ephemeral JWT token for two-factor challenge (5 minutes expiration)."""
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
     expire = now + timedelta(minutes=MFA_TOKEN_EXPIRE_MINUTES)
-    to_encode.update({"exp": expire, "iat": now, "type": token_type})
+    to_encode.update({"exp": expire, "iat": now, "type": "mfa_pending"})
     return jwt.encode(to_encode, settings.jwt_secret_key, algorithm=settings.jwt_algorithm)
 
 
