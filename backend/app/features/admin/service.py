@@ -20,7 +20,11 @@ from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
 from app.core.config import settings
-from app.core.notification_types import ACCOUNT_UNLOCKED
+from app.core.notification_types import (
+    ACCOUNT_UNLOCKED,
+    ELEVATED_ACCESS_GRANTED,
+    ELEVATED_ACCESS_REVOKED,
+)
 from app.db.session import engine
 from app.features.admin.repository import AdminRepository
 from app.features.admin.schemas import (
@@ -80,6 +84,14 @@ class AdminPermissionError(Exception):
 
 
 class AccountNotLockedError(Exception):
+    pass
+
+
+class GrantNotFoundError(Exception):
+    pass
+
+
+class GrantNotActiveError(Exception):
     pass
 
 
@@ -446,6 +458,17 @@ class AdminService:
             reason=payload.reason,
         )
 
+        NotificationService.create_notification(
+            db,
+            user_id=grant.user_id,
+            type=ELEVATED_ACCESS_GRANTED,
+            title="Elevated access granted",
+            message=(
+                f"You have been granted temporary {grant.granted_role} access "
+                f"until {expires_at:%Y-%m-%d %H:%M} UTC."
+            ),
+        )
+
         # 4. Audit log creation
         write_audit_log(
             db=db,
@@ -461,7 +484,56 @@ class AdminService:
                 "reason": grant.reason,
             },
             ip_address=ip_address,
+            commit=False,
         )
+        db.commit()
+
+        return ElevatedAccessGrantResponse.model_validate(grant)
+
+    @staticmethod
+    def revoke_elevated_grant(
+        db: Session,
+        grant_id: int,
+        admin_user: UserAccount,
+        ip_address: Optional[str] = None,
+    ) -> ElevatedAccessGrantResponse:
+        """Revoke an active elevated access grant immediately (US-45)."""
+        grant = AdminRepository.get_elevated_grant_by_id(db, grant_id)
+        if not grant:
+            raise GrantNotFoundError(f"Elevated access grant '{grant_id}' not found.")
+        now = datetime.now(timezone.utc)
+        if grant.revoked_at is not None:
+            raise GrantNotActiveError("Grant is already revoked")
+        if _as_utc(grant.expires_at) <= now:
+            raise GrantNotActiveError("Grant has already expired")
+
+        AdminRepository.revoke_elevated_grant(db, grant, revoked_at=now)
+
+        NotificationService.create_notification(
+            db,
+            user_id=grant.user_id,
+            type=ELEVATED_ACCESS_REVOKED,
+            title="Elevated access revoked",
+            message=f"Your temporary {grant.granted_role} access has been revoked by an administrator.",
+        )
+        write_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            entity_name="ELEVATED_ACCESS_GRANT",
+            entity_ref_id=str(grant.id),
+            account_id=admin_user.account_id,
+            old_value={"revoked_at": None},
+            new_value={
+                "event": "ELEVATED_ACCESS_REVOKED",
+                "revoked_at": now.isoformat(),
+                "revoked_by": str(admin_user.account_id),
+                "granted_role": grant.granted_role,
+                "user_id": str(grant.user_id),
+            },
+            ip_address=ip_address,
+            commit=False,
+        )
+        db.commit()
 
         return ElevatedAccessGrantResponse.model_validate(grant)
 

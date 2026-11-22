@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -8,13 +8,20 @@ from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
 
 from app.core.config import settings
-from app.core.notification_types import ACCOUNT_UNLOCKED, SECURITY_ALERT
+from app.core.notification_types import (
+    ACCOUNT_UNLOCKED,
+    ELEVATED_ACCESS_GRANTED,
+    ELEVATED_ACCESS_REVOKED,
+    SECURITY_ALERT,
+)
 from app.core.security import create_access_token, hash_password
 from app.db.base import Base
 from app.db.session import get_db
 from app.features.auth.rate_limit import LOGIN_RATE_LIMIT
 from app.main import app
 from app.models.audit_log import AuditLog
+from app.models.elevated_access_grant import ElevatedAccessGrant
+from app.models.employee import Employee
 from app.models.enums import AuditAction, UserType
 from app.models.notification import Notification
 from app.models.user_account import UserAccount
@@ -289,6 +296,96 @@ def test_unlock_and_reset_password_clear_lock(client, db):
     )
     assert '"unlocked": true' in reset_row.new_value
     assert login(client, target.email, "BrandNew123!").status_code == 200
+
+
+# ==============================================================================
+# Elevated access revocation (US-45)
+# ==============================================================================
+
+def test_revoke_elevated_access_audited_and_effective(client, db):
+    admin = make_account(db, UserType.ADMIN)
+    grantee = make_account(db, UserType.EMPLOYEE)
+    employee = Employee(
+        account_id=grantee.account_id,
+        emp_code=f"EMP-{uuid4().hex[:8]}",
+        full_name="Grantee",
+        email=grantee.email,
+        designation="Engineer",
+        date_of_joining=date(2024, 1, 1),
+    )
+    db.add(employee)
+    db.commit()
+    workload_url = f"/api/v1/employees/{employee.emp_id}/workload"
+    admin_headers = auth_headers(admin)
+    grantee_headers = auth_headers(grantee)
+
+    assert client.get(workload_url, headers=grantee_headers).status_code == 403
+    res = client.post(
+        "/api/v1/admin/elevated-access",
+        json={
+            "user_id": str(grantee.account_id),
+            "granted_role": "PM",
+            "expires_at": (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+            "reason": "Covering for PM on leave",
+        },
+        headers=admin_headers,
+    )
+    assert res.status_code == 201
+    grant_id = res.json()["id"]
+    assert client.get(workload_url, headers=grantee_headers).status_code == 200
+
+    def notifications(type_: str) -> int:
+        return (
+            db.query(Notification)
+            .filter(Notification.account_id == grantee.account_id, Notification.type == type_)
+            .count()
+        )
+
+    assert notifications(ELEVATED_ACCESS_GRANTED) == 1
+
+    revoke_url = f"/api/v1/admin/elevated-access/{grant_id}"
+    assert client.delete(revoke_url, headers=grantee_headers).status_code == 403
+    res = client.delete(revoke_url, headers=admin_headers)
+    assert res.status_code == 200
+    assert res.json()["revoked_at"] is not None
+
+    assert client.get(workload_url, headers=grantee_headers).status_code == 403
+    res = client.delete(revoke_url, headers=admin_headers)
+    assert res.status_code == 409
+    assert res.json()["detail"] == "Grant is already revoked"
+    assert client.delete("/api/v1/admin/elevated-access/999999", headers=admin_headers).status_code == 404
+
+    expired_owner = make_account(db, UserType.EMPLOYEE)
+    expired = ElevatedAccessGrant(
+        user_id=expired_owner.account_id,
+        granted_role="PM",
+        granted_by=admin.account_id,
+        expires_at=datetime.now(timezone.utc) - timedelta(minutes=5),
+        reason="Expired grant",
+    )
+    db.add(expired)
+    db.commit()
+    res = client.delete(f"/api/v1/admin/elevated-access/{expired.id}", headers=admin_headers)
+    assert res.status_code == 409
+    assert res.json()["detail"] == "Grant has already expired"
+
+    active = client.get("/api/v1/admin/elevated-access/active", headers=admin_headers).json()
+    assert grant_id not in [grant["id"] for grant in active]
+    assert client.get("/api/v1/auth/me", headers=grantee_headers).json()["active_elevated_roles"] == []
+
+    revoke_rows = [
+        row
+        for row in db.query(AuditLog).filter(
+            AuditLog.action == AuditAction.UPDATE,
+            AuditLog.entity_name == "ELEVATED_ACCESS_GRANT",
+            AuditLog.entity_ref_id == str(grant_id),
+        )
+        if '"ELEVATED_ACCESS_REVOKED"' in (row.new_value or "")
+    ]
+    assert len(revoke_rows) == 1
+    assert revoke_rows[0].account_id == admin.account_id
+    assert f'"revoked_by": "{admin.account_id}"' in revoke_rows[0].new_value
+    assert notifications(ELEVATED_ACCESS_REVOKED) == 1
 
 
 # ==============================================================================

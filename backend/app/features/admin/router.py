@@ -27,6 +27,8 @@ from app.features.admin.service import (
     AdminPermissionError,
     AdminService,
     EmailAlreadyExistsError,
+    GrantNotActiveError,
+    GrantNotFoundError,
     InvalidExpirationError,
     InvalidParameterValueError,
     SystemParameterNotFoundError,
@@ -327,6 +329,33 @@ def list_active_elevated_grants(
     current_user: UserAccount = Depends(platform_admin_guard),
 ) -> List[ElevatedAccessGrantResponse]:
     return AdminService.list_active_elevated_grants(db=db)
+
+
+@router.delete(
+    "/elevated-access/{grant_id}",
+    response_model=ElevatedAccessGrantResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Revoke an elevated access grant (US-45)",
+    description="ADMIN or SYSTEM_ADMIN. Revokes an active grant immediately and notifies the grantee.",
+)
+def revoke_elevated_grant(
+    grant_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(platform_admin_guard),
+) -> ElevatedAccessGrantResponse:
+    client_ip = request.client.host if request.client else None
+    try:
+        return AdminService.revoke_elevated_grant(
+            db=db,
+            grant_id=grant_id,
+            admin_user=current_user,
+            ip_address=client_ip,
+        )
+    except GrantNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except GrantNotActiveError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
 
 

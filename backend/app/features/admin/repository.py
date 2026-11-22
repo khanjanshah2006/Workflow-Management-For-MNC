@@ -134,7 +134,7 @@ class AdminRepository:
             reason=reason.strip(),
         )
         db.add(grant)
-        db.commit()
+        db.flush()
         db.refresh(grant)
         return grant
 
@@ -162,7 +162,7 @@ class AdminRepository:
     ) -> ElevatedAccessGrant:
         """Mark an elevated grant as revoked immediately."""
         grant.revoked_at = revoked_at
-        db.commit()
+        db.flush()
         db.refresh(grant)
         return grant
 
