@@ -755,7 +755,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Active Team Members",
+              "name": "200 OK \u2013 Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -768,7 +768,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK – Empty Team",
+              "name": "200 OK \u2013 Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -781,7 +781,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team / Non-Lead",
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -794,7 +794,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found – Team Non-existent",
+              "name": "404 Not Found \u2013 Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -836,7 +836,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Tasks Stub",
+              "name": "200 OK \u2013 Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -849,7 +849,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team",
+              "name": "403 Forbidden \u2013 Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -862,6 +862,204 @@
               "_postman_previewlanguage": "json"
             }
           ]
+        },
+        {
+          "name": "GET Employee Workload (US-35)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees/1/workload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees",
+                "1",
+                "workload"
+              ]
+            },
+            "description": "Retrieve cross-project workload metrics for an employee. Visibility restricted to self, HR/Admin, managing PM, and Team Lead (US-35)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Propose Skill Change (US-34)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"action\": \"ADD\",\n    \"proposed_skill_name\": \"FastAPI\",\n    \"proficiency\": \"INTERMEDIATE\",\n    \"years_of_experience\": 2,\n    \"justification\": \"Built core backend microservices in recent sprints\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Submit a proposal to ADD, UPDATE, or REMOVE a skill rating. Triggers notifications and audit trail (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Skill Proposals (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Retrieve all skill proposals submitted by current authenticated employee, newest first (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Skill Proposals Review Queue (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests?status=PENDING&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Paginated review queue for pending skill change proposals. Scoped by role: HR/Admin see all; Team Leads see led team members (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Approve Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Approved based on sprint performance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "approve"
+              ]
+            },
+            "description": "Approve a pending skill change request and update employee skill profile. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reject Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Please provide relevant certifications before upgrading to Expert\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "reject"
+              ]
+            },
+            "description": "Reject a pending skill change request with mandatory remarks. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
         }
       ]
     },
@@ -1712,7 +1910,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"

@@ -303,7 +303,7 @@ class ProfileService:
         # Notify HR accounts and applicant's active Team Lead(s)
         hr_stmt = select(UserAccount.account_id).where(
             UserAccount.user_type.in_([UserType.HR, "HR", "HR_MANAGER"]),
-            UserAccount.status == CommonStatus.ACTIVE,
+            UserAccount.is_active.is_(True),
         )
         hr_account_ids = list(db.scalars(hr_stmt))
         tl_account_ids = scope.team_lead_account_ids_for(db, emp.emp_id)
