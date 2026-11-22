@@ -33,6 +33,15 @@ class ClientPortalRepository:
         )
 
     @staticmethod
+    def get_client_by_id(db: Session, client_id: int) -> Optional[Client]:
+        """Resolve Client by client_id."""
+        return (
+            db.query(Client)
+            .filter(Client.client_id == client_id)
+            .first()
+        )
+
+    @staticmethod
     def get_projects_by_client_id(db: Session, client_id: int) -> List[Project]:
         """Return every project belonging to *this* client."""
         return (

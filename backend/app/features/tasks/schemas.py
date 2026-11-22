@@ -312,6 +312,8 @@ class TaskSummaryResponse(BaseModel):
     due_date: Optional[date] = None
     created_at: datetime
     updated_at: datetime
+    blocker_reason: Optional[str] = None
+    rejection_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 

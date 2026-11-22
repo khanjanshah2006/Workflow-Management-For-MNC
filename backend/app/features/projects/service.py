@@ -12,6 +12,8 @@ from app.models.employee import Employee
 from app.models.department import Department
 from app.models.enums import ProjectStatus, TeamStatus, UserType, AuditAction, MilestoneStatus, CommonStatus
 from app.core.audit import write_audit_log
+from app.core.notification_types import PROJECT_ASSIGNED
+from app.features.notifications.service import NotificationService
 from app.features.projects.repository import ProjectRepository
 from app.features.employees.repository import EmployeeRepository
 from app.features.projects.schemas import (
@@ -354,8 +356,6 @@ class ProjectService:
             assigned_on=date.today(),
         )
         ProjectRepository.create_assignment(db, assignment)
-        db.commit()
-        db.refresh(assignment)
 
         write_audit_log(
             db=db,
@@ -370,6 +370,19 @@ class ProjectService:
             },
             ip_address=ip_address,
         )
+
+        if employee.account_id:
+            NotificationService.create_notification(
+                db=db,
+                user_id=employee.account_id,
+                type=PROJECT_ASSIGNED,
+                title="Assigned to Project",
+                message=f"You have been assigned to project '{project.name}' as {assignment.role_in_project}.",
+                link=f"/projects/{project.project_id}",
+            )
+
+        db.commit()
+        db.refresh(assignment)
 
         return ProjectAssignmentResponse.model_validate(assignment)
 
@@ -549,8 +562,6 @@ class ProjectService:
 
         member = TeamMember(team_id=team_id, emp_id=payload.emp_id)
         ProjectRepository.add_team_member(db, member)
-        db.commit()
-        db.refresh(member)
 
         write_audit_log(
             db=db,
@@ -561,6 +572,20 @@ class ProjectService:
             new_value={"team_id": team_id, "emp_id": payload.emp_id},
             ip_address=ip_address,
         )
+
+        emp = ProjectRepository.get_employee_by_id(db, payload.emp_id)
+        if emp and emp.account_id:
+            NotificationService.create_notification(
+                db=db,
+                user_id=emp.account_id,
+                type=PROJECT_ASSIGNED,
+                title="Added to Project Team",
+                message=f"You have been added to team '{team.name}' on project '{project.name}'.",
+                link=f"/projects/{project.project_id}",
+            )
+
+        db.commit()
+        db.refresh(member)
 
         return TeamMemberResponse.model_validate(member)
 
