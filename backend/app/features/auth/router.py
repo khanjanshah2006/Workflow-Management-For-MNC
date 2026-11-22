@@ -14,6 +14,7 @@ from app.features.auth.schemas import (
     MfaVerifyRequest,
     MfaLoginRequest,
     MfaStatusResponse,
+    MeResponse,
 )
 from app.features.auth.service import AuthService
 from app.models.user_account import UserAccount
@@ -137,6 +138,22 @@ def mfa_login(
     set_refresh_cookie(response, tokens.refresh_token)
 
     return tokens
+
+
+@router.get(
+    "/me",
+    response_model=MeResponse,
+    status_code=status.HTTP_200_OK,
+    summary="Get current authenticated user info with employee and team scope",
+)
+def get_me(
+    current_user: UserAccount = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MeResponse:
+    """
+    Returns the authenticated account plus emp_id, team ids, and active elevated roles.
+    """
+    return AuthService.get_me_info(db=db, user=current_user)
 
 
 @router.get(

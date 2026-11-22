@@ -1,5 +1,7 @@
-﻿from uuid import UUID
+﻿from datetime import datetime, timezone
+from uuid import UUID
 from fastapi import HTTPException, status
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 from jose import JWTError
 import pyotp
@@ -13,11 +15,14 @@ from app.core.security import (
 )
 from app.core.audit import write_audit_log
 from app.core.config import settings
+from app.core.scope import employee_team_ids, led_team_ids, resolve_employee
+from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.features.auth.repository import AuthRepository
 from app.features.auth.schemas import (
     LoginResponse,
+    MeResponse,
     TokenResponse,
     TokenRefreshResponse,
     UserInfoResponse,
@@ -342,4 +347,24 @@ class AuthService:
             access_token=new_access_token,
             token_type="bearer",
             expires_in=settings.access_token_expire_minutes * 60,
+        )
+
+    @staticmethod
+    def get_me_info(db: Session, user: UserAccount) -> MeResponse:
+        """Current account info plus employee, team scope, and active elevated roles."""
+        employee = resolve_employee(db, user)
+        now = datetime.now(timezone.utc)
+        granted_roles = db.scalars(
+            select(ElevatedAccessGrant.granted_role).where(
+                ElevatedAccessGrant.user_id == user.account_id,
+                ElevatedAccessGrant.revoked_at.is_(None),
+                ElevatedAccessGrant.expires_at > now,
+            )
+        )
+        return MeResponse(
+            **UserInfoResponse.model_validate(user).model_dump(),
+            emp_id=employee.emp_id if employee else None,
+            led_team_ids=sorted(led_team_ids(db, employee.emp_id)) if employee else [],
+            team_ids=sorted(employee_team_ids(db, employee.emp_id)) if employee else [],
+            active_elevated_roles=sorted(set(granted_roles)),
         )

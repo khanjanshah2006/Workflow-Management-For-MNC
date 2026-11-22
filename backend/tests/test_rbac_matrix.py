@@ -1,5 +1,5 @@
 import re
-from datetime import date
+from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -15,12 +15,13 @@ from app.db.session import get_db
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.client import Client
+from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.employee import Employee
 from app.models.enums import AuditAction, UserType
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
 from app.models.task import Task
-from app.models.team import Team
+from app.models.team import Team, TeamMember
 from app.models.user_account import UserAccount
 
 
@@ -263,3 +264,48 @@ def test_sysadmin_can_manage_users_and_security(client, db):
     assert client.get("/api/v1/admin/users", headers=auth_headers(admin)).status_code == 200
     employee = make_account(db, UserType.EMPLOYEE)
     assert client.get("/api/v1/admin/users", headers=auth_headers(employee)).status_code == 403
+
+
+def test_me_includes_led_team_ids(client, db):
+    lead = make_account(db, UserType.TEAM_LEAD)
+    lead_emp = make_employee(db, lead)
+    team_a = make_team(db, lead=lead_emp)
+    team_b = make_team(db, lead=make_employee(db))
+    db.add(TeamMember(team_id=team_b.team_id, emp_id=lead_emp.emp_id))
+    db.commit()
+
+    body = client.get("/api/v1/auth/me", headers=auth_headers(lead)).json()
+    assert "user" not in body
+    assert body["account_id"] == str(lead.account_id)
+    assert body["email"] == lead.email
+    assert body["user_type"] == "TEAM_LEAD"
+    assert body["is_active"] is True
+    assert "is_mfa_enabled" in body
+    assert body["emp_id"] == lead_emp.emp_id
+    assert body["led_team_ids"] == [team_a.team_id]
+    assert team_b.team_id in body["team_ids"]
+
+    pm = make_account(db, UserType.PM)
+    body = client.get("/api/v1/auth/me", headers=auth_headers(pm)).json()
+    assert body["emp_id"] is None
+    assert body["led_team_ids"] == body["team_ids"] == body["active_elevated_roles"] == []
+
+    employee = make_account(db, UserType.EMPLOYEE)
+    admin = make_account(db, UserType.ADMIN)
+    now = datetime.now(timezone.utc)
+    for role, expires_at, revoked_at in (
+        ("PM", now + timedelta(days=1), None),
+        ("HR", now - timedelta(hours=1), None),
+        ("ADMIN", now + timedelta(days=1), now),
+    ):
+        db.add(ElevatedAccessGrant(
+            user_id=employee.account_id,
+            granted_by=admin.account_id,
+            granted_role=role,
+            reason="test",
+            expires_at=expires_at,
+            revoked_at=revoked_at,
+        ))
+    db.commit()
+    body = client.get("/api/v1/auth/me", headers=auth_headers(employee)).json()
+    assert body["active_elevated_roles"] == ["PM"]
