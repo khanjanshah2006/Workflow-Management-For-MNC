@@ -512,6 +512,29 @@ def get_task_submissions(
     )
 
 
+@router.get(
+    "/{id}/submissions/{submission_id}/file",
+    status_code=status.HTTP_200_OK,
+    summary="Download task submission deliverable file (S9, US-11)",
+    description=(
+        "Streams the deliverable attachment stored in Postgres. "
+        "Allowed: task assignee, lead of the task's team, PM of the task's project, and ADMIN."
+    ),
+)
+def download_task_submission_file(
+    id: int,
+    submission_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserAccount = Depends(get_current_user),
+):
+    return TaskSubmissionService.download_submission_file(
+        db=db,
+        task_id=id,
+        submission_id=submission_id,
+        current_user=current_user,
+    )
+
+
 @router.put(
     "/{id}/progress",
     response_model=TaskProgressResponse,

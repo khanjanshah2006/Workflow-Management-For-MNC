@@ -776,7 +776,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Active Team Members",
+              "name": "200 OK \u2013 Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -789,7 +789,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK – Empty Team",
+              "name": "200 OK \u2013 Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -802,7 +802,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team / Non-Lead",
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -815,7 +815,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found – Team Non-existent",
+              "name": "404 Not Found \u2013 Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -897,7 +897,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Tasks Stub",
+              "name": "200 OK \u2013 Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -910,7 +910,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team",
+              "name": "403 Forbidden \u2013 Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -2147,7 +2147,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2758,6 +2758,66 @@
               "body": "{\n  \"detail\": \"Access forbidden: requires one of ['TEAM_LEAD', 'PM', 'ADMIN', 'SYSTEM_ADMIN']\"\n}"
             }
           ]
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File (200 OK) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Download task submission deliverable file streamed from database bytea storage. Allowed: assignee, team lead, project manager, or admin."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File - Unauthorized (403 Forbidden) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{unauthorized_employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Returns 403 Forbidden when an unauthorized employee attempts to download another employee's deliverable."
+          },
+          "response": []
         }
       ]
     },
@@ -6427,6 +6487,57 @@
               ]
             },
             "description": "Admin password reset (US-48). Sets a new password for the account (bcrypt, audit logged). It also clears any active login lockout and failed-attempt counter, so a locked account can sign in with the new password. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Internal Overdue Sweep Job (200 OK) (US-15, S9)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Job-Token",
+                "value": "{{job_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/internal/jobs/overdue-sweep",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "internal",
+                "jobs",
+                "overdue-sweep"
+              ]
+            },
+            "description": "Runs scheduled overdue task sweep via internal secret token."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Service Health Check (/health) (200 OK) (S9)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verifies service and database reachability (SELECT 1)."
           },
           "response": []
         }
