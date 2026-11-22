@@ -17,7 +17,7 @@ from app.models.audit_log import AuditLog
 from app.models.client import Client
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.employee import Employee
-from app.models.enums import AuditAction, UserType
+from app.models.enums import AuditAction, TeamStatus, UserType
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
 from app.models.task import Task
@@ -214,6 +214,20 @@ def test_team_lead_can_comment_on_team_task(client, db):
 
     assert client.post(url, json={"content": "Nope"}, headers=auth_headers(other_lead)).status_code == 403
     assert client.get(url, headers=auth_headers(other_lead)).status_code == 403
+
+
+def test_disbanded_team_lead_cannot_read_task_comments(client, db):
+    project = make_project(db)
+    team = make_team(db, project=project)
+    task = make_task(db, team, assignee=make_employee(db, make_account(db, UserType.EMPLOYEE)))
+    lead = make_account(db, UserType.TEAM_LEAD)
+    old_team = make_team(db, lead=make_employee(db, lead), project=project)
+    url = f"/api/v1/tasks/{task.task_id}/comments"
+    assert client.get(url, headers=auth_headers(lead)).status_code == 200
+
+    old_team.status = TeamStatus.DISBANDED
+    db.commit()
+    assert client.get(url, headers=auth_headers(lead)).status_code == 403
 
 
 def test_profile_without_employee_row_returns_404(client, db):
@@ -449,7 +463,7 @@ MATRIX = [
     ("GET", "/api/v1/admin/anomaly-alerts", PLATFORM_ADMINS, 200),
     ("GET", "/api/v1/admin/system/backup-status", PLATFORM_ADMINS, 200),
     ("POST", "/api/v1/departments", {UserType.HR, UserType.ADMIN}, 201),
-    ("GET", "/api/v1/tasks/my-tasks", set(UserType), 200),
+    ("GET", "/api/v1/tasks/my-tasks", INTERNAL_ROLES, 200),
     ("GET", "/api/v1/auth/me", set(UserType), 200),
 ]
 

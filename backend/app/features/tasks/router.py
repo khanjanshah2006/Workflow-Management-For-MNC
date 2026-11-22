@@ -145,7 +145,7 @@ def get_my_tasks(
     priority: Optional[PriorityLevel] = Query(None),
     page: int = Query(1, ge=1),
     limit: int = Query(20, ge=1, le=100),
-    current_user: UserAccount = Depends(get_current_user),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> PaginatedTasksResponse:
     items, total = TaskService.list_my_tasks(

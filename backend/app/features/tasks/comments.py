@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 from app.features.notifications.service import NotificationService
 from app.features.tasks.schemas import TaskCommentResponse
 from app.models.employee import Employee
-from app.models.enums import UserType
+from app.models.enums import TeamStatus, UserType
 from app.models.project import Project
 from app.models.project_manager import ProjectManager
 from app.models.task import Task, TaskComment
@@ -33,6 +33,7 @@ class TaskCommentService:
             is_team_lead = db.query(Team).filter(
                 Team.project_id == task.project_id,
                 Team.lead_emp_id == employee.emp_id,
+                Team.status == TeamStatus.ACTIVE,
             ).first() is not None
             return employee, employee.full_name, "TEAM_LEAD" if is_team_lead else role, False, is_team_lead
 
