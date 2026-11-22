@@ -76,12 +76,25 @@ class SkillProficiency(str, enum.Enum):
     EXPERT = "EXPERT"
 
 
+class SkillRequestAction(str, enum.Enum):
+    ADD = "ADD"
+    UPDATE = "UPDATE"
+    REMOVE = "REMOVE"
+
+
+class SkillRequestStatus(str, enum.Enum):
+    PENDING = "PENDING"
+    APPROVED = "APPROVED"
+    REJECTED = "REJECTED"
+
+
 class AuditAction(str, enum.Enum):
     CREATE = "CREATE"
     UPDATE = "UPDATE"
     DELETE = "DELETE"
     LOGIN = "LOGIN"
     APPROVE = "APPROVE"
+    REJECT = "REJECT"
     EXPORT = "EXPORT"
 
 

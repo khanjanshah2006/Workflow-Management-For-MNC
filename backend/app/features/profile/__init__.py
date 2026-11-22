@@ -5,6 +5,10 @@ from app.features.profile.schemas import (
     SkillResponse,
     DepartmentInfo,
     ManagerInfo,
+    SkillChangeRequestCreate,
+    SkillChangeDecisionIn,
+    SkillChangeRequestOut,
+    PaginatedSkillChangeRequestsOut,
 )
 from app.features.profile.service import ProfileService
 from app.features.profile.repository import ProfileRepository
@@ -18,4 +22,8 @@ __all__ = [
     "SkillResponse",
     "DepartmentInfo",
     "ManagerInfo",
+    "SkillChangeRequestCreate",
+    "SkillChangeDecisionIn",
+    "SkillChangeRequestOut",
+    "PaginatedSkillChangeRequestsOut",
 ]

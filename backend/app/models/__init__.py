@@ -11,6 +11,8 @@ from app.models.enums import (
     FeedbackDecision,
     LeaveStatus,
     SkillProficiency,
+    SkillRequestAction,
+    SkillRequestStatus,
     AuditAction,
     ReportFormat,
 )
@@ -26,7 +28,7 @@ from app.models.milestone import ProjectMilestone, Milestone
 from app.models.task import Task, TaskComment, TaskSubmission
 from app.models.deliverable import Deliverable, DeliverableFeedback
 from app.models.leave import LeaveType, LeaveRequest
-from app.models.skill import Skill, EmployeeSkill
+from app.models.skill import Skill, EmployeeSkill, SkillChangeRequest
 from app.models.notification import Notification
 from app.models.audit_log import AuditLog
 from app.models.support import SupportTicket, TicketActivity
@@ -48,6 +50,8 @@ __all__ = [
     "FeedbackDecision",
     "LeaveStatus",
     "SkillProficiency",
+    "SkillRequestAction",
+    "SkillRequestStatus",
     "AuditAction",
     "ReportFormat",
     "UserAccount",
@@ -71,6 +75,7 @@ __all__ = [
     "LeaveRequest",
     "Skill",
     "EmployeeSkill",
+    "SkillChangeRequest",
     "Notification",
     "AuditLog",
     "SupportTicket",
