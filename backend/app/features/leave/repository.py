@@ -5,6 +5,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 from sqlalchemy import and_, case, func, or_, select
 from sqlalchemy.orm import Session
 
+from app.core import roles
 from app.core.scope import (
     employee_team_ids,
     get_int_param,
@@ -362,7 +363,7 @@ class LeaveRepository:
                 return True
             if elevated == "TEAM_LEAD":
                 user_type_val = "TEAM_LEAD"
-            elif elevated in ("PM", "PROJECT_MANAGER"):
+            elif elevated == roles.PM:
                 user_type_val = "PM"
 
         # Check Team Lead scope: leads an active team the applicant belongs to

@@ -9,6 +9,7 @@ from app.models.employee import Employee
 from app.models.team import Team
 from app.models.user_account import UserAccount
 from app.models.audit_log import AuditLog
+from app.core import roles
 from app.models.enums import AuditAction, UserType
 from app.features.departments import repository
 from app.features.departments.schemas import DepartmentCreate, DepartmentUpdate
@@ -220,7 +221,7 @@ def _assert_team_access(
     Enforce US-37 RBAC scope:
     - HR and ADMIN (SysAdmin) can query any team's roster.
     - PM can query any team roster (project oversight).
-    - Team Lead (EMPLOYEE where team.lead_emp_id == employee.emp_id) can query their own assigned team.
+    - Team Lead (TEAM_LEAD or EMPLOYEE account whose employee row is team.lead_emp_id) can query their own assigned team.
     - Other employees or clients attempting to query teams they do not lead receive 403 Forbidden.
     """
     user_type_val = (
@@ -230,11 +231,11 @@ def _assert_team_access(
     ).upper()
 
     # HR, Admin, PM have unrestricted read access to team rosters
-    if user_type_val in ("HR", "HR_MANAGER", "ADMIN", "PM", "PROJECT_MANAGER"):
+    if user_type_val in (roles.HR, roles.ADMIN, roles.PM):
         return
 
-    # Employee must be the designated Team Lead for this specific team
-    if user_type_val == "EMPLOYEE":
+    # Team Lead / Employee must be the designated Team Lead for this specific team
+    if user_type_val in (roles.TEAM_LEAD, roles.EMPLOYEE):
         emp = _resolve_employee_for_account(db, current_user.account_id)
         if emp is not None and team.lead_emp_id == emp.emp_id:
             return

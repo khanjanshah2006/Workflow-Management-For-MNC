@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.core import roles
 from app.core.rbac import require_role
 from app.models.user_account import UserAccount
 from app.features.profile.schemas import (
@@ -14,18 +15,6 @@ from app.features.profile.service import ProfileService
 
 router = APIRouter(prefix="/api/v1/profile", tags=["Profile"])
 
-INTERNAL_EMPLOYEE_ROLES = [
-    "EMPLOYEE",
-    "PM",
-    "PROJECT_MANAGER",
-    "HR",
-    "HR_MANAGER",
-    "ADMIN",
-    "IT_SUPPORT",
-    "SYSTEM_ADMIN",
-]
-
-
 @router.get(
     "/me",
     response_model=ProfileResponse,
@@ -34,7 +23,7 @@ INTERNAL_EMPLOYEE_ROLES = [
     description="Retrieve the authenticated employee's full organizational profile, department, and manager/lead details.",
 )
 def get_my_profile(
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
@@ -54,7 +43,7 @@ def get_my_profile(
 def update_my_profile(
     payload: ProfileUpdateRequest,
     request: Request,
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> ProfileResponse:
     """
@@ -78,7 +67,7 @@ def update_my_profile(
     description="Retrieve technical and domain skills assigned to the authenticated employee with proficiency levels and experience.",
 )
 def get_my_skills(
-    current_user: UserAccount = Depends(require_role(INTERNAL_EMPLOYEE_ROLES)),
+    current_user: UserAccount = Depends(require_role(roles.INTERNAL)),
     db: Session = Depends(get_db),
 ) -> List[SkillResponse]:
     """

@@ -336,6 +336,26 @@
         },
         {
           "name": "GET Current User Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "var body = pm.response.json();",
+                  "pm.test(\"Has RBAC context keys\", function () {",
+                  "    ['emp_id', 'led_team_ids', 'team_ids', 'active_elevated_roles'].forEach(function (k) { pm.expect(body).to.have.property(k); });",
+                  "});",
+                  "pm.test(\"Team and elevated role lists are arrays\", function () {",
+                  "    pm.expect(body.led_team_ids).to.be.an('array');",
+                  "    pm.expect(body.team_ids).to.be.an('array');",
+                  "    pm.expect(body.active_elevated_roles).to.be.an('array');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
           "request": {
             "method": "GET",
             "header": [
@@ -356,7 +376,7 @@
                 "me"
               ]
             },
-            "description": "Retrieves the authenticated user profile information."
+            "description": "Retrieves the authenticated user profile information: flat user fields (id, email, role, ...) plus emp_id (int or null when the account has no employee row), led_team_ids (int[] teams the user leads), team_ids (int[] teams the user belongs to) and active_elevated_roles (string[] of currently active time-bound elevated roles)."
           },
           "response": []
         },
@@ -751,7 +771,7 @@
                 "members"
               ]
             },
-            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR Manager and SysAdmin can query any team's roster.\n- PM can query any team roster.\n- Team Lead can query their own assigned team.\n- 403 Forbidden if querying other teams or if non-lead employee / client.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
+            "description": "US-37: Returns all ACTIVE employees assigned to the specified team.\n\nAccess rules (enforced server-side):\n- HR, Admin, PM, or the team's lead (TEAM_LEAD or EMPLOYEE account whose employee row is the team's lead_emp_id) can query the roster.\n- 403 Forbidden for anyone else, including leads of other teams and clients.\n- 404 Not Found if team does not exist.\n- Returns empty array [] cleanly if team has no assigned members."
           },
           "response": [
             {
@@ -807,6 +827,46 @@
               "_postman_previewlanguage": "json"
             }
           ]
+        },
+        {
+          "name": "GET Team roster as Team Lead (200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test(\"Status is 200\", function () { pm.response.to.have.status(200); });",
+                  "pm.test(\"Response is an array\", function () { pm.expect(pm.response.json()).to.be.an('array'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{team_lead_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "Team roster as the team's lead. Run 'POST Login as Team Lead' first (saves team_lead_access_token) and set team_id to a team led by that account. Allowed: HR, Admin, PM, or the team's lead (TEAM_LEAD or EMPLOYEE account whose employee row is the team's lead_emp_id)."
+          },
+          "response": []
         },
         {
           "name": "GET Team Tasks Stub (US-37)",
@@ -5284,7 +5344,7 @@
                 "system-params"
               ]
             },
-            "description": "List all global system parameters. Restricted to ADMIN."
+            "description": "List all global system parameters. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
@@ -5319,7 +5379,7 @@
                 "session_timeout_minutes"
               ]
             },
-            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN."
+            "description": "Update a system parameter value. Type validation is enforced against data_type (string, integer, boolean, json) and an audit log is recorded. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
@@ -5353,7 +5413,7 @@
                 "elevated-access"
               ]
             },
-            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN."
+            "description": "Grant time-bound elevated access to an employee with audit logging and future expiration check. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
@@ -5380,7 +5440,7 @@
                 "active"
               ]
             },
-            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN."
+            "description": "List all active (unexpired and unrevoked) elevated access grants across the system. Restricted to ADMIN or SYSTEM_ADMIN."
           },
           "response": []
         },
@@ -5467,7 +5527,7 @@
                 "trigger"
               ]
             },
-            "description": "SYSTEM_ADMIN only. Requires pg_dump to be installed and configured on the API server. Successful response returns the backup file name, not its absolute server path."
+            "description": "ADMIN or SYSTEM_ADMIN. Requires pg_dump to be installed and configured on the API server. Successful response returns the backup file name, not its absolute server path."
           },
           "response": [
             {
@@ -5507,7 +5567,7 @@
               "body": "{\n  \"backup_id\": 1,\n  \"backup_type\": \"ON_DEMAND\",\n  \"file_path\": \"database_backup_20261117T000000Z_1.dump\",\n  \"file_size_bytes\": 1048576,\n  \"status\": \"COMPLETED\",\n  \"created_at\": \"2026-11-17T00:00:00Z\",\n  \"triggered_by_account_id\": \"0d124198-5cce-4e2c-9893-2505190340ff\",\n  \"details\": \"Database backup completed successfully.\"\n}"
             },
             {
-              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "name": "403 Forbidden - ADMIN or SYSTEM_ADMIN Required",
               "originalRequest": {
                 "method": "POST",
                 "header": [
@@ -5566,7 +5626,7 @@
                 "anomaly-alerts"
               ]
             },
-            "description": "SYSTEM_ADMIN only. Detects more than five failed logins in the configured 15-minute window and reports individual privilege elevations in the last 24 hours."
+            "description": "ADMIN or SYSTEM_ADMIN. Detects more than five failed logins in the configured 15-minute window and reports individual privilege elevations in the last 24 hours."
           },
           "response": [
             {
@@ -5605,7 +5665,7 @@
               "body": "{\n  \"window_minutes\": 15,\n  \"total_alerts\": 1,\n  \"alerts\": [\n    {\n      \"alert_type\": \"FAILED_LOGIN_BURST\",\n      \"severity\": \"HIGH\",\n      \"ip_address\": \"203.0.113.15\",\n      \"count\": 6,\n      \"first_timestamp\": \"2026-11-17T00:10:00Z\",\n      \"last_timestamp\": \"2026-11-17T00:24:00Z\",\n      \"details\": \"More than 5 failed login attempts from this IP in 15 minutes.\"\n    }\n  ],\n  \"notes\": \"Privilege elevations are listed individually over the last 24 hours; no spike threshold is configured.\"\n}"
             },
             {
-              "name": "403 Forbidden - SYSTEM_ADMIN Required",
+              "name": "403 Forbidden - ADMIN or SYSTEM_ADMIN Required",
               "originalRequest": {
                 "method": "GET",
                 "header": [

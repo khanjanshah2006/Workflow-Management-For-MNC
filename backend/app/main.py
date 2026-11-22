@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
@@ -23,9 +23,6 @@ from app.features.client_portal import (
 )
 from app.features.leave import leave_router
 from app.features.executive import executive_router
-from app.core.deps import get_current_user
-from app.features.auth.schemas import UserInfoResponse
-from app.models.user_account import UserAccount
 
 logging.basicConfig(level=settings.log_level)
 
@@ -96,14 +93,3 @@ def root():
 def health_check():
     """Service health check endpoint."""
     return {"status": "healthy"}
-
-
-@app.get(
-    "/api/v1/auth/me",
-    response_model=UserInfoResponse,
-    tags=["Authentication"],
-    summary="Get current authenticated user info (test protected endpoint)",
-)
-def get_me(current_user: UserAccount = Depends(get_current_user)):
-    """Protected endpoint demonstrating get_current_user dependency."""
-    return current_user
