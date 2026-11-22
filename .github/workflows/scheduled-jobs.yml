@@ -1,0 +1,43 @@
+name: Scheduled Jobs
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  overdue-sweep:
+    name: Overdue Task Sweep
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Overdue Sweep
+        run: |
+          URL="${{ vars.API_BASE_URL }}/api/v1/internal/jobs/overdue-sweep"
+          echo "Triggering overdue sweep at $URL"
+
+          HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$URL" \
+            -H "X-Job-Token: ${{ secrets.JOB_TOKEN }}" \
+            -H "Content-Type: application/json" || echo "000")
+
+          if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+            echo "Sweep succeeded with status $HTTP_STATUS"
+            cat response.json
+          else
+            echo "Attempt 1 failed with HTTP $HTTP_STATUS. Retrying in 60s for cold start..."
+            sleep 60
+            HTTP_STATUS=$(curl -s -o response.json -w "%{http_code}" -X POST "$URL" \
+              -H "X-Job-Token: ${{ secrets.JOB_TOKEN }}" \
+              -H "Content-Type: application/json" || echo "000")
+
+            if [ "$HTTP_STATUS" -ge 200 ] && [ "$HTTP_STATUS" -lt 300 ]; then
+              echo "Sweep succeeded on retry with status $HTTP_STATUS"
+              cat response.json
+            else
+              echo "Sweep failed with HTTP $HTTP_STATUS"
+              cat response.json 2>/dev/null || true
+              exit 1
+            fi
+          fi
