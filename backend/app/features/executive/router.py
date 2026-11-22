@@ -8,7 +8,7 @@ All endpoints are strictly read-only and restricted to MNC_EXECUTIVE, ADMIN,
 and SYSTEM_ADMIN roles. Unauthenticated requests receive 401; unauthorized roles receive 403.
 """
 
-from fastapi import APIRouter, Depends, Query, Request, status
+from fastapi import APIRouter, Depends, Query, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -149,14 +149,7 @@ def download_executive_report(
     id: int,
     db: Session = Depends(get_db),
     current_user: UserAccount = Depends(executive_guard),
-) -> FileResponse:
+) -> Response:
     """Download the generated report file."""
-    file_path, media_type, download_name = ExecutiveReportService.get_report_download_info(
-        db=db, report_id=id
-    )
-    return FileResponse(
-        path=file_path,
-        media_type=media_type,
-        filename=download_name,
-    )
+    return ExecutiveReportService.download_report(db=db, report_id=id)
 
