@@ -7,6 +7,7 @@ after container restarts on free-tier hosting (e.g., Render).
 import hashlib
 import mimetypes
 import os
+import urllib.parse
 import uuid
 from typing import Any, Optional, Tuple, Union
 from uuid import UUID
@@ -164,10 +165,28 @@ def save_file(
 
 
 def stream_file(stored_file: StoredFile, filename: Optional[str] = None) -> Response:
-    """Stream a stored file to the HTTP response with Content-Disposition: attachment."""
-    download_filename = filename or stored_file.filename
+    """Stream a stored file to the HTTP response with Content-Disposition: attachment.
+
+    Uses RFC 6266 / RFC 5987 formatting with an ASCII fallback in filename="..."
+    and UTF-8 percent-encoding in filename*=UTF-8''... to prevent Latin-1 encoding errors
+    on non-Latin filenames (e.g. 报告.pdf).
+    """
+    download_filename = filename or stored_file.filename or "attachment"
+
+    # 1. Compute ASCII fallback filename (safe for Latin-1 HTTP header encoding)
+    name_root, ext = os.path.splitext(download_filename)
+    ascii_root = name_root.encode("ascii", "ignore").decode("ascii").strip()
+    if not ascii_root:
+        ascii_fallback = f"attachment{ext}" if ext else "attachment"
+    else:
+        ascii_fallback = f"{ascii_root}{ext}"
+    ascii_fallback = ascii_fallback.replace('"', '').replace('\r', '').replace('\n', '')
+
+    # 2. RFC 5987 percent-encoded UTF-8 filename
+    encoded_name = urllib.parse.quote(download_filename, encoding="utf-8")
+
     headers = {
-        "Content-Disposition": f'attachment; filename="{download_filename}"',
+        "Content-Disposition": f'attachment; filename="{ascii_fallback}"; filename*=UTF-8\'\'{encoded_name}',
         "Content-Length": str(stored_file.size_bytes),
     }
     return Response(
