@@ -63,6 +63,12 @@ export const navConfig = [
     roles: ["TEAM_LEAD", "HR", "ADMIN"],
   },
   {
+    path: "/hr/leave-policies",
+    label: "Leave Policies",
+    icon: "📜",
+    roles: ["HR", "ADMIN"],
+  },
+  {
     path: "/support",
     label: "IT Support",
     icon: "🛠",
