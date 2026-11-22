@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.deps import get_current_user
 from app.db.session import get_db
+from app.features.auth.rate_limit import login_rate_limit
 from app.features.auth.schemas import (
     LoginRequest,
     LoginResponse,
@@ -43,6 +44,7 @@ def set_refresh_cookie(response: Response, refresh_token: str) -> None:
     response_model=LoginResponse,
     status_code=status.HTTP_200_OK,
     summary="Authenticate user (triggers MFA challenge if enabled - US-01, US-31)",
+    dependencies=[Depends(login_rate_limit)],
 )
 def login(
     payload: LoginRequest,
@@ -117,6 +119,7 @@ def verify_mfa(
     response_model=TokenResponse,
     status_code=status.HTTP_200_OK,
     summary="Complete two-factor authentication login challenge (US-31)",
+    dependencies=[Depends(login_rate_limit)],
 )
 def mfa_login(
     payload: MfaLoginRequest,

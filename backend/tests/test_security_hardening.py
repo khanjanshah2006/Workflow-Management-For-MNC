@@ -12,6 +12,7 @@ from app.core.notification_types import SECURITY_ALERT
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.session import get_db
+from app.features.auth.rate_limit import LOGIN_RATE_LIMIT
 from app.main import app
 from app.models.audit_log import AuditLog
 from app.models.enums import AuditAction, UserType
@@ -157,3 +158,23 @@ def test_successful_login_resets_counter(client, db):
     db.refresh(account)
     assert account.failed_login_count == 0
     assert account.locked_until is None
+
+
+# ==============================================================================
+# Login rate limit (per path and client IP)
+# ==============================================================================
+
+def test_login_rate_limit_returns_429(client):
+    email = f"nobody-{uuid4().hex[:8]}@example.com"
+    for attempt in range(1, LOGIN_RATE_LIMIT + 1):
+        res = login(client, email, "WrongPass!")
+        assert res.status_code != 429, attempt
+
+    res = login(client, email, "WrongPass!")
+    assert res.status_code == 429
+    assert res.json()["detail"] == "Too many login attempts. Try again in a minute."
+    assert int(res.headers["Retry-After"]) >= 1
+
+    # /mfa/login has its own bucket.
+    res = client.post("/api/v1/auth/mfa/login", json={"mfa_token": "not-a-token", "code": "123456"})
+    assert res.status_code != 429
