@@ -1,10 +1,10 @@
-"""Pydantic schemas for the leave feature (US-14, US-16, US-17, US-19, US-40, S4-BE-1, S4-BE-3, S4-BE-5)."""
+"""Pydantic schemas for the leave feature (US-14, US-16, US-17, US-19, US-40, S4-BE-1, S4-BE-2, S4-BE-3, S4-BE-5)."""
 from datetime import date, datetime
 from enum import Enum
-from typing import List, Optional
+from typing import Annotated, List, Optional
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, StringConstraints, field_validator, model_validator
 
 from app.models.enums import LeaveStatus
 
@@ -141,6 +141,50 @@ class LeaveConflictReportOut(BaseModel):
     availability_threshold: int = 5
 
 
+class PendingLeaveQueueItem(BaseModel):
+    leave_id: int
+    employee_id: int
+    employee_name: str
+    leave_type_name: str
+    start_date: date
+    end_date: date
+    total_days: int
+    reason: str
+    status: LeaveStatus
+    applied_at: datetime
+    conflicting_task_count: int
+
+
+class PendingLeaveQueueResponse(BaseModel):
+    items: List[PendingLeaveQueueItem]
+    total: int
+    page: int
+    limit: int
+
+
+class LeaveApprovalPayload(BaseModel):
+    review_remarks: Optional[str] = Field(None, max_length=2000)
+
+    @field_validator("review_remarks")
+    @classmethod
+    def trim_optional_remarks(cls, value: Optional[str]) -> Optional[str]:
+        if value is None:
+            return None
+        return value.strip() or None
+
+
+class LeaveRejectionPayload(BaseModel):
+    review_remarks: str = Field(..., min_length=1, max_length=2000)
+
+    @field_validator("review_remarks")
+    @classmethod
+    def require_meaningful_remarks(cls, value: str) -> str:
+        value = value.strip()
+        if len(value) < 10:
+            raise ValueError("Review remarks must contain at least 10 non-whitespace characters.")
+        return value
+
+
 # ==========================================
 # Task Reallocation Schemas (US-14, US-19, S4-BE-5)
 # ==========================================
@@ -215,3 +259,46 @@ class TaskReallocationBatchOut(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
+# ── US-18 / S4-BE-2 Schemas ──────────────────────────────────────────────────
+
+# Stripped before the length check, so "   " is rejected rather than stored as "".
+PolicyName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=2, max_length=50)]
+YearlyQuota = Annotated[int, Field(ge=0, le=366)]
+PolicyDescription = Annotated[str, Field(max_length=1000)]
+
+
+class LeavePolicyCreate(BaseModel):
+    """Payload for creating a leave policy (leave type)."""
+    name: PolicyName
+    yearly_quota: YearlyQuota
+    is_paid: bool = True
+    description: Optional[PolicyDescription] = None
+
+
+class LeavePolicyUpdate(BaseModel):
+    """Partial update: only the fields sent are changed."""
+    name: Optional[PolicyName] = None
+    yearly_quota: Optional[YearlyQuota] = None
+    is_paid: Optional[bool] = None
+    description: Optional[PolicyDescription] = None
+    is_active: Optional[bool] = None
+
+    @model_validator(mode="after")
+    def reject_null_required_fields(self) -> "LeavePolicyUpdate":
+        for field in ("name", "yearly_quota", "is_paid", "is_active"):
+            if field in self.model_fields_set and getattr(self, field) is None:
+                raise ValueError(f"{field} cannot be null")
+        return self
+
+
+class LeavePolicyResponse(BaseModel):
+    """Leave policy representation."""
+    leave_type_id: int
+    name: str
+    yearly_quota: int
+    is_paid: bool
+    is_active: bool
+    description: Optional[str] = None
+
+    model_config = ConfigDict(from_attributes=True)

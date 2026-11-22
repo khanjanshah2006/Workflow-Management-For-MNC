@@ -47,3 +47,51 @@ python scripts/seed_wave3_demo.py
 ```
 
 It creates a Team Lead (`john.teamlead@company.com`), three employees (`sarah.connor@`, `john.matrix@`, `kyle.reese@company.com`), `pm@company.com`, `hr@company.com`, `executive@company.com` and `client@acme.com`, plus the "Alpha ERP Modernization" project, team, leave types, leave requests and tasks. All accounts use the password in the `SEED_PASSWORD` environment variable (default `Password@123`). Dates are relative to today, so re-running it refreshes the demo instead of duplicating it.
+
+## Rich Demo Data
+
+A larger, idempotent demo that fills every dashboard. It runs the Wave 3 seed first, so run only this one from `backend/`:
+
+```bash
+export DATABASE_URL=sqlite:///wms_dev.db   # set it deliberately: an exported URL is used as-is
+python scripts/seed_rich_demo.py
+```
+
+If `DATABASE_URL` is unset the script uses `sqlite:///wms_dev.db` (it ignores the URL in `backend/.env`, which may point at the shared database) and creates the tables itself. It refuses any non-SQLite URL unless you opt in with `SEED_ALLOW_NON_SQLITE=1`; for a PostgreSQL database you mean to seed, run `alembic upgrade head` first. Executive report files go to `REPORTS_DIR`, default `backend/uploads/reports`; set a custom value as an absolute path. Re-running it refreshes the data (dates move with the day you seed) instead of duplicating it. All accounts use `SEED_PASSWORD` (default `Password@123`).
+
+| Login | Role | What to look at |
+|---|---|---|
+| `admin@company.com` | Admin | User accounts, audit log, system parameters |
+| `sysadmin@company.com` | System Admin | Anomaly alerts (failed-login burst, backup failure), backup status, escalated tickets |
+| `it.support@company.com` | IT Support | Ticket queue; active 48h System Admin grant, which also opens System Admin routes and global scope for leave conflict checks |
+| `it.helpdesk@company.com` | IT Support | Assigned tickets; expired Admin grant |
+| `executive@company.com` | MNC Executive | Department breakdown, 3 generated reports |
+| `hr@company.com` | HR | Leave review queue, leave policies (Sabbatical inactive) |
+| `pm@company.com` | PM, Delivery | Alpha, Phoenix (at-risk milestone), Nova (planned), Lyra (cancelled) |
+| `daniel.okafor@company.com` | PM, Engineering | Helios (on hold, overdue milestone), Zephyr (at-risk milestone) |
+| `mei.lin@company.com` | PM, Data & Analytics | Atlas (overdue milestone), Vega (completed) |
+| `sofia.alvarez@company.com` | PM, Quality Engineering | Orion, client change request |
+| `john.teamlead@company.com` | Team Lead, Alpha | Review queue, Sarah's pending leave |
+| `ana.lopez@company.com` | Team Lead, Phoenix | Tom's pending leave; reallocate Ravi's tasks for his approved leave |
+| `marcus.chen@company.com` | Team Lead, Atlas | Elena's pending leave and its conflicts |
+| `grace.kim@`, `omar.haddad@`, `leo.novak@company.com` | Team Leads, Orion / Helios / Zephyr | One pending leave each, blocked and rejected tasks |
+| `ravi.kumar@company.com` | Employee | On 5 projects; approved leave the week after next with 3 tasks inside it |
+| `elena.petrova@company.com` | Employee | Pending leave next week overlapping 2 tasks and a milestone |
+| `sarah.connor@company.com` | Employee | Wave 3 tasks, unread notifications |
+| `rachel.green@company.com` | Employee, Human Resources | No team; pending casual leave |
+| `tom.becker@`, `aisha.khan@`, `lucas.silva@`, `hannah.wright@`, `yuki.tanaka@`, `carlos.mendes@`, `fatima.zahra@`, `noah.fischer@`, `priya.nair@`, `ben.carter@`, `zoe.martin@`, `samir.patel@`, `olivia.brown@`, `ethan.ross@`, `john.matrix@`, `kyle.reese@`, `employee@company.com` | Employees | Tasks, leave history, support tickets |
+| `client@acme.com` | Client, Acme Corp | Alpha ERP |
+| `client.globex@company.com` | Client, Globex | Phoenix and Vega deliverables with feedback |
+| `client.initech@company.com` | Client, Initech | Atlas, Nova |
+| `client.umbrella@company.com` | Client, Umbrella Health | Helios, Zephyr |
+| `client.stark@company.com` | Client, Stark Logistics | Orion, Lyra |
+
+Notes:
+
+- `admin@company.com` is reset to the seed password with MFA off, even if `seed_test_users.py` created it earlier with `Admin@123`.
+- The failed-login anomaly only shows for 15 minutes after a seed run (the detector's window). Re-run the seed to bring it back.
+- Leave, task and milestone dates are relative to the day you seed.
+- Task submission and deliverable file URLs are placeholders; the files do not exist.
+- Re-running resets seeded rows (task, leave and ticket status, assignees, dates) but keeps what the app wrote meanwhile, such as audit rows and notifications. Seeded audit rows use `198.51.100.x` / `203.0.113.45` addresses, so they are easy to filter.
+
+Data summary (Wave 3 rows included): 42 accounts across all 9 roles, 6 departments, 31 employees, 4 PMs, 5 clients, 9 projects in every status, 28 milestones, 8 teams, 43 project assignments, 118 tasks in every status with 62 submissions and 30 comments, 7 leave types, 18 leave requests in every status, 18 support tickets with 57 activities, 10 deliverables with 6 client feedback entries, 52 notifications, 6 backup logs, 3 elevated access grants, 3 executive reports and about 325 audit log rows.

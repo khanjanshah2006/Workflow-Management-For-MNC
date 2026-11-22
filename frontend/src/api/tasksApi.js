@@ -838,6 +838,39 @@ export async function getProjectTasks(projectId, { team_id, milestone_id, status
   const qs = query.toString();
   return apiClient.get(`/api/v1/projects/${projectId}/tasks${qs ? '?' + qs : ''}`);
 }
+/**
+ * Fetch paginated list of overdue tasks (US-15 / S5).
+ * GET /api/v1/tasks/overdue
+ *
+ * @param {Object} [params]
+ * @param {number|string} [params.project_id]
+ * @param {number|string} [params.team_id]
+ * @param {number|string} [params.assignee_id]
+ * @param {string} [params.priority]
+ * @param {number} [params.page=1]
+ * @param {number} [params.limit=20]
+ * @returns {Promise<Object>} OverdueTasksResponse { total_overdue, page, limit, items }
+ */
+export async function getOverdueTasks({
+  project_id,
+  team_id,
+  assignee_id,
+  priority,
+  page = 1,
+  limit = 20,
+} = {}) {
+  const query = new URLSearchParams();
+  if (project_id) query.append("project_id", String(project_id));
+  if (team_id) query.append("team_id", String(team_id));
+  if (assignee_id) query.append("assignee_id", String(assignee_id));
+  if (priority && priority !== "ALL") query.append("priority", priority.toUpperCase());
+  if (page) query.append("page", String(page));
+  if (limit) query.append("limit", String(limit));
+
+  const qs = query.toString();
+  return apiClient.get(`/api/v1/tasks/overdue${qs ? `?${qs}` : ""}`);
+}
+
 export const tasksApi = {
   getProgressFillClass,
   matchesTaskSearch,
@@ -867,6 +900,7 @@ export const tasksApi = {
   getReviewQueue,
   reviewTask,
   getProjectTasks,
+  getOverdueTasks,
   ALLOWED_FILE_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
 };

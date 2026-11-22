@@ -24,6 +24,8 @@ import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
+import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
+import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
@@ -279,9 +281,25 @@ function App() {
                 />
 
                 {/* S4-FE-1 routes (Employee Leave Application & History: /leave) */}
+                <Route
+                  path="/leave"
+                  element={
+                    <ProtectedRoute allowedRoles={["EMPLOYEE", "TEAM_LEAD"]}>
+                      <LeaveDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* S4-FE-2 routes (Team Lead Leave Triage & Conflict Calendar: /team-lead/leave) */}
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
+                <Route
+                  path="/pm/risk-dashboard"
+                  element={
+                    <ProtectedRoute allowedRoles={["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"]}>
+                      <PMRiskDashboardPage />
+                    </ProtectedRoute>
+                  }
+                />
 
                 {/* Executive: Guarded & MNC_EXECUTIVE, ADMIN, SYSTEM_ADMIN permitted */}
                 {/* S7-FE-1 routes (MNC Executive Dashboard & Export: /executive/console) */}

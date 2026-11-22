@@ -27,6 +27,12 @@ export const navConfig = [
     roles: ["PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
   },
   {
+    path: "/pm/risk-dashboard",
+    label: "Risk Dashboard",
+    icon: "⚠️",
+    roles: ["PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
+  },
+  {
     path: "/team",
     label: "Team Roster",
     icon: "👥",
@@ -43,6 +49,12 @@ export const navConfig = [
     label: "Team Tasks",
     icon: "📋",
     roles: ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
+  },
+  {
+    path: "/leave",
+    label: "Leave",
+    icon: "🗓️",
+    roles: ["EMPLOYEE", "TEAM_LEAD"],
   },
   {
     path: "/support",
