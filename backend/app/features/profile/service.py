@@ -15,6 +15,8 @@ from app.features.profile.schemas import (
     ManagerInfo,
 )
 
+NO_EMPLOYEE_PROFILE = "No employee profile for this account"
+
 
 class ProfileService:
     """Service layer handling business logic for employee self-service profile (US-03)."""
@@ -56,7 +58,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         return cls._build_profile_response(db, employee)
@@ -77,7 +79,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         # Capture old values for audit logging
@@ -129,7 +131,7 @@ class ProfileService:
         if not employee:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee profile not found for the authenticated user account",
+                detail=NO_EMPLOYEE_PROFILE,
             )
 
         skills_data = ProfileRepository.get_employee_skills(db, employee.emp_id)

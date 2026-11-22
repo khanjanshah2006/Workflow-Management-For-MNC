@@ -637,10 +637,7 @@ class TaskService:
     ) -> Tuple[List[Task], int]:
         actor_emp = TaskRepository.get_employee_by_account_id(db, actor.account_id)
         if not actor_emp:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Employee record not found for the authenticated user.",
-            )
+            return [], 0
         return TaskRepository.list_my_tasks(
             db=db,
             emp_id=actor_emp.emp_id,

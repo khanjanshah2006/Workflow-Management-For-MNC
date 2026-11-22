@@ -210,3 +210,23 @@ def test_team_lead_can_comment_on_team_task(client, db):
 
     assert client.post(url, json={"content": "Nope"}, headers=auth_headers(other_lead)).status_code == 403
     assert client.get(url, headers=auth_headers(other_lead)).status_code == 403
+
+
+def test_profile_without_employee_row_returns_404(client, db):
+    for user_type in (UserType.TEAM_LEAD, UserType.MNC_EXECUTIVE):
+        res = client.get("/api/v1/profile/me", headers=auth_headers(make_account(db, user_type)))
+        assert res.status_code == 404
+        assert res.json()["detail"] == "No employee profile for this account"
+
+    lead = make_account(db, UserType.TEAM_LEAD)
+    employee = make_employee(db, lead)
+    res = client.get("/api/v1/profile/me", headers=auth_headers(lead))
+    assert res.status_code == 200
+    assert res.json()["emp_id"] == employee.emp_id
+
+
+def test_my_tasks_without_employee_row_returns_empty_page(client, db):
+    for user_type in (UserType.PM, UserType.MNC_EXECUTIVE):
+        res = client.get("/api/v1/tasks/my-tasks", headers=auth_headers(make_account(db, user_type)))
+        assert res.status_code == 200
+        assert res.json() == {"items": [], "total": 0, "page": 1, "limit": 20}
