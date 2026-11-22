@@ -76,6 +76,116 @@ def _record_audit_log(
     return audit_entry
 
 
+def _record_user_account_audit_log(
+    db: Session,
+    action: AuditAction,
+    account_id: UUID,
+    old_role: str,
+    new_role: str,
+    actor_account_id: UUID | None = None,
+    ip_address: str | None = None,
+) -> AuditLog:
+    """Helper to record an audit log entry for USER_ACCOUNT role changes."""
+    audit_entry = AuditLog(
+        account_id=actor_account_id,
+        action=action,
+        entity_name="USER_ACCOUNT",
+        entity_ref_id=str(account_id),
+        old_value=json.dumps({"user_type": old_role}),
+        new_value=json.dumps({"user_type": new_role}),
+        ip_address=ip_address,
+    )
+    db.add(audit_entry)
+    return audit_entry
+
+
+def _promote_lead_to_team_lead(
+    db: Session,
+    emp_id: int,
+    actor_account_id: UUID | None = None,
+    ip_address: str | None = None,
+) -> None:
+    """
+    If the designated lead has an account with user_type == EMPLOYEE,
+    promote them to TEAM_LEAD and record an audit log. Other roles keep their role.
+    """
+    emp = repository.get_employee_by_id(db, emp_id)
+    if not emp or not emp.account_id:
+        return
+
+    user_acc = db.get(UserAccount, emp.account_id)
+    if not user_acc:
+        return
+
+    current_role = (
+        user_acc.user_type.value
+        if hasattr(user_acc.user_type, "value")
+        else str(user_acc.user_type)
+    )
+    if current_role == UserType.EMPLOYEE.value or current_role == "EMPLOYEE":
+        user_acc.user_type = UserType.TEAM_LEAD
+        db.add(user_acc)
+        db.flush()
+        _record_user_account_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            account_id=user_acc.account_id,
+            old_role=current_role,
+            new_role=UserType.TEAM_LEAD.value,
+            actor_account_id=actor_account_id,
+            ip_address=ip_address,
+        )
+
+
+def _demote_lead_to_employee_if_no_active_teams(
+    db: Session,
+    emp_id: int | None,
+    exclude_team_id: int | None = None,
+    actor_account_id: UUID | None = None,
+    ip_address: str | None = None,
+) -> None:
+    """
+    If the previous lead was a TEAM_LEAD and no longer leads any active team,
+    demote them back to EMPLOYEE and record an audit log.
+    """
+    if emp_id is None:
+        return
+
+    emp = repository.get_employee_by_id(db, emp_id)
+    if not emp or not emp.account_id:
+        return
+
+    user_acc = db.get(UserAccount, emp.account_id)
+    if not user_acc:
+        return
+
+    current_role = (
+        user_acc.user_type.value
+        if hasattr(user_acc.user_type, "value")
+        else str(user_acc.user_type)
+    )
+    if current_role != UserType.TEAM_LEAD.value and current_role != "TEAM_LEAD":
+        return
+
+    active_led_count = repository.count_active_teams_led_by_employee(
+        db, emp_id=emp_id, exclude_team_id=exclude_team_id
+    )
+    if active_led_count == 0:
+        user_acc.user_type = UserType.EMPLOYEE
+        db.add(user_acc)
+        db.flush()
+        _record_user_account_audit_log(
+            db=db,
+            action=AuditAction.UPDATE,
+            account_id=user_acc.account_id,
+            old_role=current_role,
+            new_role=UserType.EMPLOYEE.value,
+            actor_account_id=actor_account_id,
+            ip_address=ip_address,
+        )
+
+
+
 def get_department(db: Session, dept_id: int) -> Department:
     dept = repository.get_by_id(db, dept_id)
     if dept is None:
