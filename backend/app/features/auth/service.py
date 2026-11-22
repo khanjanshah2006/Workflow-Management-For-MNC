@@ -1,4 +1,4 @@
-﻿from datetime import datetime, timezone
+﻿from datetime import datetime, timedelta, timezone
 from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy import select
@@ -15,11 +15,13 @@ from app.core.security import (
 )
 from app.core.audit import write_audit_log
 from app.core.config import settings
+from app.core.notification_types import SECURITY_ALERT
 from app.core.scope import employee_team_ids, led_team_ids, resolve_employee
 from app.models.elevated_access_grant import ElevatedAccessGrant
 from app.models.enums import AuditAction, UserType
 from app.models.user_account import UserAccount
 from app.features.auth.repository import AuthRepository
+from app.features.notifications.service import NotificationService
 from app.features.auth.schemas import (
     LoginResponse,
     MeResponse,
@@ -28,6 +30,11 @@ from app.features.auth.schemas import (
     UserInfoResponse,
     MfaSetupResponse,
 )
+
+
+def _as_utc(value: datetime) -> datetime:
+    """SQLite returns naive datetimes; treat them as UTC."""
+    return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
 
 
 class AuthService:
@@ -39,20 +46,69 @@ class AuthService:
     ) -> LoginResponse:
         """Authenticate user credentials and issue signed JWT access & refresh tokens or trigger MFA challenge."""
         account = AuthRepository.get_by_email(db, email=email)
+        now = datetime.now(timezone.utc)
+        if account and account.locked_until is not None:
+            locked_until = _as_utc(account.locked_until)
+            if locked_until > now:
+                # Locked accounts are refused without checking the password (US-48).
+                write_audit_log(
+                    db=db,
+                    action=AuditAction.LOGIN,
+                    entity_name="USER_ACCOUNT",
+                    entity_ref_id=str(account.account_id),
+                    account_id=account.account_id,
+                    new_value={
+                        "status": "LOCKED",
+                        "event": "LOGIN_LOCKED",
+                        "attempted_email": email,
+                        "locked_until": locked_until.isoformat(),
+                    },
+                    ip_address=ip_address,
+                    commit=False,
+                )
+                db.commit()
+                raise HTTPException(
+                    status_code=status.HTTP_423_LOCKED,
+                    detail=f"Account locked. Try again after {locked_until:%H:%M} UTC or contact an administrator.",
+                )
+            # Lock expired: start a fresh round of attempts.
+            account.locked_until = None
+            account.failed_login_count = 0
+
         if not account or not verify_password(password, account.password_hash):
             # Record failed login attempt for security audit and anomaly detection
+            new_value = {
+                "status": "FAILED",
+                "attempted_email": email,
+            }
+            if account:
+                account.failed_login_count = (account.failed_login_count or 0) + 1
+                if account.failed_login_count >= settings.failed_login_threshold:
+                    account.locked_until = now + timedelta(minutes=settings.lockout_minutes)
+                    new_value["account_locked"] = True
+                    new_value["locked_until"] = account.locked_until.isoformat()
+                    for admin in AuthRepository.list_active_platform_admins(db):
+                        NotificationService.create_notification(
+                            db,
+                            user_id=admin.account_id,
+                            type=SECURITY_ALERT,
+                            title="Account locked",
+                            message=(
+                                f"Account {account.email} was locked after {account.failed_login_count} "
+                                f"failed login attempts until {account.locked_until:%Y-%m-%d %H:%M} UTC."
+                            ),
+                        )
             write_audit_log(
                 db=db,
                 action=AuditAction.LOGIN,
                 entity_name="USER_ACCOUNT",
                 entity_ref_id=str(account.account_id) if account else "UNKNOWN",
                 account_id=account.account_id if account else None,
-                new_value={
-                    "status": "FAILED",
-                    "attempted_email": email,
-                },
+                new_value=new_value,
                 ip_address=ip_address,
+                commit=False,
             )
+            db.commit()
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid email or password",
@@ -64,6 +120,10 @@ class AuthService:
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Account is inactive. Contact HR.",
             )
+
+        # Correct password: clear failed attempts (persisted by the commit on either path below)
+        account.failed_login_count = 0
+        account.locked_until = None
 
         # Check if user has MFA enabled (or is an Admin with active MFA)
         is_admin = account.user_type == UserType.ADMIN or (
@@ -83,6 +143,7 @@ class AuthService:
                 "email": account.email,
                 "user_type": user_type_val,
             })
+            db.commit()
             return LoginResponse(
                 mfa_required=True,
                 mfa_token=mfa_token,
