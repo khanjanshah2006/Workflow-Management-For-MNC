@@ -313,6 +313,83 @@ def test_me_includes_led_team_ids(client, db):
     assert body["active_elevated_roles"] == ["PM"]
 
 
+def test_admin_endpoints_block_self_escalation(client, db):
+    sysadmin = make_account(db, UserType.SYSTEM_ADMIN)
+    admin = make_account(db, UserType.ADMIN)
+    headers = auth_headers(sysadmin)
+
+    def patch_role(actor_headers, target, user_type):
+        return client.patch(
+            f"/api/v1/admin/users/{target.account_id}/role",
+            json={"user_type": user_type},
+            headers=actor_headers,
+        )
+
+    def grant(target, role):
+        return client.post(
+            "/api/v1/admin/elevated-access",
+            json={
+                "user_id": str(target.account_id),
+                "granted_role": role,
+                "expires_at": (datetime.now(timezone.utc) + timedelta(days=1)).isoformat(),
+                "reason": "Escalation test",
+            },
+            headers=headers,
+        )
+
+    def audit_count():
+        return db.query(AuditLog).filter(AuditLog.account_id == sysadmin.account_id).count()
+
+    before = audit_count()
+    res = patch_role(headers, sysadmin, "ADMIN")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "You cannot change your own role"
+    db.refresh(sysadmin)
+    assert sysadmin.user_type == UserType.SYSTEM_ADMIN
+
+    target = make_account(db, UserType.EMPLOYEE)
+    res = patch_role(headers, target, "ADMIN")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "Only ADMIN can assign the ADMIN role"
+
+    for role in ("ADMIN", "PM"):
+        assert grant(sysadmin, role).status_code == 403
+    res = grant(target, " admin ")
+    assert res.status_code == 403
+    assert res.json()["detail"] == "Only ADMIN can assign the ADMIN role"
+    assert audit_count() == before
+    assert db.query(ElevatedAccessGrant).filter(ElevatedAccessGrant.granted_by == sysadmin.account_id).count() == 0
+
+    assert patch_role(headers, target, "PM").status_code == 200
+    assert patch_role(headers, target, "EMPLOYEE").status_code == 200
+    res = grant(target, "PM")
+    assert res.status_code == 201
+    assert res.json()["granted_role"] == "PM"
+
+    admin_headers = auth_headers(admin)
+    assert patch_role(admin_headers, target, "ADMIN").status_code == 200
+    assert patch_role(admin_headers, admin, "EMPLOYEE").status_code == 403
+
+    def create_user(actor_headers, user_type, email=None):
+        return client.post(
+            "/api/v1/admin/users",
+            json={"email": email or f"new-{uuid4().hex[:8]}@example.com", "password": "Secret123!", "user_type": user_type},
+            headers=actor_headers,
+        )
+
+    before = audit_count()
+    email = f"new-{uuid4().hex[:8]}@example.com"
+    res = create_user(headers, "ADMIN", email)
+    assert res.status_code == 403
+    assert res.json()["detail"] == "Only ADMIN can assign the ADMIN role"
+    assert db.query(UserAccount).filter(UserAccount.email == email).count() == 0
+    assert audit_count() == before
+    # Permission is checked before the duplicate-email conflict.
+    assert create_user(headers, "ADMIN", target.email).status_code == 403
+    assert create_user(headers, "EMPLOYEE").status_code == 201
+    assert create_user(admin_headers, "ADMIN").status_code == 201
+
+
 # ==============================================================================
 # Role x endpoint matrix
 # ==============================================================================

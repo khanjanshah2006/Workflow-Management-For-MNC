@@ -23,6 +23,7 @@ from app.features.admin.schemas import (
     UserRoleUpdate,
 )
 from app.features.admin.service import (
+    AdminPermissionError,
     AdminService,
     EmailAlreadyExistsError,
     InvalidExpirationError,
@@ -88,6 +89,8 @@ def create_user(
         )
     except EmailAlreadyExistsError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except AdminPermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 @router.get(
@@ -160,6 +163,8 @@ def update_user_role(
         )
     except UserNotFoundError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except AdminPermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 @router.post(
@@ -278,6 +283,8 @@ def grant_elevated_access(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
     except InvalidExpirationError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except AdminPermissionError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
 
 @router.get(

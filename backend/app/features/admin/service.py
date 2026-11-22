@@ -16,6 +16,7 @@ from sqlalchemy import text
 from sqlalchemy.engine import make_url
 from fastapi import HTTPException, status
 
+from app.core import roles
 from app.core.audit import write_audit_log
 from app.core.security import hash_password
 from app.core.config import settings
@@ -72,6 +73,10 @@ class InvalidExpirationError(Exception):
     pass
 
 
+class AdminPermissionError(Exception):
+    pass
+
+
 class AdminService:
     """Service layer orchestrating administrator operations on user accounts."""
 
@@ -102,6 +107,8 @@ class AdminService:
         admin_user: UserAccount,
         ip_address: Optional[str] = None,
     ) -> UserAccountResponse:
+        if payload.user_type.value == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
         existing = AdminRepository.get_by_email(db, email=payload.email)
         if existing:
             raise EmailAlreadyExistsError(f"User with email '{payload.email}' already exists.")
@@ -172,6 +179,10 @@ class AdminService:
         user = AdminRepository.get_by_id(db, account_id=account_id)
         if not user:
             raise UserNotFoundError(f"User account with ID '{account_id}' not found.")
+        if account_id == admin_user.account_id:
+            raise AdminPermissionError("You cannot change your own role")
+        if new_role.value == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
 
         old_role = user.user_type.value if hasattr(user.user_type, "value") else str(user.user_type)
         updated_user = AdminRepository.update_role(db=db, user=user, new_role=new_role)
@@ -353,6 +364,10 @@ class AdminService:
         user = AdminRepository.get_by_id(db, account_id=payload.user_id)
         if not user:
             raise UserNotFoundError(f"User account with ID '{payload.user_id}' not found.")
+        if payload.user_id == admin_user.account_id:
+            raise AdminPermissionError("You cannot grant elevated access to yourself")
+        if payload.granted_role.strip().upper() == roles.ADMIN and admin_user.user_type.value != roles.ADMIN:
+            raise AdminPermissionError("Only ADMIN can assign the ADMIN role")
 
         # 2. Expiration validation (must be in the future)
         now = datetime.now(timezone.utc)
