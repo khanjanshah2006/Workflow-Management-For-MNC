@@ -30,6 +30,8 @@ import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
+import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
+import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
@@ -118,24 +120,8 @@ function App() {
                 }
               >
                 <Route index element={<Navigate to="/client/projects" replace />} />
-                <Route
-                  path="projects"
-                  element={
-                    <PagePlaceholder
-                      title="Client Projects"
-                      description="Client portal workspace for deliverables and project tracking."
-                    />
-                  }
-                />
-                <Route
-                  path="projects/:projectId"
-                  element={
-                    <PagePlaceholder
-                      title="Project Details"
-                      description="Client milestone roadmap, deliverables, and progress reports."
-                    />
-                  }
-                />
+                <Route path="projects" element={<ClientProjectListPage />} />
+                <Route path="projects/:projectId" element={<ClientProjectDetailPage />} />
                 <Route path="*" element={<Navigate to="/client/projects" replace />} />
               </Route>
 

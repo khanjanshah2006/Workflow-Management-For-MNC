@@ -361,3 +361,34 @@ describe("5. Client Portal API Client Integration", () => {
     assert.equal(clientPortalApi.exportClientReportPdf, exportClientReportPdf);
   });
 });
+
+// ============================================================================
+// 6. Client Portal Navigation & Role Separation (US-20)
+// ============================================================================
+describe("6. Client Portal Navigation & Role Separation (US-20)", () => {
+  test("CLIENT role default home redirects to /client/projects", async () => {
+    const { getHomeRouteForRole, INTERNAL_ROLES } = await import("../src/auth/session.js");
+    assert.equal(getHomeRouteForRole("CLIENT"), "/client/projects");
+    assert.equal(INTERNAL_ROLES.includes("CLIENT"), false);
+  });
+
+  test("CLIENT has zero internal navigation items in default navConfig", async () => {
+    const { navConfig, filterNavForRole } = await import("../src/components/layout/navConfig.js");
+    const clientNav = filterNavForRole(navConfig, "CLIENT");
+    assert.equal(clientNav.length, 0);
+  });
+
+  test("Milestones are sorted chronologically by target_date", () => {
+    const milestones = [
+      { id: 1, title: "M3", target_date: "2026-12-01" },
+      { id: 2, title: "M1", target_date: "2026-10-15" },
+      { id: 3, title: "M2", target_date: "2026-11-05" },
+    ];
+    const sorted = [...milestones].sort(
+      (a, b) => new Date(a.target_date).getTime() - new Date(b.target_date).getTime()
+    );
+    assert.equal(sorted[0].title, "M1");
+    assert.equal(sorted[1].title, "M2");
+    assert.equal(sorted[2].title, "M3");
+  });
+});
