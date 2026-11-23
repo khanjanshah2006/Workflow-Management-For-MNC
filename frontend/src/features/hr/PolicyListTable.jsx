@@ -24,9 +24,9 @@ export default function PolicyListTable({
 
   if (isLoading) {
     return (
-      <div className="policy-table-container">
-        <div className="table-loading-state" role="status">
-          <div className="spinner"></div>
+      <div className="lp-policy-table-container">
+        <div className="lp-table-loading-state" role="status">
+          <div className="lp-spinner"></div>
           <p>Loading leave policies...</p>
         </div>
       </div>
@@ -35,9 +35,9 @@ export default function PolicyListTable({
 
   if (!policies || policies.length === 0) {
     return (
-      <div className="policy-table-container">
-        <div className="table-empty-state">
-          <span className="empty-icon">📜</span>
+      <div className="lp-policy-table-container">
+        <div className="lp-table-empty-state">
+          <span className="lp-empty-icon">📜</span>
           <h3>No Leave Policies Found</h3>
           <p>
             No matching leave policies found. Click &quot;Create policy&quot; to establish an entitlement.
@@ -55,8 +55,8 @@ export default function PolicyListTable({
   };
 
   return (
-    <div className="policy-table-container">
-      <table className="policy-table" aria-label="Leave Policies Directory">
+    <div className="lp-policy-table-container">
+      <table className="lp-policy-table" aria-label="Leave Policies Directory">
         <thead>
           <tr>
             <th scope="col" style={{ width: "24%" }}>Policy Name</th>
@@ -73,44 +73,44 @@ export default function PolicyListTable({
             const isActive = policy.is_active !== false;
 
             return (
-              <tr key={policy.leave_type_id} className={!isActive ? "row-inactive" : ""}>
-                <td className="cell-policy-name">
-                  <div className="policy-name-wrapper">
-                    <span className="policy-title">{policy.name}</span>
-                    <span className="policy-id-tag">ID #{policy.leave_type_id}</span>
+              <tr key={policy.leave_type_id} className={!isActive ? "lp-row-inactive" : ""}>
+                <td className="lp-cell-policy-name">
+                  <div className="lp-policy-name-wrapper">
+                    <span className="lp-policy-title">{policy.name}</span>
+                    <span className="lp-policy-id-tag">ID #{policy.leave_type_id}</span>
                   </div>
                 </td>
-                <td className="cell-quota">
-                  <span className="quota-pill">{formatQuotaLabel(policy.yearly_quota)}</span>
+                <td className="lp-cell-quota">
+                  <span className="lp-quota-pill">{formatQuotaLabel(policy.yearly_quota)}</span>
                 </td>
-                <td className="cell-type">
+                <td className="lp-cell-type">
                   {policy.is_paid ? (
-                    <span className="badge badge-paid" title="Employee is compensated normally">
+                    <span className="lp-badge lp-badge-paid" title="Employee is compensated normally">
                       ● Paid
                     </span>
                   ) : (
-                    <span className="badge badge-unpaid" title="Uncompensated absence">
+                    <span className="lp-badge lp-badge-unpaid" title="Uncompensated absence">
                       ○ Unpaid
                     </span>
                   )}
                 </td>
-                <td className="cell-status">
+                <td className="lp-cell-status">
                   {isActive ? (
-                    <span className="badge badge-active">Active</span>
+                    <span className="lp-badge lp-badge-active">Active</span>
                   ) : (
-                    <span className="badge badge-inactive">Inactive</span>
+                    <span className="lp-badge lp-badge-inactive">Inactive</span>
                   )}
                 </td>
-                <td className="cell-description">
-                  <span className="description-text" title={policy.description || ""}>
-                    {policy.description ? policy.description : <span className="text-muted">—</span>}
+                <td className="lp-cell-description">
+                  <span className="lp-description-text" title={policy.description || ""}>
+                    {policy.description ? policy.description : <span className="lp-text-muted">—</span>}
                   </span>
                 </td>
-                <td className="cell-actions" style={{ textAlign: "right" }}>
-                  <div className="action-buttons-group">
+                <td className="lp-cell-actions" style={{ textAlign: "right" }}>
+                  <div className="lp-action-buttons-group">
                     <button
                       type="button"
-                      className="btn-action btn-edit"
+                      className="lp-btn-action lp-btn-edit"
                       onClick={() => onEdit(policy)}
                       disabled={isTargetLoading}
                       title={`Edit ${policy.name}`}
@@ -120,7 +120,7 @@ export default function PolicyListTable({
                     {isActive ? (
                       <button
                         type="button"
-                        className="btn-action btn-deactivate"
+                        className="lp-btn-action lp-btn-deactivate"
                         onClick={() =>
                           setConfirmTarget({
                             policy,
@@ -135,7 +135,7 @@ export default function PolicyListTable({
                     ) : (
                       <button
                         type="button"
-                        className="btn-action btn-reactivate"
+                        className="lp-btn-action lp-btn-reactivate"
                         onClick={() =>
                           setConfirmTarget({
                             policy,
@@ -159,7 +159,7 @@ export default function PolicyListTable({
       {/* Confirmation Modal for Deactivate / Reactivate */}
       {confirmTarget && (
         <div
-          className="modal-backdrop"
+          className="lp-modal-backdrop"
           role="dialog"
           aria-modal="true"
           aria-labelledby="confirm-modal-title"
@@ -167,10 +167,10 @@ export default function PolicyListTable({
             if (e.target === e.currentTarget) setConfirmTarget(null);
           }}
         >
-          <div className="modal-dialog policy-confirm-modal-dialog">
-            <div className="modal-header">
+          <div className="lp-modal-dialog lp-policy-confirm-modal-dialog">
+            <div className="lp-modal-header">
               <div>
-                <h3 id="confirm-modal-title" className="modal-title">
+                <h3 id="confirm-modal-title" className="lp-modal-title">
                   {confirmTarget.action === "DEACTIVATE"
                     ? "Deactivate Leave Policy?"
                     : "Reactivate Leave Policy?"}
@@ -178,14 +178,14 @@ export default function PolicyListTable({
               </div>
               <button
                 type="button"
-                className="modal-close-btn"
+                className="lp-modal-close-btn"
                 onClick={() => setConfirmTarget(null)}
                 aria-label="Close"
               >
                 ✕
               </button>
             </div>
-            <div className="modal-body">
+            <div className="lp-modal-body">
               {confirmTarget.action === "DEACTIVATE" ? (
                 <p>
                   Are you sure you want to deactivate <strong>&quot;{confirmTarget.policy.name}&quot;</strong>?
@@ -199,18 +199,18 @@ export default function PolicyListTable({
                 </p>
               )}
             </div>
-            <div className="modal-footer">
+            <div className="lp-modal-footer">
               <button
                 type="button"
-                className="btn btn-secondary"
+                className="lp-btn lp-btn-secondary"
                 onClick={() => setConfirmTarget(null)}
               >
                 Cancel
               </button>
               <button
                 type="button"
-                className={`btn ${
-                  confirmTarget.action === "DEACTIVATE" ? "btn-danger" : "btn-primary"
+                className={`lp-btn ${
+                  confirmTarget.action === "DEACTIVATE" ? "lp-btn-danger" : "lp-btn-primary"
                 }`}
                 onClick={handleConfirmAction}
               >

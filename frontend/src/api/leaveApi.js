@@ -59,7 +59,7 @@ export async function getMyLeaveBalances(params = {}) {
  * Endpoint: GET /api/v1/leave/policies
  *
  * @param {{ includeInactive?: boolean, include_inactive?: boolean }} [params] Optional query params (HR/ADMIN only)
- * @returns {Promise<Array<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string, is_active: boolean }>>}
+ * @returns {Promise<Array<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string|null, is_active: boolean }>>}
  */
 export async function getLeavePolicies(params = {}) {
   const includeInactive = Boolean(params?.includeInactive || params?.include_inactive);

@@ -1,5 +1,7 @@
 /* ==========================================================================
    Leave Policy Administration Styles (US-18 / S4-FE-3)
+   All selectors strictly scoped under .leave-policy-admin-page with .lp-* prefix
+   to prevent global style leakage.
    ========================================================================== */
 
 .leave-policy-admin-page {
@@ -9,7 +11,7 @@
 }
 
 /* Header & Controls */
-.leave-policy-header {
+.leave-policy-admin-page .lp-leave-policy-header {
   display: flex;
   align-items: flex-start;
   justify-content: space-between;
@@ -18,7 +20,7 @@
   flex-wrap: wrap;
 }
 
-.leave-policy-header .page-eyebrow {
+.leave-policy-admin-page .lp-leave-policy-header .page-eyebrow {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -27,7 +29,7 @@
   margin-bottom: 4px;
 }
 
-.leave-policy-header .page-title {
+.leave-policy-admin-page .lp-leave-policy-header .page-title {
   font-size: 26px;
   font-weight: 700;
   color: #0f172a;
@@ -35,7 +37,7 @@
   line-height: 1.25;
 }
 
-.leave-policy-header .page-description {
+.leave-policy-admin-page .lp-leave-policy-header .page-description {
   font-size: 14px;
   color: #64748b;
   margin: 0;
@@ -43,7 +45,7 @@
   line-height: 1.5;
 }
 
-.policy-header-actions {
+.leave-policy-admin-page .lp-policy-header-actions {
   display: flex;
   align-items: center;
   gap: 16px;
@@ -51,7 +53,7 @@
 }
 
 /* Show Inactive Toggle Control */
-.show-inactive-control {
+.leave-policy-admin-page .lp-show-inactive-control {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -67,24 +69,24 @@
   transition: all 0.15s ease;
 }
 
-.show-inactive-control:hover {
+.leave-policy-admin-page .lp-show-inactive-control:hover {
   background-color: #f1f5f9;
   border-color: #cbd5e1;
 }
 
-.show-inactive-control input[type="checkbox"] {
+.leave-policy-admin-page .lp-show-inactive-control input[type="checkbox"] {
   width: 16px;
   height: 16px;
   cursor: pointer;
   accent-color: #6366f1;
 }
 
-.show-inactive-label {
+.leave-policy-admin-page .lp-show-inactive-label {
   font-size: 13.5px;
 }
 
 /* Button Styles */
-.btn-create-policy {
+.leave-policy-admin-page .lp-btn-create-policy {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -99,12 +101,12 @@
   transition: background-color 0.15s ease;
 }
 
-.btn-create-policy:hover {
+.leave-policy-admin-page .lp-btn-create-policy:hover {
   background-color: #4f46e5;
 }
 
 /* Error Banner */
-.policy-error-banner {
+.leave-policy-admin-page .lp-policy-error-banner {
   background-color: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
@@ -119,7 +121,7 @@
 }
 
 /* Table Container */
-.policy-table-container {
+.leave-policy-admin-page .lp-policy-table-container {
   background-color: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
@@ -127,14 +129,14 @@
   overflow-x: auto;
 }
 
-.policy-table {
+.leave-policy-admin-page .lp-policy-table {
   width: 100%;
   border-collapse: collapse;
   text-align: left;
   font-size: 14px;
 }
 
-.policy-table th {
+.leave-policy-admin-page .lp-policy-table th {
   background-color: #f8fafc;
   color: #475569;
   font-weight: 600;
@@ -145,50 +147,50 @@
   border-bottom: 1px solid #e2e8f0;
 }
 
-.policy-table td {
+.leave-policy-admin-page .lp-policy-table td {
   padding: 14px 18px;
   border-bottom: 1px solid #f1f5f9;
   vertical-align: middle;
 }
 
-.policy-table tbody tr:last-child td {
+.leave-policy-admin-page .lp-policy-table tbody tr:last-child td {
   border-bottom: none;
 }
 
-.policy-table tbody tr:hover {
+.leave-policy-admin-page .lp-policy-table tbody tr:hover {
   background-color: #f8fafc;
 }
 
 /* Inactive Row Styling */
-.policy-table tbody tr.row-inactive {
+.leave-policy-admin-page .lp-policy-table tbody tr.lp-row-inactive {
   background-color: #fafafa;
   opacity: 0.72;
 }
 
-.policy-table tbody tr.row-inactive:hover {
+.leave-policy-admin-page .lp-policy-table tbody tr.lp-row-inactive:hover {
   opacity: 0.9;
 }
 
 /* Cells */
-.policy-name-wrapper {
+.leave-policy-admin-page .lp-policy-name-wrapper {
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.policy-title {
+.leave-policy-admin-page .lp-policy-title {
   font-weight: 600;
   color: #0f172a;
   font-size: 14px;
 }
 
-.policy-id-tag {
+.leave-policy-admin-page .lp-policy-id-tag {
   font-size: 11px;
   color: #94a3b8;
   font-family: monospace;
 }
 
-.quota-pill {
+.leave-policy-admin-page .lp-quota-pill {
   display: inline-block;
   background-color: #f1f5f9;
   color: #334155;
@@ -199,7 +201,7 @@
 }
 
 /* Badges */
-.badge {
+.leave-policy-admin-page .lp-badge {
   display: inline-flex;
   align-items: center;
   font-size: 12px;
@@ -209,31 +211,31 @@
   line-height: 1;
 }
 
-.badge-paid {
+.leave-policy-admin-page .lp-badge-paid {
   background-color: #ecfdf5;
   color: #065f46;
   border: 1px solid #a7f3d0;
 }
 
-.badge-unpaid {
+.leave-policy-admin-page .lp-badge-unpaid {
   background-color: #f8fafc;
   color: #64748b;
   border: 1px solid #cbd5e1;
 }
 
-.badge-active {
+.leave-policy-admin-page .lp-badge-active {
   background-color: #eff6ff;
   color: #1e40af;
   border: 1px solid #bfdbfe;
 }
 
-.badge-inactive {
+.leave-policy-admin-page .lp-badge-inactive {
   background-color: #f1f5f9;
   color: #475569;
   border: 1px solid #cbd5e1;
 }
 
-.description-text {
+.leave-policy-admin-page .lp-description-text {
   color: #475569;
   font-size: 13px;
   display: -webkit-box;
@@ -244,19 +246,19 @@
   max-width: 280px;
 }
 
-.text-muted {
+.leave-policy-admin-page .lp-text-muted {
   color: #94a3b8;
 }
 
 /* Actions in Table */
-.action-buttons-group {
+.leave-policy-admin-page .lp-action-buttons-group {
   display: inline-flex;
   align-items: center;
   gap: 8px;
   justify-content: flex-end;
 }
 
-.btn-action {
+.leave-policy-admin-page .lp-btn-action {
   font-size: 12.5px;
   font-weight: 600;
   padding: 4px 10px;
@@ -266,85 +268,85 @@
   transition: all 0.15s ease;
 }
 
-.btn-edit {
+.leave-policy-admin-page .lp-btn-edit {
   background-color: #f8fafc;
   color: #475569;
   border-color: #cbd5e1;
 }
 
-.btn-edit:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-edit:hover:not(:disabled) {
   background-color: #e2e8f0;
   color: #0f172a;
 }
 
-.btn-deactivate {
+.leave-policy-admin-page .lp-btn-deactivate {
   background-color: #fff1f2;
   color: #be123c;
   border-color: #fecdd3;
 }
 
-.btn-deactivate:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-deactivate:hover:not(:disabled) {
   background-color: #ffe4e6;
   color: #9f1239;
 }
 
-.btn-reactivate {
+.leave-policy-admin-page .lp-btn-reactivate {
   background-color: #f0fdf4;
   color: #15803d;
   border-color: #bbf7d0;
 }
 
-.btn-reactivate:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-reactivate:hover:not(:disabled) {
   background-color: #dcfce7;
   color: #166534;
 }
 
-.btn-action:disabled {
+.leave-policy-admin-page .lp-btn-action:disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
 
 /* Empty & Loading States */
-.table-empty-state,
-.table-loading-state {
+.leave-policy-admin-page .lp-table-empty-state,
+.leave-policy-admin-page .lp-table-loading-state {
   padding: 48px 24px;
   text-align: center;
   color: #64748b;
 }
 
-.table-empty-state .empty-icon {
+.leave-policy-admin-page .lp-table-empty-state .lp-empty-icon {
   font-size: 36px;
   margin-bottom: 8px;
   display: block;
 }
 
-.table-empty-state h3 {
+.leave-policy-admin-page .lp-table-empty-state h3 {
   font-size: 17px;
   color: #1e293b;
   margin: 0 0 6px 0;
 }
 
-.table-empty-state p {
+.leave-policy-admin-page .lp-table-empty-state p {
   font-size: 14px;
   margin: 0;
 }
 
-.table-loading-state .spinner {
+.leave-policy-admin-page .lp-table-loading-state .lp-spinner {
   width: 28px;
   height: 28px;
   border: 3px solid #e2e8f0;
   border-top-color: #6366f1;
   border-radius: 50%;
-  animation: spin 0.8s linear infinite;
+  animation: lp-spin 0.8s linear infinite;
   margin: 0 auto 12px;
 }
 
-@keyframes spin {
+@keyframes lp-spin {
   to { transform: rotate(360deg); }
 }
 
 /* Modals (Ensuring solid background & no transparent body bleed-through) */
-.modal-backdrop {
+.leave-policy-admin-page .lp-modal-backdrop {
   position: fixed;
   inset: 0;
   background-color: rgba(15, 23, 42, 0.65);
@@ -357,7 +359,7 @@
   padding: 16px;
 }
 
-.modal-dialog {
+.leave-policy-admin-page .lp-modal-dialog {
   background-color: #ffffff !important;
   border-radius: 12px;
   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08);
@@ -367,15 +369,15 @@
   border: 1px solid #e2e8f0;
 }
 
-.policy-form-modal-dialog {
+.leave-policy-admin-page .lp-policy-form-modal-dialog {
   max-width: 520px;
 }
 
-.policy-confirm-modal-dialog {
+.leave-policy-admin-page .lp-policy-confirm-modal-dialog {
   max-width: 440px;
 }
 
-.modal-header {
+.leave-policy-admin-page .lp-modal-header {
   padding: 18px 22px;
   border-bottom: 1px solid #f1f5f9;
   display: flex;
@@ -384,20 +386,20 @@
   background-color: #ffffff;
 }
 
-.modal-title {
+.leave-policy-admin-page .lp-modal-title {
   font-size: 18px;
   font-weight: 700;
   color: #0f172a;
   margin: 0 0 4px 0;
 }
 
-.modal-subtitle {
+.leave-policy-admin-page .lp-modal-subtitle {
   font-size: 13px;
   color: #64748b;
   margin: 0;
 }
 
-.modal-close-btn {
+.leave-policy-admin-page .lp-modal-close-btn {
   background: none;
   border: none;
   font-size: 18px;
@@ -407,17 +409,17 @@
   border-radius: 4px;
 }
 
-.modal-close-btn:hover {
+.leave-policy-admin-page .lp-modal-close-btn:hover {
   color: #475569;
   background-color: #f1f5f9;
 }
 
-.modal-body {
+.leave-policy-admin-page .lp-modal-body {
   padding: 22px;
   background-color: #ffffff;
 }
 
-.modal-footer {
+.leave-policy-admin-page .lp-modal-footer {
   padding: 16px 22px;
   border-top: 1px solid #f1f5f9;
   display: flex;
@@ -430,11 +432,11 @@
 }
 
 /* Form Controls */
-.form-group {
+.leave-policy-admin-page .lp-form-group {
   margin-bottom: 18px;
 }
 
-.form-label {
+.leave-policy-admin-page .lp-form-label {
   display: block;
   font-size: 13px;
   font-weight: 600;
@@ -442,18 +444,18 @@
   margin-bottom: 6px;
 }
 
-.required-star {
+.leave-policy-admin-page .lp-required-star {
   color: #dc2626;
 }
 
-.optional-tag {
+.leave-policy-admin-page .lp-optional-tag {
   color: #94a3b8;
   font-weight: normal;
   font-size: 12px;
 }
 
-.form-input,
-.form-textarea {
+.leave-policy-admin-page .lp-form-input,
+.leave-policy-admin-page .lp-form-textarea {
   width: 100%;
   padding: 9px 12px;
   font-size: 14px;
@@ -466,21 +468,21 @@
   box-sizing: border-box;
 }
 
-.form-input:focus,
-.form-textarea:focus {
+.leave-policy-admin-page .lp-form-input:focus,
+.leave-policy-admin-page .lp-form-textarea:focus {
   border-color: #6366f1;
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
 }
 
-.input-error {
+.leave-policy-admin-page .lp-input-error {
   border-color: #ef4444 !important;
 }
 
-.input-error:focus {
+.leave-policy-admin-page .lp-input-error:focus {
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.15) !important;
 }
 
-.form-field-meta {
+.leave-policy-admin-page .lp-form-field-meta {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -488,20 +490,20 @@
   font-size: 12px;
 }
 
-.field-error-msg {
+.leave-policy-admin-page .lp-field-error-msg {
   color: #dc2626;
   font-weight: 500;
 }
 
-.field-hint {
+.leave-policy-admin-page .lp-field-hint {
   color: #64748b;
 }
 
-.char-count {
+.leave-policy-admin-page .lp-char-count {
   color: #94a3b8;
 }
 
-.form-alert-error {
+.leave-policy-admin-page .lp-form-alert-error {
   background-color: #fef2f2;
   border: 1px solid #fecaca;
   color: #b91c1c;
@@ -512,7 +514,7 @@
 }
 
 /* Paid Toggle Switch */
-.paid-toggle-container {
+.leave-policy-admin-page .lp-paid-toggle-container {
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -522,7 +524,7 @@
   border-radius: 6px;
 }
 
-.switch-label {
+.leave-policy-admin-page .lp-switch-label {
   display: inline-flex;
   align-items: center;
   gap: 10px;
@@ -530,14 +532,14 @@
   user-select: none;
 }
 
-.switch-checkbox {
+.leave-policy-admin-page .lp-switch-checkbox {
   position: absolute;
   opacity: 0;
   width: 0;
   height: 0;
 }
 
-.switch-slider {
+.leave-policy-admin-page .lp-switch-slider {
   position: relative;
   display: inline-block;
   width: 38px;
@@ -547,7 +549,7 @@
   transition: background-color 0.2s ease;
 }
 
-.switch-slider::after {
+.leave-policy-admin-page .lp-switch-slider::after {
   content: "";
   position: absolute;
   height: 16px;
@@ -560,28 +562,28 @@
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
 }
 
-.switch-checkbox:checked + .switch-slider {
+.leave-policy-admin-page .lp-switch-checkbox:checked + .lp-switch-slider {
   background-color: #10b981;
 }
 
-.switch-checkbox:checked + .switch-slider::after {
+.leave-policy-admin-page .lp-switch-checkbox:checked + .lp-switch-slider::after {
   transform: translateX(16px);
 }
 
-.switch-text {
+.leave-policy-admin-page .lp-switch-text {
   font-size: 14px;
   font-weight: 600;
   color: #1e293b;
 }
 
-.toggle-explanation {
+.leave-policy-admin-page .lp-toggle-explanation {
   font-size: 12px;
   color: #64748b;
   margin-left: 48px;
 }
 
 /* General Buttons */
-.btn {
+.leave-policy-admin-page .lp-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -594,42 +596,47 @@
   transition: all 0.15s ease;
 }
 
-.btn-primary {
+.leave-policy-admin-page .lp-btn-sm {
+  padding: 4px 10px;
+  font-size: 12.5px;
+}
+
+.leave-policy-admin-page .lp-btn-primary {
   background-color: #6366f1;
   color: #ffffff;
 }
 
-.btn-primary:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-primary:hover:not(:disabled) {
   background-color: #4f46e5;
 }
 
-.btn-secondary {
+.leave-policy-admin-page .lp-btn-secondary {
   background-color: #ffffff;
   color: #475569;
   border-color: #cbd5e1;
 }
 
-.btn-secondary:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-secondary:hover:not(:disabled) {
   background-color: #f1f5f9;
   color: #0f172a;
 }
 
-.btn-danger {
+.leave-policy-admin-page .lp-btn-danger {
   background-color: #ef4444;
   color: #ffffff;
 }
 
-.btn-danger:hover:not(:disabled) {
+.leave-policy-admin-page .lp-btn-danger:hover:not(:disabled) {
   background-color: #dc2626;
 }
 
-.btn:disabled {
+.leave-policy-admin-page .lp-btn:disabled {
   opacity: 0.6;
   cursor: not-allowed;
 }
 
 /* Toast Notifications */
-.policy-toast {
+.leave-policy-admin-page .lp-policy-toast {
   position: fixed;
   bottom: 24px;
   right: 24px;
@@ -642,20 +649,20 @@
   gap: 10px;
   box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
   z-index: 1100;
-  animation: slideUp 0.25s ease-out;
+  animation: lp-slideUp 0.25s ease-out;
 }
 
-.policy-toast-success {
+.leave-policy-admin-page .lp-policy-toast-success {
   background-color: #065f46;
   color: #ffffff;
 }
 
-.policy-toast-error {
+.leave-policy-admin-page .lp-policy-toast-error {
   background-color: #991b1b;
   color: #ffffff;
 }
 
-@keyframes slideUp {
+@keyframes lp-slideUp {
   from {
     transform: translateY(20px);
     opacity: 0;
@@ -672,37 +679,37 @@
     padding: 16px;
   }
 
-  .leave-policy-header {
+  .leave-policy-admin-page .lp-leave-policy-header {
     flex-direction: column;
     align-items: stretch;
   }
 
-  .policy-header-actions {
+  .leave-policy-admin-page .lp-policy-header-actions {
     justify-content: space-between;
     width: 100%;
   }
 
-  .policy-form-modal-dialog {
+  .leave-policy-admin-page .lp-policy-form-modal-dialog {
     max-width: 95vw;
   }
 }
 
 @media (max-width: 400px) {
-  .leave-policy-header .page-title {
+  .leave-policy-admin-page .lp-leave-policy-header .page-title {
     font-size: 22px;
   }
 
-  .policy-header-actions {
+  .leave-policy-admin-page .lp-policy-header-actions {
     flex-direction: column;
     align-items: stretch;
     gap: 10px;
   }
 
-  .show-inactive-control {
+  .leave-policy-admin-page .lp-show-inactive-control {
     justify-content: center;
   }
 
-  .btn-create-policy {
+  .leave-policy-admin-page .lp-btn-create-policy {
     justify-content: center;
   }
 }

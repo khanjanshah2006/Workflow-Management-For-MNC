@@ -117,7 +117,7 @@ export default function PolicyFormModal({
 
   return (
     <div
-      className="modal-backdrop"
+      className="lp-modal-backdrop"
       role="dialog"
       aria-modal="true"
       aria-labelledby="policy-modal-title"
@@ -127,13 +127,13 @@ export default function PolicyFormModal({
         }
       }}
     >
-      <div className="modal-dialog policy-form-modal-dialog">
-        <div className="modal-header">
+      <div className="lp-modal-dialog lp-policy-form-modal-dialog">
+        <div className="lp-modal-header">
           <div>
-            <h2 id="policy-modal-title" className="modal-title">
+            <h2 id="policy-modal-title" className="lp-modal-title">
               {isEdit ? "Edit Leave Policy" : "Create Leave Policy"}
             </h2>
-            <p className="modal-subtitle">
+            <p className="lp-modal-subtitle">
               {isEdit
                 ? "Update quota, compensation type, or description."
                 : "Define a new leave category and annual entitlement."}
@@ -141,7 +141,7 @@ export default function PolicyFormModal({
           </div>
           <button
             type="button"
-            className="modal-close-btn"
+            className="lp-modal-close-btn"
             onClick={onClose}
             disabled={isLoading}
             aria-label="Close dialog"
@@ -151,22 +151,22 @@ export default function PolicyFormModal({
         </div>
 
         <form onSubmit={handleSubmit} noValidate>
-          <div className="modal-body">
+          <div className="lp-modal-body">
             {fieldErrors.general && (
-              <div className="form-alert-error" role="alert">
+              <div className="lp-form-alert-error" role="alert">
                 ⚠️ {fieldErrors.general}
               </div>
             )}
 
             {/* Policy Name */}
-            <div className="form-group">
-              <label htmlFor="policy-name" className="form-label">
-                Policy Name <span className="required-star">*</span>
+            <div className="lp-form-group">
+              <label htmlFor="policy-name" className="lp-form-label">
+                Policy Name <span className="lp-required-star">*</span>
               </label>
               <input
                 id="policy-name"
                 type="text"
-                className={`form-input ${fieldErrors.name ? "input-error" : ""}`}
+                className={`lp-form-input ${fieldErrors.name ? "lp-input-error" : ""}`}
                 placeholder="e.g. Annual Leave, Paternity Leave"
                 value={formData.name}
                 onChange={(e) => handleChange("name", e.target.value)}
@@ -176,20 +176,20 @@ export default function PolicyFormModal({
                 required
                 autoFocus
               />
-              <div className="form-field-meta">
+              <div className="lp-form-field-meta">
                 {fieldErrors.name ? (
-                  <span className="field-error-msg" role="alert">{fieldErrors.name}</span>
+                  <span className="lp-field-error-msg" role="alert">{fieldErrors.name}</span>
                 ) : (
-                  <span className="field-hint">2 to 50 characters</span>
+                  <span className="lp-field-hint">2 to 50 characters</span>
                 )}
-                <span className="char-count">{formData.name.trim().length}/50</span>
+                <span className="lp-char-count">{formData.name.trim().length}/50</span>
               </div>
             </div>
 
             {/* Yearly Quota */}
-            <div className="form-group">
-              <label htmlFor="policy-quota" className="form-label">
-                Yearly Quota (Days) <span className="required-star">*</span>
+            <div className="lp-form-group">
+              <label htmlFor="policy-quota" className="lp-form-label">
+                Yearly Quota (Days) <span className="lp-required-star">*</span>
               </label>
               <input
                 id="policy-quota"
@@ -197,7 +197,7 @@ export default function PolicyFormModal({
                 min="0"
                 max="366"
                 step="1"
-                className={`form-input ${fieldErrors.yearly_quota ? "input-error" : ""}`}
+                className={`lp-form-input ${fieldErrors.yearly_quota ? "lp-input-error" : ""}`}
                 placeholder="e.g. 20"
                 value={formData.yearly_quota}
                 onChange={(e) => handleChange("yearly_quota", e.target.value)}
@@ -205,33 +205,33 @@ export default function PolicyFormModal({
                 disabled={isLoading}
                 required
               />
-              <div className="form-field-meta">
+              <div className="lp-form-field-meta">
                 {fieldErrors.yearly_quota ? (
-                  <span className="field-error-msg" role="alert">{fieldErrors.yearly_quota}</span>
+                  <span className="lp-field-error-msg" role="alert">{fieldErrors.yearly_quota}</span>
                 ) : (
-                  <span className="field-hint">Whole integer between 0 and 366 days</span>
+                  <span className="lp-field-hint">Whole integer between 0 and 366 days</span>
                 )}
               </div>
             </div>
 
             {/* Paid / Unpaid Toggle */}
-            <div className="form-group">
-              <label className="form-label">Compensation Type</label>
-              <div className="paid-toggle-container">
-                <label className="switch-label">
+            <div className="lp-form-group">
+              <label className="lp-form-label">Compensation Type</label>
+              <div className="lp-paid-toggle-container">
+                <label className="lp-switch-label">
                   <input
                     type="checkbox"
-                    className="switch-checkbox"
+                    className="lp-switch-checkbox"
                     checked={formData.is_paid}
                     onChange={(e) => handleChange("is_paid", e.target.checked)}
                     disabled={isLoading}
                   />
-                  <span className="switch-slider"></span>
-                  <span className="switch-text">
+                  <span className="lp-switch-slider"></span>
+                  <span className="lp-switch-text">
                     {formData.is_paid ? "Paid Leave" : "Unpaid Leave"}
                   </span>
                 </label>
-                <span className="toggle-explanation">
+                <span className="lp-toggle-explanation">
                   {formData.is_paid
                     ? "Employee is compensated normally during this absence."
                     : "Absence is recorded without wage compensation."}
@@ -240,13 +240,13 @@ export default function PolicyFormModal({
             </div>
 
             {/* Description */}
-            <div className="form-group">
-              <label htmlFor="policy-description" className="form-label">
-                Description <span className="optional-tag">(Optional)</span>
+            <div className="lp-form-group">
+              <label htmlFor="policy-description" className="lp-form-label">
+                Description <span className="lp-optional-tag">(Optional)</span>
               </label>
               <textarea
                 id="policy-description"
-                className={`form-textarea ${fieldErrors.description ? "input-error" : ""}`}
+                className={`lp-form-textarea ${fieldErrors.description ? "lp-input-error" : ""}`}
                 placeholder="Guidelines, eligibility rules, or documentation required..."
                 rows={3}
                 value={formData.description}
@@ -255,21 +255,21 @@ export default function PolicyFormModal({
                 maxLength={1000}
                 disabled={isLoading}
               />
-              <div className="form-field-meta">
+              <div className="lp-form-field-meta">
                 {fieldErrors.description ? (
-                  <span className="field-error-msg" role="alert">{fieldErrors.description}</span>
+                  <span className="lp-field-error-msg" role="alert">{fieldErrors.description}</span>
                 ) : (
-                  <span className="field-hint">Maximum 1000 characters</span>
+                  <span className="lp-field-hint">Maximum 1000 characters</span>
                 )}
-                <span className="char-count">{formData.description.length}/1000</span>
+                <span className="lp-char-count">{formData.description.length}/1000</span>
               </div>
             </div>
           </div>
 
-          <div className="modal-footer">
+          <div className="lp-modal-footer">
             <button
               type="button"
-              className="btn btn-secondary"
+              className="lp-btn lp-btn-secondary"
               onClick={onClose}
               disabled={isLoading}
             >
@@ -277,7 +277,7 @@ export default function PolicyFormModal({
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
+              className="lp-btn lp-btn-primary"
               disabled={isLoading}
             >
               {isLoading

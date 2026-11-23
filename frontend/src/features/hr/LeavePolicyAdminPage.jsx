@@ -175,17 +175,17 @@ export default function LeavePolicyAdminPage() {
       {/* Toast Notification */}
       {toast && (
         <div
-          className={`policy-toast policy-toast-${toast.type}`}
+          className={`lp-policy-toast lp-policy-toast-${toast.type}`}
           role="status"
           aria-live="polite"
         >
-          <span className="toast-icon">{toast.type === "error" ? "⚠️" : "✓"}</span>
+          <span className="lp-toast-icon">{toast.type === "error" ? "⚠️" : "✓"}</span>
           <span>{toast.message}</span>
         </div>
       )}
 
       {/* Page Header */}
-      <div className="leave-policy-header">
+      <div className="lp-leave-policy-header">
         <div>
           <div className="page-eyebrow">HUMAN RESOURCES</div>
           <h1 className="page-title">Leave Policy Administration</h1>
@@ -194,22 +194,22 @@ export default function LeavePolicyAdminPage() {
           </p>
         </div>
 
-        <div className="policy-header-actions">
+        <div className="lp-policy-header-actions">
           {/* Show Inactive Toggle */}
-          <label className="show-inactive-control">
+          <label className="lp-show-inactive-control">
             <input
               type="checkbox"
               checked={showInactive}
               onChange={(e) => handleToggleInactive(e.target.checked)}
               id="show-inactive-toggle"
             />
-            <span className="show-inactive-label">Show inactive</span>
+            <span className="lp-show-inactive-label">Show inactive</span>
           </label>
 
           {/* Create Policy Button */}
           <button
             type="button"
-            className="btn btn-primary btn-create-policy"
+            className="lp-btn lp-btn-primary lp-btn-create-policy"
             onClick={handleOpenCreate}
           >
             + Create policy
@@ -219,13 +219,13 @@ export default function LeavePolicyAdminPage() {
 
       {/* Error state if query fails */}
       {isError && (
-        <div className="policy-error-banner" role="alert">
+        <div className="lp-policy-error-banner" role="alert">
           <div>
             <strong>Error loading policies:</strong> {error?.message || "Failed to retrieve policy directory."}
           </div>
           <button
             type="button"
-            className="btn btn-secondary btn-sm"
+            className="lp-btn lp-btn-secondary lp-btn-sm"
             onClick={() => refetch()}
           >
             Retry
