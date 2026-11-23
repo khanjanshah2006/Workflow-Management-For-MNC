@@ -23,6 +23,7 @@ import SecurityOpsPage from "./features/admin/SecurityOpsPage";
 import UserManagementPage from "./features/admin/UserManagementPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
+import ReporterSupportPage from "./features/support/ReporterSupportPage";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
 import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
@@ -251,23 +252,25 @@ function App() {
                   }
                 />
 
-                {/* Support: Guarded for IT staff */}
+                {/* Support: Reporter portal for all internal employees (US-26 / S8-FE-3) */}
                 <Route
                   path="/support"
                   element={
-                    <ProtectedRoute allowedRoles={IT_STAFF}>
-                      <ITSupportDashboard />
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ReporterSupportPage />
                     </ProtectedRoute>
                   }
                 />
                 <Route
                   path="/support/tickets"
                   element={
-                    <ProtectedRoute allowedRoles={IT_STAFF}>
-                      <ITSupportDashboard />
+                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                      <ReporterSupportPage />
                     </ProtectedRoute>
                   }
                 />
+
+                {/* IT Support Triage Queue: Guarded strictly for IT staff (US-27, US-28 / S8-FE-3) */}
                 <Route
                   path="/it-support"
                   element={
