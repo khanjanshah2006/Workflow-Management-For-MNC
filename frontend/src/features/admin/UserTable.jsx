@@ -5,13 +5,12 @@ const ROLE_DISPLAY_NAMES = {
   ADMIN: "System Admin",
   SYSTEM_ADMIN: "System Admin",
   PM: "Project Manager",
-  PROJECT_MANAGER: "Project Manager",
   EMPLOYEE: "Employee",
-  HR: "HR Manager",
-  HR_MANAGER: "HR Manager",
+  HR: "HR",
   CLIENT: "Client",
   IT_SUPPORT: "IT Support",
   TEAM_LEAD: "Team Lead",
+  MNC_EXECUTIVE: "MNC Executive",
 };
 
 export const UserTable = ({

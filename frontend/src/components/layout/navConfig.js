@@ -1,6 +1,14 @@
-import { normalizeRole, getUserRole, INTERNAL_ROLES, getHomeRouteForRole } from "../../auth/session.js";
+import {
+  ROLES,
+  INTERNAL_ROLES,
+  PLATFORM_ADMINS,
+  IT_STAFF,
+  normalizeRole,
+  getUserRole,
+  getHomeRouteForRole,
+} from "../../auth/session.js";
 
-export { INTERNAL_ROLES, getHomeRouteForRole };
+export { ROLES, INTERNAL_ROLES, PLATFORM_ADMINS, IT_STAFF, getHomeRouteForRole };
 
 /**
  * Shared navigation configuration for WorkSphere application.
@@ -24,13 +32,13 @@ export const navConfig = [
     path: "/projects",
     label: "Projects",
     icon: "◇",
-    roles: ["PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
+    roles: [ROLES.PM, ROLES.ADMIN],
   },
   {
     path: "/pm/risk-dashboard",
     label: "Risk Dashboard",
     icon: "⚠️",
-    roles: ["PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
+    roles: [ROLES.PM, ROLES.ADMIN],
   },
   {
     path: "/team",
@@ -48,31 +56,31 @@ export const navConfig = [
     path: "/team-lead/tasks",
     label: "Team Tasks",
     icon: "📋",
-    roles: ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"],
+    roles: [ROLES.TEAM_LEAD, ROLES.PM, ROLES.ADMIN],
   },
   {
     path: "/leave",
     label: "Leave",
     icon: "🗓️",
-    roles: ["EMPLOYEE", "TEAM_LEAD"],
+    roles: [ROLES.EMPLOYEE, ROLES.TEAM_LEAD],
   },
   {
     path: "/team-lead/leave",
     label: "Leave Triage",
     icon: "⚖️",
-    roles: ["TEAM_LEAD", "HR", "ADMIN"],
+    roles: [ROLES.TEAM_LEAD, ROLES.HR, ROLES.ADMIN],
   },
   {
     path: "/hr/leave-policies",
     label: "Leave Policies",
     icon: "📜",
-    roles: ["HR", "ADMIN"],
+    roles: [ROLES.HR, ROLES.ADMIN],
   },
   {
-    path: "/support",
+    path: "/it-support",
     label: "IT Support",
     icon: "🛠",
-    roles: INTERNAL_ROLES,
+    roles: IT_STAFF,
   },
   {
     path: "/profile",
@@ -84,13 +92,19 @@ export const navConfig = [
     path: "/admin/users",
     label: "User Admin",
     icon: "👤",
-    roles: ["SYSTEM_ADMIN", "ADMIN"],
+    roles: PLATFORM_ADMINS,
+  },
+  {
+    path: "/admin/security",
+    label: "Security Ops",
+    icon: "🛡️",
+    roles: PLATFORM_ADMINS,
   },
   {
     path: "/executive/console",
     label: "Executive Console",
     icon: "📊",
-    roles: ["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"],
+    roles: [ROLES.MNC_EXECUTIVE, ROLES.ADMIN, ROLES.SYSTEM_ADMIN],
   },
 ];
 
@@ -113,7 +127,7 @@ export function filterNavForRole(config, roleOrUser) {
   }
 
   const normRole = getUserRole(roleOrUser);
-  const isValidRole = normRole === "CLIENT" || INTERNAL_ROLES.includes(normRole);
+  const isValidRole = normRole === ROLES.CLIENT || INTERNAL_ROLES.includes(normRole);
 
   // Missing, null, empty or unknown roles return an empty array (strictly fail-closed)
   if (!isValidRole) {
@@ -135,13 +149,6 @@ export function filterNavForRole(config, roleOrUser) {
 
     return item.roles.some((allowed) => {
       const normAllowed = normalizeRole(allowed);
-      // Support PM <-> PROJECT_MANAGER alias
-      if (
-        (normAllowed === "PM" || normAllowed === "PROJECT_MANAGER") &&
-        (normRole === "PM" || normRole === "PROJECT_MANAGER")
-      ) {
-        return true;
-      }
       return normAllowed === normRole;
     });
   });

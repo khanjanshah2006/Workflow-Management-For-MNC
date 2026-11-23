@@ -129,7 +129,7 @@ function ProgressBar({ pct, status }) {
  */
 export default function MyTasksPage() {
   const { role } = useAuth();
-  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
+  const isTeamLeadOrManager = ["TEAM_LEAD", "PM", "SYSTEM_ADMIN", "ADMIN"].includes((role || "").toUpperCase());
   // Filter & Search states
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
