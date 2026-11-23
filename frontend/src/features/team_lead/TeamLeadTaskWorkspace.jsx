@@ -63,10 +63,30 @@ export default function TeamLeadTaskWorkspace() {
     queryFn: () => getProjects(),
   });
 
+  const ledTeamIds = useMemo(() => {
+    if (Array.isArray(user?.led_team_ids)) {
+      return user.led_team_ids;
+    }
+    return [];
+  }, [user]);
+
+  const [selectedTeamId, setSelectedTeamId] = useState(() => {
+    if (typeof localStorage !== "undefined") {
+      return localStorage.getItem("wms_tl_selected_team") || "";
+    }
+    return "";
+  });
+
+  const activeTeamId = useMemo(() => {
+    if (ledTeamIds.length === 0) return null;
+    if (selectedTeamId && ledTeamIds.includes(Number(selectedTeamId))) {
+      return String(selectedTeamId);
+    }
+    return String(ledTeamIds[0]);
+  }, [ledTeamIds, selectedTeamId]);
+
   const [selectedProjectId, setSelectedProjectId] = useState("");
   const activeProjectId = selectedProjectId || (projects.length > 0 ? String(projects[0].project_id) : "1");
-
-  const teamId = user?.team_id ? String(user.team_id) : "1";
 
   // Fetch tasks for the project and team
   const {
@@ -75,9 +95,9 @@ export default function TeamLeadTaskWorkspace() {
     isError: isTasksError,
     error: tasksError,
   } = useQuery({
-    queryKey: ["projects", activeProjectId, "tasks", teamId],
-    queryFn: () => getProjectTasks(activeProjectId, { team_id: Number(teamId), limit: 100 }),
-    enabled: Boolean(activeProjectId),
+    queryKey: ["projects", activeProjectId, "tasks", activeTeamId],
+    queryFn: () => getProjectTasks(activeProjectId, { team_id: Number(activeTeamId), limit: 100 }),
+    enabled: Boolean(activeProjectId && activeTeamId),
   });
 
   const tasks = useMemo(
@@ -93,9 +113,9 @@ export default function TeamLeadTaskWorkspace() {
 
   // Fetch team members for filter dropdown and card display
   const { data: rawTeamMembers = [] } = useQuery({
-    queryKey: ["teams", teamId, "members"],
-    queryFn: () => teamApi.getTeamMembers(teamId, activeProjectId || null),
-    enabled: Boolean(teamId),
+    queryKey: ["teams", activeTeamId, "members"],
+    queryFn: () => teamApi.getTeamMembers(activeTeamId, activeProjectId || null),
+    enabled: Boolean(activeTeamId),
   });
 
   const teamMembers = (rawTeamMembers || []).map((m) => teamApi.normalizeMember(m));
@@ -175,6 +195,30 @@ export default function TeamLeadTaskWorkspace() {
     setToastMessage(isApproval ? "Task deliverable approved and marked as DONE!" : "Task deliverable rejected with feedback.");
   };
 
+  if (ledTeamIds.length === 0) {
+    return (
+      <div className="team-lead-workspace">
+        <header className="workspace-header">
+          <div className="workspace-header-left">
+            <div className="workspace-badge">Team Lead Mission Control</div>
+            <h1 className="workspace-title">Team Task Workspace & Review Triage</h1>
+            <p className="workspace-subtitle">
+              Create tasks, reallocate workloads across team members, and inspect submitted deliverables.
+            </p>
+          </div>
+        </header>
+
+        <div className="empty-workspace-state" style={{ textAlign: "center", padding: "60px 20px" }}>
+          <div style={{ fontSize: "3rem", marginBottom: "16px" }}>👥</div>
+          <h2>You don't lead an active team yet</h2>
+          <p style={{ color: "#64748b", maxWidth: "480px", margin: "8px auto" }}>
+            Once an administrator or project manager assigns you to lead a team, your team workspace, roster, and task review queue will appear here.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="team-lead-workspace">
       {/* Toast Notification */}
@@ -196,6 +240,28 @@ export default function TeamLeadTaskWorkspace() {
         </div>
 
         <div className="workspace-header-actions">
+          {/* Team selector when lead leads multiple teams */}
+          {ledTeamIds.length > 1 && (
+            <select
+              className="form-control form-control-sm team-selector"
+              value={activeTeamId || ""}
+              onChange={(e) => {
+                setSelectedTeamId(e.target.value);
+                if (typeof localStorage !== "undefined") {
+                  localStorage.setItem("wms_tl_selected_team", e.target.value);
+                }
+              }}
+              title="Switch led team"
+              aria-label="Select Team"
+            >
+              {ledTeamIds.map((tid) => (
+                <option key={tid} value={tid}>
+                  Team #{tid}
+                </option>
+              ))}
+            </select>
+          )}
+
           {/* Project selector */}
           <select
             className="form-control form-control-sm"
@@ -551,7 +617,7 @@ export default function TeamLeadTaskWorkspace() {
       <CreateTaskModal
         isOpen={isCreateModalOpen}
         defaultProjectId={activeProjectId}
-        defaultTeamId={teamId}
+        defaultTeamId={activeTeamId}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleTaskCreated}
       />
