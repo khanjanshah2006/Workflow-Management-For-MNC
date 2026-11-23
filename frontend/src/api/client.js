@@ -19,6 +19,7 @@ export class ApiError extends Error {
 let activeTokenGetter = null;
 let tokenRefreshHandler = null;
 let sessionClearHandler = null;
+let inMemoryToken = "";
 
 /**
  * Registers an optional external token provider (e.g. in-memory session adapter).
@@ -50,18 +51,19 @@ export function getStoredToken() {
       const active = activeTokenGetter();
       if (active) return active;
     } catch {
-      // Fallback to localStorage
+      // Fallback to storage/memory
     }
   }
-  if (typeof localStorage === "undefined") return "";
+  if (typeof localStorage === "undefined") return inMemoryToken;
   try {
-    return localStorage.getItem("wms_access_token") || "";
+    return localStorage.getItem("wms_access_token") || inMemoryToken;
   } catch {
-    return "";
+    return inMemoryToken;
   }
 }
 
 export function setStoredToken(token) {
+  inMemoryToken = token || "";
   if (typeof localStorage === "undefined") return;
   try {
     if (token) {
