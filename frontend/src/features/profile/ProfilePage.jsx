@@ -6,7 +6,6 @@ import { useAuth } from "../../hooks/useAuth";
 import ProposeSkillModal from "./ProposeSkillModal";
 import MySkillRequestsList from "./MySkillRequestsList";
 import {
-  SKILL_ACTIONS,
   PROFICIENCY_LABELS,
 } from "../skills/skillRequestUtils";
 import "./profile.css";
@@ -206,7 +205,7 @@ export default function ProfilePage() {
     isLoading: isLoadingSkills,
     isError: isErrorSkills,
     error: skillsError,
-    refetch: refetchSkills,
+    refetch: _refetchSkills,
   } = useQuery({
     queryKey: ["profile", "skills"],
     queryFn: profileApi.getMySkills,

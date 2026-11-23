@@ -1,5 +1,5 @@
-import { apiClient } from "./client";
-import mockProfile from "../features/profile/mockData.json";
+import { apiClient } from "./client.js";
+import mockProfile from "../features/profile/mockData.json" with { type: "json" };
 
 /**
  * WorkSphere Employee Profile & Skills API Client (US-03, US-34 / Issues #39, #161)
