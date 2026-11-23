@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../../api/adminApi";
@@ -8,6 +8,8 @@ import CreateUserModal from "./CreateUserModal";
 import StatusToggleModal from "./StatusToggleModal";
 import RoleChangeModal from "./RoleChangeModal";
 import ResetPasswordModal from "./ResetPasswordModal";
+import { getLockedAccounts, mergeLockState } from "./lockState";
+import useUnlockAccount from "./useUnlockAccount";
 import "./admin.css";
 
 const ROLE_OPTIONS = [
@@ -83,6 +85,19 @@ export function UserManagementPage() {
     keepPreviousData: true,
   });
 
+  // Lock state is not part of the user list; it comes from ACCOUNT_LOCKED anomaly alerts
+  const { data: anomalyAlerts = [] } = useQuery({
+    queryKey: ["admin", "anomaly-alerts"],
+    queryFn: adminApi.getAnomalyAlerts,
+    refetchInterval: 30000,
+    staleTime: 10000,
+    enabled: isAuthorizedAdmin,
+  });
+  const lockedAccounts = useMemo(() => getLockedAccounts(anomalyAlerts), [anomalyAlerts]);
+
+  // TanStack Mutation: Unlock account (US-48)
+  const unlockMutation = useUnlockAccount(addToast);
+
   // TanStack Mutation: Create user
   const createMutation = useMutation({
     mutationFn: (payload) => adminApi.createUser(payload),
@@ -129,7 +144,9 @@ export function UserManagementPage() {
   const resetMutation = useMutation({
     mutationFn: ({ accountId, newPassword }) => adminApi.resetUserPassword(accountId, newPassword),
     onSuccess: () => {
+      // A password reset also clears any lockout, so refresh the lock badges too
       queryClient.invalidateQueries({ queryKey: ["admin", "users"] });
+      queryClient.invalidateQueries({ queryKey: ["admin", "anomaly-alerts"] });
       addToast("success", "Temporary password successfully provisioned.");
     },
     onError: (err) => {
@@ -160,7 +177,7 @@ export function UserManagementPage() {
     );
   }
 
-  const usersList = usersData?.items || [];
+  const usersList = mergeLockState(usersData?.items || [], lockedAccounts);
   const totalCount = usersData?.total ?? usersList.length;
   const totalPages = usersData?.pages || Math.max(1, Math.ceil(totalCount / pageSize));
 
@@ -405,6 +422,10 @@ export function UserManagementPage() {
           onToggleStatus={(user) => setSelectedUserForStatus(user)}
           onChangeRole={(user) => setSelectedUserForRole(user)}
           onResetPassword={(user) => setSelectedUserForReset(user)}
+          onUnlock={(user) =>
+            unlockMutation.mutate({ accountId: user.account_id || user.id, email: user.email })
+          }
+          unlockingAccountId={unlockMutation.isPending ? unlockMutation.variables?.accountId : null}
         />
 
         {/* Modals */}
