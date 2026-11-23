@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { getProjectTasks, getReviewQueue, getProgressFillClass } from "../../api/tasksApi";
 import { getProjects } from "../../api/projectsApi";
+import { apiClient } from "../../api/client.js";
 import { teamApi } from "../../api/teamApi";
 import { useAuth } from "../../context/AuthContext";
 import CreateTaskModal from "./CreateTaskModal";
@@ -85,8 +86,24 @@ export default function TeamLeadTaskWorkspace() {
     return String(ledTeamIds[0]);
   }, [ledTeamIds, selectedTeamId]);
 
+  // Map each team id to the project that holds it, so the lead lands on their own team's project.
+  const { data: teamProjectMap = {} } = useQuery({
+    queryKey: ["projects", "team-project-map", projects.map((p) => p.project_id).join(",")],
+    enabled: projects.length > 0 && ledTeamIds.length > 0,
+    queryFn: async () => {
+      const lists = await Promise.all(
+        projects.map(async (p) => {
+          const teams = await apiClient.get(`/api/v1/projects/${p.project_id}/teams`);
+          return (Array.isArray(teams) ? teams : []).map((t) => [t.team_id, p.project_id]);
+        })
+      );
+      return Object.fromEntries(lists.flat());
+    },
+  });
+
   const [selectedProjectId, setSelectedProjectId] = useState("");
-  const activeProjectId = selectedProjectId || (projects.length > 0 ? String(projects[0].project_id) : "1");
+  const ledProjectId = activeTeamId ? teamProjectMap[Number(activeTeamId)] : undefined;
+  const activeProjectId = selectedProjectId || (ledProjectId ? String(ledProjectId) : "");
 
   // Fetch tasks for the project and team
   const {
@@ -270,6 +287,7 @@ export default function TeamLeadTaskWorkspace() {
             disabled={isLoadingProjects || projects.length === 0}
             title="Switch project workspace"
           >
+            {!activeProjectId && <option value="">Select a project</option>}
             {projects.map((p) => (
               <option key={p.project_id} value={p.project_id}>
                 {p.name} ({p.project_code || `#${p.project_id}`})

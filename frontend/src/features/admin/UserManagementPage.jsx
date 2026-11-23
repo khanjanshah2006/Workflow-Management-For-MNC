@@ -378,7 +378,17 @@ export function UserManagementPage() {
               fontSize: "13.5px",
             }}
           >
-            Failed to fetch user accounts: {error?.message || "Ensure the backend server is reachable."}
+            <span>
+              Failed to fetch user accounts: {error?.message || "Ensure the backend server is reachable."}
+            </span>{" "}
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="btn btn-secondary"
+              style={{ marginLeft: "8px", padding: "4px 10px", fontSize: "13px", borderRadius: "6px" }}
+            >
+              Retry
+            </button>
           </div>
         )}
 
@@ -386,6 +396,7 @@ export function UserManagementPage() {
         <UserTable
           users={usersList}
           isLoading={isLoading}
+          isError={isError}
           currentUser={currentAdmin}
           page={page}
           totalPages={totalPages}

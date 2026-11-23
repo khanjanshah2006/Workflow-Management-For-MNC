@@ -16,6 +16,7 @@ const ROLE_DISPLAY_NAMES = {
 export const UserTable = ({
   users = [],
   isLoading = false,
+  isError = false,
   currentUser = null,
   page = 1,
   totalPages = 1,
@@ -40,6 +41,9 @@ export const UserTable = ({
       </div>
     );
   }
+
+  // On a failed request the page shows its error banner (with Retry); don't claim there are no users.
+  if (isError) return null;
 
   if (!users || users.length === 0) {
     return (

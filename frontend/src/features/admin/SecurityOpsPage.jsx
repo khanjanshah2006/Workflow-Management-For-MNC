@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { useAuth, normalizeRole } from "../../hooks/useAuth";
+import { PLATFORM_ADMINS } from "../../auth/session";
 import AnomalyAlertsBanner from "./AnomalyAlertsBanner";
 import SystemParamsTable from "./SystemParamsTable";
 import ActiveGrantsTable from "./ActiveGrantsTable";
@@ -17,20 +18,20 @@ import "./admin.css";
  *  - US-46: Operational System Parameters
  *  - US-49: Real-Time Security Anomaly Alerts
  *
- * RBAC: Strictly protected — Only accessible to SYSTEM_ADMIN role.
- * (ADMIN, PM, HR, EMPLOYEE, CLIENT and other roles are strictly denied).
+ * RBAC: Restricted to platform administrators (ADMIN, SYSTEM_ADMIN), matching
+ * the backend PLATFORM_ADMINS guard. PM, HR, EMPLOYEE, CLIENT and other roles are denied.
  */
 export function SecurityOpsPage() {
   const queryClient = useQueryClient();
   const { user } = useAuth();
   const [isGrantModalOpen, setIsGrantModalOpen] = useState(false);
 
-  // Strict RBAC enforcement: ONLY SYSTEM_ADMIN is authorized
+  // RBAC enforcement: platform administrators (ADMIN, SYSTEM_ADMIN) are authorized
   const currentRole = normalizeRole(user?.role || user?.user_type);
-  const isSystemAdmin = currentRole === "SYSTEM_ADMIN";
+  const isPlatformAdmin = PLATFORM_ADMINS.includes(currentRole);
 
-  // RBAC Gate: Non-SYSTEM_ADMIN users are strictly denied access
-  if (!isSystemAdmin) {
+  // RBAC Gate: users outside PLATFORM_ADMINS are denied access
+  if (!isPlatformAdmin) {
     return (
       <section className="page security-ops-page" aria-labelledby="rbac-denied-heading">
         <div className="security-ops-container">
@@ -62,7 +63,7 @@ export function SecurityOpsPage() {
 
             <div style={{ maxWidth: "520px" }}>
               <span className="modal-eyebrow" style={{ color: "#dc2626" }}>
-                RBAC PROTECTED · SYSTEM ADMINISTRATORS ONLY
+                RBAC PROTECTED · PLATFORM ADMINISTRATORS ONLY
               </span>
               <h1
                 id="rbac-denied-heading"
@@ -76,8 +77,8 @@ export function SecurityOpsPage() {
                 Access Restricted
               </h1>
               <p style={{ fontSize: "14px", color: "#64748b", lineHeight: "1.55", margin: 0 }}>
-                The Security Operations Admin Console is strictly reserved for users with the{" "}
-                <strong>SYSTEM_ADMIN</strong> role. Standard <strong>ADMIN</strong>, <strong>PM</strong>, or other roles
+                The Security Operations Admin Console is reserved for platform administrators:{" "}
+                <strong>ADMIN</strong> and <strong>SYSTEM_ADMIN</strong>. <strong>PM</strong>, or other roles
                 do not possess the required privilege level. Current account:{" "}
                 <code>{user?.email || "Unauthenticated User"}</code> &bull; Role:{" "}
                 <code>{currentRole || "None"}</code>.
