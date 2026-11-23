@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { useSession, normalizeRole } from "../../auth/session.js";
+import { useSession, normalizeRole, IT_STAFF } from "../../auth/session.js";
 import { useAuth } from "../../hooks/useAuth.js";
 import { supportApi, calculateSLA } from "../../api/supportApi.js";
 import TicketFilterBar from "./TicketFilterBar.jsx";
@@ -18,7 +18,7 @@ import "./support.css";
  * and resolving or escalating to System Administrator.
  */
 
-const ALLOWED_SUPPORT_ROLES = ["IT_SUPPORT", "ADMIN", "SYSTEM_ADMIN"];
+const ALLOWED_SUPPORT_ROLES = IT_STAFF;
 
 // Priority rank order for sorting
 const PRIORITY_ORDER = {
@@ -46,19 +46,8 @@ export default function ITSupportDashboard() {
   const rawRole = user?.role || user?.user_type || "";
   const normalizedUserRole = normalizeRole(rawRole);
 
-  // In DEV environment, allow role switching for testing accessibility
-  const [devRoleOverride, setDevRoleOverride] = useState(() => {
-    if (typeof window !== "undefined" && window.__wmsDevSupportRole) {
-      return window.__wmsDevSupportRole;
-    }
-    return "";
-  });
-
-  const effectiveRole = devRoleOverride || normalizedUserRole;
-  const isAuthorized =
-    ALLOWED_SUPPORT_ROLES.includes(effectiveRole) ||
-    // Default to authorized in DEV mode if no role is explicitly set
-    (import.meta.env?.DEV && !effectiveRole);
+  const effectiveRole = normalizedUserRole;
+  const isAuthorized = ALLOWED_SUPPORT_ROLES.includes(effectiveRole);
 
   // Tickets state
   const [tickets, setTickets] = useState([]);
@@ -679,32 +668,6 @@ export default function ITSupportDashboard() {
 
   return (
     <section className="page support-dashboard-page" aria-label="IT Support Triage Console">
-      {/* Dev role banner */}
-      {import.meta.env?.DEV && (
-        <div className="dev-role-switcher" role="region" aria-label="Development Role Switcher">
-          <span>🛠 Dev Mode: Viewing console as <strong>{effectiveRole || "IT_SUPPORT"}</strong></span>
-          <div className="dev-role-controls">
-            <label htmlFor="dev-role-select">Role Simulation:</label>
-            <select
-              id="dev-role-select"
-              className="dev-role-select"
-              value={effectiveRole}
-              onChange={(e) => {
-                setDevRoleOverride(e.target.value);
-                if (typeof window !== "undefined") {
-                  window.__wmsDevSupportRole = e.target.value;
-                }
-              }}
-            >
-              <option value="IT_SUPPORT">IT_SUPPORT</option>
-              <option value="ADMIN">ADMIN</option>
-              <option value="SYSTEM_ADMIN">SYSTEM_ADMIN</option>
-              <option value="EMPLOYEE">EMPLOYEE (Test Unauthorized)</option>
-            </select>
-          </div>
-        </div>
-      )}
-
       {/* Page Header */}
       <header className="support-header">
         <div className="support-header-info">

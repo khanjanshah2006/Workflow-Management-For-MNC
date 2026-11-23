@@ -153,7 +153,7 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
 
   const getRoleBadgeClass = (role) => {
     const r = (role || "").toUpperCase();
-    if (r === "PM" || r === "PROJECT_MANAGER") return "role-badge role-badge-pm";
+    if (r === "PM") return "role-badge role-badge-pm";
     if (r === "ADMIN" || r === "SYSTEM_ADMIN") return "role-badge role-badge-admin";
     if (r === "HR") return "role-badge role-badge-hr";
     if (r === "IT" || r === "DEVOPS") return "role-badge role-badge-it";

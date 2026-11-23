@@ -4,7 +4,6 @@ import {
   Route,
   Navigate,
   useLocation,
-  Outlet,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -32,7 +31,13 @@ import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
 import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
 import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
-import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
+import {
+  ROLES,
+  INTERNAL_ROLES,
+  PLATFORM_ADMINS,
+  IT_STAFF,
+  getHomeRouteForRole,
+} from "./auth/session";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -114,7 +119,7 @@ function App() {
               <Route
                 path="/client"
                 element={
-                  <ProtectedRoute allowedRoles={["CLIENT"]}>
+                  <ProtectedRoute allowedRoles={[ROLES.CLIENT]}>
                     <ClientPortalLayout />
                   </ProtectedRoute>
                 }
@@ -150,7 +155,7 @@ function App() {
                 <Route
                   path="/projects"
                   element={
-                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <ProjectListPage />
                     </ProtectedRoute>
                   }
@@ -158,7 +163,7 @@ function App() {
                 <Route
                   path="/projects/:projectId"
                   element={
-                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <ProjectDetailPage />
                     </ProtectedRoute>
                   }
@@ -190,6 +195,9 @@ function App() {
                   }
                 />
 
+                {/* S1-FE-2 routes */}
+                {/* S1-FE-3 routes */}
+
                 {/* Tasks: Guarded for internal roles */}
                 <Route
                   path="/tasks"
@@ -202,7 +210,7 @@ function App() {
                 <Route
                   path="/team-lead/tasks"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.PM, ROLES.ADMIN]}>
                       <TeamLeadTaskWorkspace />
                     </ProtectedRoute>
                   }
@@ -210,17 +218,17 @@ function App() {
                 <Route
                   path="/tasks/team"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.PM, ROLES.ADMIN]}>
                       <TeamLeadTaskWorkspace />
                     </ProtectedRoute>
                   }
                 />
 
-                {/* Support: Guarded for internal roles */}
+                {/* Support: Guarded for IT staff */}
                 <Route
                   path="/support"
                   element={
-                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                    <ProtectedRoute allowedRoles={IT_STAFF}>
                       <ITSupportDashboard />
                     </ProtectedRoute>
                   }
@@ -228,7 +236,7 @@ function App() {
                 <Route
                   path="/support/tickets"
                   element={
-                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                    <ProtectedRoute allowedRoles={IT_STAFF}>
                       <ITSupportDashboard />
                     </ProtectedRoute>
                   }
@@ -236,11 +244,13 @@ function App() {
                 <Route
                   path="/it-support"
                   element={
-                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                    <ProtectedRoute allowedRoles={IT_STAFF}>
                       <ITSupportDashboard />
                     </ProtectedRoute>
                   }
                 />
+
+                {/* S8-FE-3 routes */}
 
                 {/* Profile: Guarded for internal roles */}
                 <Route
@@ -252,11 +262,14 @@ function App() {
                   }
                 />
 
+                {/* S2-FE-2 routes */}
+                {/* S3-FE-5 routes */}
+
                 {/* Admin: Guarded & role permitted */}
                 <Route
                   path="/admin"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <Navigate to="/admin/users" replace />
                     </ProtectedRoute>
                   }
@@ -264,7 +277,7 @@ function App() {
                 <Route
                   path="/admin/users"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <UserManagementPage />
                     </ProtectedRoute>
                   }
@@ -272,17 +285,19 @@ function App() {
                 <Route
                   path="/admin/security"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <SecurityOpsPage />
                     </ProtectedRoute>
                   }
                 />
 
+                {/* S9-FE-2 routes */}
+
                 {/* S4-FE-1 routes (Employee Leave Application & History: /leave) */}
                 <Route
                   path="/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["EMPLOYEE", "TEAM_LEAD"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.EMPLOYEE, ROLES.TEAM_LEAD]}>
                       <LeaveDashboardPage />
                     </ProtectedRoute>
                   }
@@ -291,7 +306,7 @@ function App() {
                 <Route
                   path="/team-lead/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "HR", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.HR, ROLES.ADMIN]}>
                       <TeamLeaveTriagePage />
                     </ProtectedRoute>
                   }
@@ -300,7 +315,7 @@ function App() {
                 <Route
                   path="/hr/leave-policies"
                   element={
-                    <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.HR, ROLES.ADMIN]}>
                       <LeavePolicyAdminPage />
                     </ProtectedRoute>
                   }
@@ -309,7 +324,7 @@ function App() {
                 <Route
                   path="/pm/risk-dashboard"
                   element={
-                    <ProtectedRoute allowedRoles={["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <PMRiskDashboardPage />
                     </ProtectedRoute>
                   }
@@ -320,7 +335,7 @@ function App() {
                 <Route
                   path="/executive"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.MNC_EXECUTIVE, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
                       <Navigate to="/executive/console" replace />
                     </ProtectedRoute>
                   }
@@ -328,7 +343,7 @@ function App() {
                 <Route
                   path="/executive/console"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.MNC_EXECUTIVE, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
                       <ExecutiveConsolePage />
                     </ProtectedRoute>
                   }

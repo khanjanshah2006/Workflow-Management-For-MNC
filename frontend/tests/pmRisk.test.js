@@ -436,18 +436,15 @@ describe("6. PM Risk Dashboard - Seed Demo Data Scenarios & Shape Verification",
 });
 
 describe("7. PM Risk Dashboard - Route Authorization & Role Guard (US-23 / RBAC)", () => {
-  test("navConfig exposes /pm/risk-dashboard to PM, ADMIN and SYSTEM_ADMIN only", () => {
+  test("navConfig exposes /pm/risk-dashboard to PM and ADMIN only", () => {
     const pmNav = filterNavForRole(navConfig, "PM");
     assert.ok(pmNav.some((item) => item.path === "/pm/risk-dashboard"));
-
-    const projectManagerNav = filterNavForRole(navConfig, "PROJECT_MANAGER");
-    assert.ok(projectManagerNav.some((item) => item.path === "/pm/risk-dashboard"));
 
     const adminNav = filterNavForRole(navConfig, "ADMIN");
     assert.ok(adminNav.some((item) => item.path === "/pm/risk-dashboard"));
 
     const sysAdminNav = filterNavForRole(navConfig, "SYSTEM_ADMIN");
-    assert.ok(sysAdminNav.some((item) => item.path === "/pm/risk-dashboard"));
+    assert.equal(sysAdminNav.some((item) => item.path === "/pm/risk-dashboard"), false);
   });
 
   test("navConfig strictly denies EMPLOYEE, HR, IT_SUPPORT, and CLIENT roles", () => {

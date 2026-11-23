@@ -32,16 +32,29 @@ export const AuthProvider = ({ children }) => {
           const meResponse = await authApi.getMe();
           const verifiedUser = meResponse?.user || meResponse;
           if (isMounted && verifiedUser) {
-            setUser(verifiedUser);
-            setSession({ access_token: existingToken, user: verifiedUser });
-            localStorage.setItem("wms_user", JSON.stringify(verifiedUser));
+            const normalizedUser = {
+              account_id: verifiedUser.account_id || "",
+              email: verifiedUser.email || "",
+              user_type: verifiedUser.user_type || "",
+              role: verifiedUser.role || verifiedUser.user_type || "",
+              is_active: Boolean(verifiedUser.is_active),
+              emp_id: verifiedUser.emp_id ?? null,
+              led_team_ids: Array.isArray(verifiedUser.led_team_ids) ? verifiedUser.led_team_ids : [],
+              team_ids: Array.isArray(verifiedUser.team_ids) ? verifiedUser.team_ids : [],
+              active_elevated_roles: Array.isArray(verifiedUser.active_elevated_roles) ? verifiedUser.active_elevated_roles : [],
+            };
+            setUser(normalizedUser);
+            setSession({ access_token: existingToken, user: normalizedUser });
+            localStorage.setItem("wms_user", JSON.stringify(normalizedUser));
           }
         } catch (err) {
           // If token rejected with 401, clear credentials
           if (err?.status === 401) {
             clearSession();
             setStoredToken("");
-            localStorage.removeItem("wms_user");
+            if (typeof localStorage !== "undefined") {
+              localStorage.removeItem("wms_user");
+            }
             if (isMounted) {
               setUser(null);
               setToken(null);
@@ -88,20 +101,34 @@ export const AuthProvider = ({ children }) => {
         console.warn("GET /api/v1/auth/me check completed with fallback user:", meError?.message);
       }
 
-      setUser(authenticatedUser);
+      const normalizedUser = authenticatedUser
+        ? {
+            account_id: authenticatedUser.account_id || "",
+            email: authenticatedUser.email || "",
+            user_type: authenticatedUser.user_type || "",
+            role: authenticatedUser.role || authenticatedUser.user_type || "",
+            is_active: Boolean(authenticatedUser.is_active),
+            emp_id: authenticatedUser.emp_id ?? null,
+            led_team_ids: Array.isArray(authenticatedUser.led_team_ids) ? authenticatedUser.led_team_ids : [],
+            team_ids: Array.isArray(authenticatedUser.team_ids) ? authenticatedUser.team_ids : [],
+            active_elevated_roles: Array.isArray(authenticatedUser.active_elevated_roles) ? authenticatedUser.active_elevated_roles : [],
+          }
+        : null;
+
+      setUser(normalizedUser);
       setSession({
         access_token: accessToken,
         refresh_token: data.refresh_token,
         token_type: data.token_type,
         expires_in: data.expires_in,
-        user: authenticatedUser,
+        user: normalizedUser,
       });
 
-      if (authenticatedUser) {
-        localStorage.setItem("wms_user", JSON.stringify(authenticatedUser));
+      if (normalizedUser && typeof localStorage !== "undefined") {
+        localStorage.setItem("wms_user", JSON.stringify(normalizedUser));
       }
 
-      return authenticatedUser;
+      return normalizedUser;
     } finally {
       setIsLoading(false);
     }

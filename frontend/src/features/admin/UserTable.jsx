@@ -5,18 +5,18 @@ const ROLE_DISPLAY_NAMES = {
   ADMIN: "System Admin",
   SYSTEM_ADMIN: "System Admin",
   PM: "Project Manager",
-  PROJECT_MANAGER: "Project Manager",
   EMPLOYEE: "Employee",
-  HR: "HR Manager",
-  HR_MANAGER: "HR Manager",
+  HR: "HR",
   CLIENT: "Client",
   IT_SUPPORT: "IT Support",
   TEAM_LEAD: "Team Lead",
+  MNC_EXECUTIVE: "MNC Executive",
 };
 
 export const UserTable = ({
   users = [],
   isLoading = false,
+  isError = false,
   currentUser = null,
   page = 1,
   totalPages = 1,
@@ -41,6 +41,9 @@ export const UserTable = ({
       </div>
     );
   }
+
+  // On a failed request the page shows its error banner (with Retry); don't claim there are no users.
+  if (isError) return null;
 
   if (!users || users.length === 0) {
     return (
