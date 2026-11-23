@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { authApi } from "../api/authApi";
 import { setStoredToken, getStoredToken } from "../api/client";
 import { setSession, clearSession, normalizeRole } from "../auth/session";
+import { clearPendingMfa } from "../auth/pendingMfa";
+import { submitPasswordLogin } from "../auth/loginFlow";
 
 const AuthContext = createContext(null);
 
@@ -74,61 +76,79 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   /**
+   * Finishes a sign-in from a token response (password login without MFA,
+   * POST /api/v1/auth/mfa/login or POST /api/v1/auth/mfa/verify with a setup token):
+   * stores the access token, queries GET /api/v1/auth/me and stores the user.
+   * @param {Object} data Token response with access_token and optional user
+   * @returns {Promise<Object|null>} the normalized user
+   */
+  const completeSignIn = async (data) => {
+    const accessToken = data?.access_token || data?.token;
+
+    if (!accessToken) {
+      throw new Error("Authentication failed: No access token returned.");
+    }
+
+    clearPendingMfa();
+    setToken(accessToken);
+    setStoredToken(accessToken);
+
+    let authenticatedUser = data.user || null;
+    try {
+      const meResponse = await authApi.getMe();
+      authenticatedUser = meResponse?.user || meResponse || authenticatedUser;
+    } catch (meError) {
+      console.warn("GET /api/v1/auth/me check completed with fallback user:", meError?.message);
+    }
+
+    const normalizedUser = authenticatedUser
+      ? {
+          account_id: authenticatedUser.account_id || "",
+          email: authenticatedUser.email || "",
+          user_type: authenticatedUser.user_type || "",
+          role: authenticatedUser.role || authenticatedUser.user_type || "",
+          is_active: Boolean(authenticatedUser.is_active),
+          emp_id: authenticatedUser.emp_id ?? null,
+          led_team_ids: Array.isArray(authenticatedUser.led_team_ids) ? authenticatedUser.led_team_ids : [],
+          team_ids: Array.isArray(authenticatedUser.team_ids) ? authenticatedUser.team_ids : [],
+          active_elevated_roles: Array.isArray(authenticatedUser.active_elevated_roles) ? authenticatedUser.active_elevated_roles : [],
+        }
+      : null;
+
+    setUser(normalizedUser);
+    setSession({
+      access_token: accessToken,
+      refresh_token: data.refresh_token,
+      token_type: data.token_type,
+      expires_in: data.expires_in,
+      user: normalizedUser,
+    });
+
+    if (normalizedUser && typeof localStorage !== "undefined") {
+      localStorage.setItem("wms_user", JSON.stringify(normalizedUser));
+    }
+
+    return normalizedUser;
+  };
+
+  /**
    * Submits login credentials to POST /api/v1/auth/login.
-   * On success, stores token in state/storage, queries GET /api/v1/auth/me,
-   * stores user in state/storage, and returns verified profile.
+   * - Tokens returned: completes the sign-in and resolves { type: "authenticated", user }.
+   * - mfa_required / mfa_setup_required: keeps the mfa_token in memory only (never in
+   *   storage) and resolves { type, route } so the caller can open the MFA screen.
+   * Rejects with the ApiError for 401 / 423 / 429 and other failures.
    */
   const login = async (credentials) => {
     setIsLoading(true);
     try {
-      // 1. POST /api/v1/auth/login
-      const data = await authApi.login(credentials);
-      const accessToken = data.access_token || data.token;
+      const { outcome, data } = await submitPasswordLogin(credentials);
 
-      if (!accessToken) {
-        throw new Error("Authentication failed: No access token returned.");
+      if (outcome.type !== "authenticated") {
+        return { type: outcome.type, route: outcome.route };
       }
 
-      setToken(accessToken);
-      setStoredToken(accessToken);
-
-      // 2. Query GET /api/v1/auth/me
-      let authenticatedUser = data.user || null;
-      try {
-        const meResponse = await authApi.getMe();
-        authenticatedUser = meResponse?.user || meResponse || authenticatedUser;
-      } catch (meError) {
-        console.warn("GET /api/v1/auth/me check completed with fallback user:", meError?.message);
-      }
-
-      const normalizedUser = authenticatedUser
-        ? {
-            account_id: authenticatedUser.account_id || "",
-            email: authenticatedUser.email || "",
-            user_type: authenticatedUser.user_type || "",
-            role: authenticatedUser.role || authenticatedUser.user_type || "",
-            is_active: Boolean(authenticatedUser.is_active),
-            emp_id: authenticatedUser.emp_id ?? null,
-            led_team_ids: Array.isArray(authenticatedUser.led_team_ids) ? authenticatedUser.led_team_ids : [],
-            team_ids: Array.isArray(authenticatedUser.team_ids) ? authenticatedUser.team_ids : [],
-            active_elevated_roles: Array.isArray(authenticatedUser.active_elevated_roles) ? authenticatedUser.active_elevated_roles : [],
-          }
-        : null;
-
-      setUser(normalizedUser);
-      setSession({
-        access_token: accessToken,
-        refresh_token: data.refresh_token,
-        token_type: data.token_type,
-        expires_in: data.expires_in,
-        user: normalizedUser,
-      });
-
-      if (normalizedUser && typeof localStorage !== "undefined") {
-        localStorage.setItem("wms_user", JSON.stringify(normalizedUser));
-      }
-
-      return normalizedUser;
+      const authenticatedUser = await completeSignIn(data);
+      return { type: "authenticated", user: authenticatedUser };
     } finally {
       setIsLoading(false);
     }
@@ -138,6 +158,7 @@ export const AuthProvider = ({ children }) => {
    * Clears credentials and calls POST /api/v1/auth/logout.
    */
   const logout = async () => {
+    clearPendingMfa();
     try {
       await authApi.logout();
     } finally {
@@ -175,6 +196,7 @@ export const AuthProvider = ({ children }) => {
         isAuthenticated,
         isLoading,
         login,
+        completeSignIn,
         logout,
         hasRole,
       }}

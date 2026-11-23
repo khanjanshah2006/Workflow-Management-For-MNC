@@ -2,6 +2,7 @@ import React from "react";
 import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
 import NotificationBell from "../../components/common/NotificationBell";
+import { ROUTES } from "../../routes";
 import "./clientPortal.css";
 
 /**
@@ -59,6 +60,14 @@ export default function ClientPortalLayout() {
               {displayName.charAt(0).toUpperCase()}
             </div>
           </div>
+
+          <Link
+            to={ROUTES.ACCOUNT_SECURITY}
+            className="account-security-link"
+            title="Account security and MFA"
+          >
+            Security
+          </Link>
 
           <button
             type="button"

@@ -10,8 +10,10 @@ import { apiClient } from "./client.js";
  *   - Update User Status (PATCH /api/v1/admin/users/{id}/status)
  *   - Update User Role (PATCH /api/v1/admin/users/{id}/role)
  *   - Admin Password Reset (POST /api/v1/admin/users/{id}/reset-password)
+ *   - Unlock Account (POST /api/v1/admin/users/{id}/unlock)
  * - System Parameters (GET /api/v1/admin/system-params, PUT /api/v1/admin/system-params/{key})
- * - Time-Bound Elevated Access (POST /api/v1/admin/elevated-access, GET /api/v1/admin/elevated-access/active)
+ * - Time-Bound Elevated Access (POST /api/v1/admin/elevated-access, GET /api/v1/admin/elevated-access/active,
+ *   DELETE /api/v1/admin/elevated-access/{grant_id})
  * - Security Anomaly Alerts (GET /api/v1/admin/anomaly-alerts)
  */
 
@@ -149,21 +151,25 @@ export const adminApi = {
   },
 
   /**
-   * Revoke an active elevated access grant.
+   * Clear the failed-login lockout on an account (US-48).
+   * Endpoint: POST /api/v1/admin/users/{account_id}/unlock
+   * Rejects with ApiError status 409 when the account is not locked.
+   * @param {string} accountId User account ID
+   * @returns {Promise<Object>} Updated user account
+   */
+  unlockAccount: async (accountId) => {
+    return await apiClient.post(`/api/v1/admin/users/${encodeURIComponent(accountId)}/unlock`);
+  },
+
+  /**
+   * Revoke an active elevated access grant (US-45).
+   * Endpoint: DELETE /api/v1/admin/elevated-access/{grant_id}
+   * Rejects with ApiError status 409 when the grant is already revoked or expired.
+   * @param {number|string} grantId
+   * @returns {Promise<Object>} The revoked grant
    */
   revokeElevatedGrant: async (grantId) => {
-    try {
-      return await apiClient.delete(`/api/v1/admin/elevated-access/${encodeURIComponent(grantId)}`);
-    } catch (err) {
-      if (err?.status === 404 || err?.status === 405) {
-        throw new Error(
-          "Backend revoke endpoint (DELETE /api/v1/admin/elevated-access/:id) is not yet exposed by the backend router. Manual grant revocation requires backend Wave 2 implementation."
-        );
-      }
-      throw new Error(
-        err?.message || "Failed to revoke elevated access grant. Backend endpoint unavailable."
-      );
-    }
+    return await apiClient.delete(`/api/v1/admin/elevated-access/${encodeURIComponent(grantId)}`);
   },
 
   /**

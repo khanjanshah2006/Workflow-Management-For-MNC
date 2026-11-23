@@ -13,6 +13,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import ToastProvider from "./components/common/Toast";
 import LoginPage from "./features/auth/LoginPage";
+import MfaChallengePage from "./features/auth/MfaChallengePage";
+import MfaSetupPage from "./features/auth/MfaSetupPage";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
@@ -31,12 +33,14 @@ import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
 import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
 import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
+import AccountSecurityPage from "./features/account/AccountSecurityPage";
 import {
   ROLES,
   INTERNAL_ROLES,
   PLATFORM_ADMINS,
   IT_STAFF,
   getHomeRouteForRole,
+  isClient,
 } from "./auth/session";
 import "./App.css";
 
@@ -70,6 +74,15 @@ function RootRedirect() {
       : getHomeRouteForRole(role);
 
   return <Navigate to={targetPath} replace />;
+}
+
+/**
+ * Shell for pages every signed-in role can open: clients keep the client portal
+ * shell, everyone else gets the internal AppLayout.
+ */
+function RoleShell() {
+  const { role } = useAuth();
+  return isClient(role) ? <ClientPortalLayout /> : <AppLayout />;
 }
 
 function PagePlaceholder({ title, description }) {
@@ -110,6 +123,9 @@ function App() {
             <Routes>
               {/* Public Login Route */}
               <Route path="/login" element={<LoginPage />} />
+              {/* S9-FE-2: MFA steps (public; need a pending MFA token held in memory) */}
+              <Route path="/login/mfa" element={<MfaChallengePage />} />
+              <Route path="/login/mfa-setup" element={<MfaSetupPage />} />
 
               {/* Root route: role-based home redirection */}
               <Route path="/" element={<RootRedirect />} />
@@ -128,6 +144,17 @@ function App() {
                 <Route path="projects" element={<ClientProjectListPage />} />
                 <Route path="projects/:projectId" element={<ClientProjectDetailPage />} />
                 <Route path="*" element={<Navigate to="/client/projects" replace />} />
+              </Route>
+
+              {/* S9-FE-2: Account Security, open to every signed-in role */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <RoleShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/account/security" element={<AccountSecurityPage />} />
               </Route>
 
               {/* Guarded Internal Application Shell: requires internal role */}
@@ -291,7 +318,7 @@ function App() {
                   }
                 />
 
-                {/* S9-FE-2 routes */}
+                {/* S9-FE-2 routes: /login/mfa, /login/mfa-setup and /account/security are registered above */}
 
                 {/* S4-FE-1 routes (Employee Leave Application & History: /leave) */}
                 <Route

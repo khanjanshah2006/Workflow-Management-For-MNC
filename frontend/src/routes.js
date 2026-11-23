@@ -5,6 +5,8 @@
  */
 export const ROUTES = Object.freeze({
   LOGIN: "/login",
+  LOGIN_MFA: "/login/mfa",
+  LOGIN_MFA_SETUP: "/login/mfa-setup",
   DASHBOARD: "/dashboard",
   PROJECTS: "/projects",
   PROJECT_DETAIL: "/projects/:projectId",
