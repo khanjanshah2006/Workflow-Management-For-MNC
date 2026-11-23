@@ -59,7 +59,7 @@ export default function AssignTicketModal({
             setSelectedStaffId(formatted[0].id);
           }
         }
-      } catch (err) {
+      } catch {
         // Fallback to default list if not authorized to fetch admin users
         if (!ignore) {
           setSelectedStaffId(DEFAULT_IT_TEAM_MEMBERS[0].id);

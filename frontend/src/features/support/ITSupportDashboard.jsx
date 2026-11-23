@@ -4,8 +4,6 @@ import { useSession, normalizeRole, IT_STAFF } from "../../auth/session.js";
 import { useAuth } from "../../hooks/useAuth.js";
 import { supportApi, calculateSLA } from "../../api/supportApi.js";
 import {
-  allowedActions,
-  ACTIONS,
   buildAssignPayload,
   buildNotePayload,
   buildStatusPayload,
@@ -477,7 +475,7 @@ export default function ITSupportDashboard() {
   const handleAddInternalNote = async (ticketId, noteText) => {
     try {
       const payload = buildNotePayload(noteText);
-      const serverActivity = await supportApi.addInternalNote(ticketId, payload);
+      await supportApi.addInternalNote(ticketId, payload);
 
       // Refresh ticket details to retrieve updated timeline
       const freshTicket = await supportApi.getTicket(ticketId);

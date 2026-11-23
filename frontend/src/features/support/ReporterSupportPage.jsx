@@ -159,8 +159,6 @@ export default function ReporterSupportPage() {
       });
       setIsCreateOpen(false);
       await fetchMyTickets();
-    } catch (err) {
-      throw err;
     } finally {
       setIsSubmitting(false);
     }
