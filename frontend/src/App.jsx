@@ -29,6 +29,8 @@ import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
+import SkillRequestQueuePage from "./features/skills/SkillRequestQueuePage";
+import { ROUTES } from "./constants/routes";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
@@ -306,6 +308,15 @@ function App() {
                   element={
                     <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
                       <LeavePolicyAdminPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* US-34 / Issue #161 routes (Skill Change Proposals Review Queue: /skill-requests) */}
+                <Route
+                  path={ROUTES.SKILL_REQUESTS}
+                  element={
+                    <ProtectedRoute allowedRoles={["HR", "TEAM_LEAD", "ADMIN"]}>
+                      <SkillRequestQueuePage />
                     </ProtectedRoute>
                   }
                 />

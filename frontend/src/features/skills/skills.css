@@ -1,0 +1,290 @@
+/* ==========================================================================
+   Skill Proposals Review Queue & Decision Styles (US-34 / Issue #161)
+   ========================================================================== */
+
+.skill-queue-page {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+.skill-queue-header {
+  margin-bottom: 24px;
+}
+
+.skill-queue-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+}
+
+.skill-queue-subtitle {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Tabs */
+.skill-queue-tabs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-bottom: 2px solid #e2e8f0;
+  margin-bottom: 20px;
+}
+
+.skill-queue-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  cursor: pointer;
+  transition: all 150ms ease;
+}
+
+.skill-queue-tab:hover {
+  color: #1e293b;
+}
+
+.skill-queue-tab.active {
+  color: #2563eb;
+  border-bottom-color: #2563eb;
+}
+
+.skill-tab-count {
+  font-size: 11px;
+  font-weight: 700;
+  background: #f1f5f9;
+  color: #475569;
+  padding: 2px 7px;
+  border-radius: 12px;
+}
+
+.skill-queue-tab.active .skill-tab-count {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+/* Queue Table */
+.skill-queue-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+  overflow: hidden;
+}
+
+.skill-queue-table-container {
+  overflow-x: auto;
+}
+
+.skill-queue-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+  text-align: left;
+}
+
+.skill-queue-table th {
+  background: #f8fafc;
+  color: #475569;
+  font-weight: 600;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  padding: 12px 16px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.skill-queue-table td {
+  padding: 14px 16px;
+  border-bottom: 1px solid #f1f5f9;
+  color: #1e293b;
+  vertical-align: middle;
+}
+
+.skill-queue-table tr:hover td {
+  background: #fbfcfe;
+}
+
+.skill-employee-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.skill-employee-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.skill-employee-meta {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.skill-change-display {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.skill-change-flow {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.skill-change-arrow {
+  color: #3b82f6;
+  font-weight: 700;
+}
+
+.skill-change-details {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.skill-justification-cell {
+  max-width: 260px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #334155;
+  word-break: break-word;
+}
+
+/* Review Decision Actions */
+.skill-queue-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.skill-btn-approve {
+  background: #16a34a;
+  color: #ffffff;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.skill-btn-approve:hover:not(:disabled) {
+  background: #15803d;
+}
+
+.skill-btn-reject {
+  background: #ffffff;
+  color: #dc2626;
+  border: 1px solid #fca5a5;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.skill-btn-reject:hover:not(:disabled) {
+  background: #fef2f2;
+  border-color: #ef4444;
+}
+
+/* Pagination */
+.skill-pagination-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: #f8fafc;
+  border-top: 1px solid #e2e8f0;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.skill-pagination-buttons {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.skill-pagination-btn {
+  background: #ffffff;
+  color: #334155;
+  border: 1px solid #cbd5e1;
+  padding: 5px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.skill-pagination-btn:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.skill-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  border-color: #e2e8f0;
+}
+
+.skill-pagination-page-indicator {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+/* Decision Modal */
+.skill-decision-modal-dialog {
+  background: #ffffff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  animation: skill-modal-scale-in 180ms ease-out;
+}
+
+.skill-decision-summary {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+}
+
+.skill-decision-summary-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.skill-decision-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.skill-decision-val {
+  font-weight: 600;
+  color: #0f172a;
+  text-align: right;
+}

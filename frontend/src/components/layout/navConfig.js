@@ -69,6 +69,12 @@ export const navConfig = [
     roles: ["HR", "ADMIN"],
   },
   {
+    path: "/skill-requests",
+    label: "Skill Requests",
+    icon: "🎯",
+    roles: ["HR", "TEAM_LEAD", "ADMIN", "SYSTEM_ADMIN"],
+  },
+  {
     path: "/support",
     label: "IT Support",
     icon: "🛠",
