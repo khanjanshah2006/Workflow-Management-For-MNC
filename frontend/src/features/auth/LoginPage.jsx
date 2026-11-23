@@ -1,24 +1,17 @@
 import React, { useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../../context/AuthContext";
-import { DEMO_USERS } from "../../api/authApi";
+import { DEMO_USERS } from "../../auth/demoUsers";
 import { getHomeRouteForRole } from "../../auth/session";
 import "./LoginPage.css";
-
-export { getHomeRouteForRole };
-
-/**
- * Maps authenticated user to their role-based destination.
- * Reuses the central getHomeRouteForRole helper.
- */
-export function getRoleDefaultRedirect(user) {
-  return getHomeRouteForRole(user);
-}
 
 export const LoginPage = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { login } = useAuth();
+
+  const searchParams = new URLSearchParams(location.search);
+  const isExpired = searchParams.get("expired") === "1";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -59,20 +52,17 @@ export const LoginPage = () => {
 
     setIsSubmitting(true);
     try {
-      // Acceptance Criteria 1 & 2:
       // Submitting credentials calls POST /api/v1/auth/login and queries GET /api/v1/auth/me
       const authenticatedUser = await login({
         email: email.trim(),
         password,
       });
 
-      // Acceptance Criteria 2:
-      // Redirect by role: SYSTEM_ADMIN → /admin, PROJECT_MANAGER → /projects
       const requestedFrom = location.state?.from?.pathname;
       const targetPath =
         requestedFrom && requestedFrom !== "/login"
           ? requestedFrom
-          : getRoleDefaultRedirect(authenticatedUser);
+          : getHomeRouteForRole(authenticatedUser);
 
       navigate(targetPath, { replace: true });
     } catch (err) {
@@ -88,23 +78,7 @@ export const LoginPage = () => {
     const demo = DEMO_USERS[demoEmail];
     if (demo) {
       setEmail(demo.email);
-      const isWave3 = demo.email.endsWith("@company.com") || demo.email === "client@acme.com";
-      const isDev = Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV);
-
-      if (isWave3) {
-        // In development only, allow pre-filling the configurable seed password
-        if (Boolean(typeof import.meta !== "undefined" && import.meta.env?.DEV)) {
-          const devSeedPassword =
-            (typeof import.meta !== "undefined" && import.meta.env?.VITE_SEED_PASSWORD) ||
-            "Password@123";
-          setPassword(devSeedPassword);
-        } else {
-          setPassword("");
-        }
-      } else {
-        // Preserve non-Wave-3 demo credential behaviour
-        setPassword("password123");
-      }
+      setPassword("");
       setFieldErrors({});
       setServerError(null);
     }
@@ -118,6 +92,13 @@ export const LoginPage = () => {
           <h1>Sign In to WorkSphere</h1>
           <p>Workflow Management System for MNCs</p>
         </div>
+
+        {isExpired && !serverError && (
+          <div className="login-error-banner" role="alert">
+            <span>⚠</span>
+            <span>Your session expired. Please sign in again.</span>
+          </div>
+        )}
 
         {serverError && (
           <div className="login-error-banner" role="alert">
@@ -182,22 +163,24 @@ export const LoginPage = () => {
           </button>
         </form>
 
-        <div className="demo-credentials-section">
-          <div className="demo-title">Quick Demo Switcher (Testing / RBAC)</div>
-          <div className="demo-buttons-grid">
-            {Object.entries(DEMO_USERS).map(([demoEmail, user]) => (
-              <button
-                key={demoEmail}
-                type="button"
-                className="demo-btn"
-                onClick={() => handleQuickDemoFill(demoEmail)}
-              >
-                <span className="demo-btn-role">{user.role}</span>
-                <span className="demo-btn-email">{user.email}</span>
-              </button>
-            ))}
+        {import.meta.env.DEV && (
+          <div className="demo-credentials-section">
+            <div className="demo-title">Quick Demo Switcher (Testing / RBAC)</div>
+            <div className="demo-buttons-grid">
+              {Object.entries(DEMO_USERS).map(([demoEmail, user]) => (
+                <button
+                  key={demoEmail}
+                  type="button"
+                  className="demo-btn"
+                  onClick={() => handleQuickDemoFill(demoEmail)}
+                >
+                  <span className="demo-btn-role">{user.role}</span>
+                  <span className="demo-btn-email">{user.email}</span>
+                </button>
+              ))}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
