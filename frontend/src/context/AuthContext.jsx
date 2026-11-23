@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from "react";
 import { authApi } from "../api/authApi";
 import { setStoredToken, getStoredToken } from "../api/client";
 import { setSession, clearSession, normalizeRole } from "../auth/session";
-import { setPendingMfa, clearPendingMfa } from "../auth/pendingMfa";
-import { classifyLoginResponse } from "../auth/loginFlow";
+import { clearPendingMfa } from "../auth/pendingMfa";
+import { submitPasswordLogin } from "../auth/loginFlow";
 
 const AuthContext = createContext(null);
 
@@ -141,12 +141,9 @@ export const AuthProvider = ({ children }) => {
   const login = async (credentials) => {
     setIsLoading(true);
     try {
-      clearPendingMfa();
-      const data = await authApi.login(credentials);
-      const outcome = classifyLoginResponse(data);
+      const { outcome, data } = await submitPasswordLogin(credentials);
 
       if (outcome.type !== "authenticated") {
-        setPendingMfa({ token: outcome.mfaToken, step: outcome.type, email: credentials.email });
         return { type: outcome.type, route: outcome.route };
       }
 

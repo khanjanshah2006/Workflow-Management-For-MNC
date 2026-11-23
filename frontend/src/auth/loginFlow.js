@@ -2,8 +2,14 @@
  * Pure helpers that turn sign-in responses into what the UI should do next
  * (US-31 Admin MFA, US-48 / US-49 Account Lockout and login throttling).
  */
-import { MFA_STEP_CHALLENGE, MFA_STEP_SETUP } from "./pendingMfa.js";
+import {
+  MFA_STEP_CHALLENGE,
+  MFA_STEP_SETUP,
+  clearPendingMfa,
+  setPendingMfa,
+} from "./pendingMfa.js";
 import { ROUTES } from "../routes.js";
+import { authApi } from "../api/authApi.js";
 
 /** Submit stays disabled this long after a 423 (account locked). */
 export const LOCKED_SUBMIT_COOLDOWN_SECONDS = 30;
@@ -31,6 +37,25 @@ export function classifyLoginResponse(data) {
     return { type: MFA_STEP_CHALLENGE, mfaToken: data.mfa_token, route: MFA_CHALLENGE_ROUTE };
   }
   return { type: "authenticated" };
+}
+
+/**
+ * Password step of the sign-in: POST /api/v1/auth/login, then hold any MFA token in
+ * memory (never browser storage) when a second step is required.
+ * Rejects with the ApiError for 401 / 423 / 429 and other failures.
+ *
+ * @param {{ email: string, password: string }} credentials
+ * @param {{ login: Function }} [api] defaults to authApi
+ * @returns {Promise<{ outcome: ReturnType<typeof classifyLoginResponse>, data: Object }>}
+ */
+export async function submitPasswordLogin(credentials, api = authApi) {
+  clearPendingMfa();
+  const data = await api.login(credentials);
+  const outcome = classifyLoginResponse(data);
+  if (outcome.type !== "authenticated") {
+    setPendingMfa({ token: outcome.mfaToken, step: outcome.type, email: credentials.email });
+  }
+  return { outcome, data };
 }
 
 /**
