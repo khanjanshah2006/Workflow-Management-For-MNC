@@ -15,8 +15,8 @@ export const SIGN_IN_TIMED_OUT_MESSAGE = "Your sign-in timed out. Please sign in
 export const DEFAULT_LOCKED_MESSAGE =
   "Account locked. Try again later or contact an administrator.";
 
-export const MFA_CHALLENGE_ROUTE = `${ROUTES.LOGIN}/mfa`;
-export const MFA_SETUP_ROUTE = `${ROUTES.LOGIN}/mfa-setup`;
+export const MFA_CHALLENGE_ROUTE = ROUTES.LOGIN_MFA;
+export const MFA_SETUP_ROUTE = ROUTES.LOGIN_MFA_SETUP;
 
 /**
  * Classifies a 200 response from POST /api/v1/auth/login.

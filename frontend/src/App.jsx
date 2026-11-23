@@ -13,6 +13,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import ToastProvider from "./components/common/Toast";
 import LoginPage from "./features/auth/LoginPage";
+import MfaChallengePage from "./features/auth/MfaChallengePage";
+import MfaSetupPage from "./features/auth/MfaSetupPage";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
@@ -110,6 +112,9 @@ function App() {
             <Routes>
               {/* Public Login Route */}
               <Route path="/login" element={<LoginPage />} />
+              {/* S9-FE-2: MFA steps (public; need a pending MFA token held in memory) */}
+              <Route path="/login/mfa" element={<MfaChallengePage />} />
+              <Route path="/login/mfa-setup" element={<MfaSetupPage />} />
 
               {/* Root route: role-based home redirection */}
               <Route path="/" element={<RootRedirect />} />

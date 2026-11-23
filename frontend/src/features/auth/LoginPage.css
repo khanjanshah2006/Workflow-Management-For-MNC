@@ -190,3 +190,123 @@
   overflow: hidden;
   text-overflow: ellipsis;
 }
+
+/* MFA challenge, enrolment and account security (US-31) */
+.mfa-setup-card {
+  max-width: 480px;
+}
+
+.mfa-code-input {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 22px;
+  letter-spacing: 0.5em;
+  text-align: center;
+}
+
+.mfa-footer {
+  margin-top: 20px;
+  text-align: center;
+}
+
+.login-link-btn {
+  background: none;
+  border: none;
+  color: #4456d9;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+}
+
+.login-link-btn:hover {
+  text-decoration: underline;
+}
+
+.mfa-muted {
+  font-size: 13px;
+  color: #64748b;
+  text-align: center;
+  margin: 12px 0;
+}
+
+.mfa-enrollment {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.mfa-steps {
+  margin: 0;
+  padding-left: 20px;
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.6;
+}
+
+.mfa-qr-wrapper {
+  display: flex;
+  justify-content: center;
+}
+
+.mfa-qr {
+  width: 192px;
+  height: 192px;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px;
+  background: #ffffff;
+  box-sizing: content-box;
+}
+
+.mfa-qr-placeholder {
+  display: grid;
+  place-items: center;
+  font-size: 12px;
+  color: #94a3b8;
+}
+
+.mfa-secret-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.mfa-secret {
+  flex: 1;
+  min-width: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 9px 12px;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  color: #1e293b;
+  overflow-wrap: anywhere;
+}
+
+.mfa-copy-btn {
+  padding: 0 14px;
+  border-radius: 8px;
+  border: none;
+  background: #4456d9;
+  color: #ffffff;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.mfa-dev-hint {
+  background: #fffbeb;
+  border: 1px dashed #f59e0b;
+  color: #92400e;
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 12.5px;
+}
+
+.mfa-dev-hint code {
+  font-weight: 700;
+  letter-spacing: 0.1em;
+}
