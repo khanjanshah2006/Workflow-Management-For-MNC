@@ -1,8 +1,4 @@
 import { apiClient } from "./client.js";
-import {
-  getMockTickets,
-  updateMockTicket,
-} from "../features/support/mockSupportData.js";
 
 /**
  * Support Console API Service (S8: US-27 & US-28)
@@ -14,8 +10,6 @@ import {
  * - POST /api/v1/support/tickets/{id}/notes (internal troubleshooting notes)
  * - PUT /api/v1/support/tickets/{id}/status (status transition e.g. RESOLVED)
  * - PUT /api/v1/support/tickets/{id}/escalate (escalate to SysAdmin)
- *
- * Includes graceful DEV fallback to mock data when backend is not running or endpoints return 404.
  */
 
 // SLA Deadlines by Priority (in milliseconds)
@@ -176,30 +170,12 @@ export const supportApi = {
     const queryString = params.toString();
     const endpoint = `/api/v1/support/tickets${queryString ? `?${queryString}` : ""}`;
 
-    try {
-      const response = await apiClient.get(endpoint);
-      const rawList = Array.isArray(response)
-        ? response
-        : response?.tickets || [];
+    const response = await apiClient.get(endpoint);
+    const rawList = Array.isArray(response)
+      ? response
+      : response?.tickets || [];
 
-      return rawList.map(normalizeTicket);
-    } catch (err) {
-      // In DEV mode, fallback to rich mock data if backend is offline or endpoint 404
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        let list = getMockTickets();
-        if (filters.status && filters.status !== "ALL" && filters.status !== "all") {
-          list = list.filter((t) => t.status.toLowerCase() === filters.status.toLowerCase());
-        }
-        if (filters.category && filters.category !== "ALL" && filters.category !== "all") {
-          list = list.filter((t) => t.category.toLowerCase() === filters.category.toLowerCase());
-        }
-        if (filters.priority && filters.priority !== "ALL" && filters.priority !== "all") {
-          list = list.filter((t) => t.priority.toUpperCase() === filters.priority.toUpperCase());
-        }
-        return list.map(normalizeTicket);
-      }
-      throw err;
-    }
+    return rawList.map(normalizeTicket);
   },
 
   /**
@@ -207,219 +183,67 @@ export const supportApi = {
    * Primary: GET /api/v1/support/tickets/{id}
    */
   getTicketDetail: async (ticketId) => {
-    try {
-      const response = await apiClient.get(`/api/v1/support/tickets/${ticketId}`);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const mock = getMockTickets().find((t) => t.id === Number(ticketId));
-        if (mock) return normalizeTicket(mock);
-      }
-      throw err;
-    }
+    const response = await apiClient.get(`/api/v1/support/tickets/${ticketId}`);
+    return normalizeTicket(response);
   },
 
   /**
    * Assign a support ticket to an IT specialist or self.
-   * Wiring: PUT /api/v1/support/tickets/{id}/assign -> { "assigned_to_emp_id": current_user.emp_id }
+   * Wiring: PUT /api/v1/support/tickets/{id}/assign
    */
-  assignTicket: async (ticketId, { assigned_to, assigned_to_emp_id, assignee_name, assignee_email, reassignment_reason }) => {
+  assignTicket: async (ticketId, { assigned_to, assigned_to_emp_id, reassignment_reason }) => {
     const payload = {
       assigned_to: assigned_to || assigned_to_emp_id,
       assigned_to_emp_id: assigned_to_emp_id || assigned_to,
       reassignment_reason: reassignment_reason || "Assigned via IT Support Console",
     };
 
-    try {
-      const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/assign`, payload);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: assigned_to || "it-support-agent",
-              actor_name: assignee_name || "IT Support Specialist",
-              action: "ASSIGNED",
-              activity_type: "ASSIGNED",
-              note: `Assigned to ${assignee_name || assignee_email || assigned_to_emp_id || "IT Specialist"}${reassignment_reason ? ` (${reassignment_reason})` : ""}`,
-              old_status: ticket.status,
-              new_status: ticket.status === "open" ? "in_progress" : ticket.status,
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            assigned_to: assigned_to || assigned_to_emp_id,
-            assigned_to_emp_id: assigned_to_emp_id || assigned_to,
-            assignee_name: assignee_name || "IT Support Specialist",
-            assignee_email: assignee_email || "",
-            status: ticket.status === "open" ? "in_progress" : ticket.status,
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
-    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/assign`, payload);
+    return normalizeTicket(response);
   },
 
   /**
    * Append an internal troubleshooting note to a ticket.
    * Wiring: POST /api/v1/support/tickets/{id}/notes -> { "note_text": "string" }
    */
-  addInternalNote: async (ticketId, { note_text, note, actor_name, actor_id }) => {
+  addInternalNote: async (ticketId, { note_text, note }) => {
     const text = note_text || note;
     const payload = {
       note_text: text,
       note: text,
     };
 
-    try {
-      const response = await apiClient.post(`/api/v1/support/tickets/${ticketId}/notes`, payload);
-      return response;
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const nowIso = new Date().toISOString();
-        const newActivity = {
-          id: Date.now(),
-          activity_id: Date.now(),
-          ticket_id: Number(ticketId),
-          actor_id: actor_id || "current-user",
-          actor_name: actor_name || "IT Support Specialist",
-          action: "NOTE_ADDED",
-          activity_type: "NOTE_ADDED",
-          note: text,
-          old_status: null,
-          new_status: null,
-          created_at: nowIso,
-        };
-
-        updateMockTicket(ticketId, (ticket) => ({
-          ...ticket,
-          updated_at: nowIso,
-          activities: [...(ticket.activities || []), newActivity],
-        }));
-
-        return newActivity;
-      }
-      throw err;
-    }
+    return await apiClient.post(`/api/v1/support/tickets/${ticketId}/notes`, payload);
   },
 
   /**
    * Transition ticket status (e.g. to in_progress, resolved).
    * Wiring: PUT /api/v1/support/tickets/{id}/status -> { "status": "RESOLVED", "resolution_notes": "..." }
    */
-  updateTicketStatus: async (ticketId, { status, resolution_notes, actor_name, actor_id }) => {
+  updateTicketStatus: async (ticketId, { status, resolution_notes }) => {
     const payload = {
       status: status.toLowerCase(),
       resolution_notes: resolution_notes || undefined,
     };
 
-    try {
-      const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, payload);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const isResolved = status.toLowerCase() === "resolved";
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: actor_id || "current-user",
-              actor_name: actor_name || "IT Support Specialist",
-              action: "STATUS_CHANGED",
-              activity_type: "STATUS_CHANGED",
-              note: resolution_notes || `Status changed from ${ticket.status} to ${status.toLowerCase()}`,
-              old_status: ticket.status,
-              new_status: status.toLowerCase(),
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            status: status.toLowerCase(),
-            resolved_at: isResolved ? nowIso : ticket.resolved_at,
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
-    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, payload);
+    return normalizeTicket(response);
   },
 
   /**
    * Escalate ticket to System Admin with required reason.
-   * Wiring: PUT /api/v1/support/tickets/{id}/escalate -> { "escalation_reason": "string" }
+   * Wiring: PUT /api/v1/support/tickets/{id}/escalate -> { "reason": "string" }
    */
-  escalateTicket: async (ticketId, { escalation_reason, reason, actor_name, actor_id }) => {
+  escalateTicket: async (ticketId, { escalation_reason, reason }) => {
     const escalationText = escalation_reason || reason;
     const payload = {
-      escalation_reason: escalationText,
       reason: escalationText,
+      escalation_reason: escalationText,
     };
 
-    try {
-      try {
-        const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/escalate`, payload);
-        return normalizeTicket(response);
-      } catch (firstErr) {
-        // If /escalate route returns 404 or 405, fallback to status transition with "escalated"
-        if (firstErr.status === 404 || firstErr.status === 405) {
-          const fallbackRes = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, {
-            status: "escalated",
-            resolution_notes: `Escalated to SysAdmin: ${escalationText}`,
-          });
-          return normalizeTicket(fallbackRes);
-        }
-        throw firstErr;
-      }
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: actor_id || "current-user",
-              actor_name: actor_name || "IT Support Specialist",
-              action: "ESCALATED",
-              activity_type: "ESCALATED",
-              note: `Escalated to SysAdmin: ${escalationText}`,
-              old_status: ticket.status,
-              new_status: "escalated",
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            status: "escalated",
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
-    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/escalate`, payload);
+    return normalizeTicket(response);
   },
 };
+
+export default supportApi;

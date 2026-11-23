@@ -1,9 +1,7 @@
 import { apiClient } from "./client.js";
-import mockLeaveData from "../features/leave/mockLeaveData.json" with { type: "json" };
-import mockLeaveTriageData from "../features/team_lead/mockLeaveTriageData.json" with { type: "json" };
 
 /**
- * WorkSphere Leave Management API Service (S4 / US-14, US-16, US-17)
+ * WorkSphere Leave Management API Service (S4 / US-14, US-16, US-17, US-18)
  *
  * Provides typed methods interacting with the backend leave endpoints:
  * - Employee APIs:
@@ -39,19 +37,7 @@ export async function getMyLeaveBalances(params = {}) {
   const queryString = query.toString();
   const endpoint = `/api/v1/leave/balance/me${queryString ? `?${queryString}` : ""}`;
 
-  try {
-    return await apiClient.get(endpoint);
-  } catch (err) {
-    if (err?.status === 0 && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      console.warn("Backend /api/v1/leave/balance/me unreachable; serving mock balances in DEV mode:", err.message);
-      return {
-        employee_id: 12,
-        year: params?.year || new Date().getFullYear(),
-        balances: mockLeaveData.balances,
-      };
-    }
-    throw err;
-  }
+  return await apiClient.get(endpoint);
 }
 
 /**
@@ -66,26 +52,14 @@ export async function getLeavePolicies(params = {}) {
   const query = includeInactive ? "?include_inactive=true" : "";
   const endpoint = `/api/v1/leave/policies${query}`;
 
-  try {
-    const response = await apiClient.get(endpoint);
-    // If backend returns wrapped object or array
-    if (Array.isArray(response)) {
-      return response;
-    }
-    if (Array.isArray(response?.items)) {
-      return response.items;
-    }
-    return response || [];
-  } catch (err) {
-    // If endpoint is not yet implemented (404/501) or network is unreachable in DEV mode
-    if ((err?.status === 404 || err?.status === 501 || err?.status === 0) &&
-        typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      console.warn("Backend /api/v1/leave/policies unavailable (S4-BE-2 pending); serving mock policies in DEV mode:", err.message);
-      const policies = mockLeaveData.policies || [];
-      return includeInactive ? policies : policies.filter((p) => p.is_active !== false);
-    }
-    throw err;
+  const response = await apiClient.get(endpoint);
+  if (Array.isArray(response)) {
+    return response;
   }
+  if (Array.isArray(response?.items)) {
+    return response.items;
+  }
+  return response || [];
 }
 
 /**
@@ -192,15 +166,7 @@ export async function getMyLeaveRequests(params = {}) {
   const queryString = query.toString();
   const endpoint = `/api/v1/leave/requests/my${queryString ? `?${queryString}` : ""}`;
 
-  try {
-    return await apiClient.get(endpoint);
-  } catch (err) {
-    if (err?.status === 0 && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      console.warn("Backend /api/v1/leave/requests/my unreachable; serving mock requests in DEV mode:", err.message);
-      return mockLeaveData.requests;
-    }
-    throw err;
-  }
+  return await apiClient.get(endpoint);
 }
 
 /**
@@ -245,15 +211,7 @@ export async function getPendingLeaveRequests(params = {}) {
   const queryString = query.toString();
   const endpoint = `/api/v1/leave/requests/pending${queryString ? `?${queryString}` : ""}`;
 
-  try {
-    return await apiClient.get(endpoint);
-  } catch (err) {
-    if (err?.status === 0 && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      console.warn("Backend /api/v1/leave/requests/pending unreachable; serving mock in DEV mode:", err.message);
-      return mockLeaveTriageData.pendingRequests;
-    }
-    throw err;
-  }
+  return await apiClient.get(endpoint);
 }
 
 /**
@@ -286,16 +244,7 @@ export async function getLeaveConflicts(leaveId) {
   const id = encodeURIComponent(String(leaveId).trim());
   const endpoint = `/api/v1/leave/requests/${id}/conflicts`;
 
-  try {
-    return await apiClient.get(endpoint);
-  } catch (err) {
-    if (err?.status === 0 && typeof import.meta !== "undefined" && import.meta.env?.DEV) {
-      console.warn(`Backend ${endpoint} unreachable; serving mock report in DEV mode:`, err.message);
-      const strId = String(leaveId);
-      return mockLeaveTriageData.conflictReports[strId] || mockLeaveTriageData.conflictReports["1"];
-    }
-    throw err;
-  }
+  return await apiClient.get(endpoint);
 }
 
 /**
