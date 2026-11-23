@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { getClientProjects, getClientMilestones } from "../../api/clientPortalApi";
 import { formatDate } from "./clientPortalUtils";
 import MilestoneRoadmap from "./MilestoneRoadmap";
+import DeliverableTable from "./DeliverableTable";
 import "./clientPortal.css";
 
 /**
@@ -192,8 +193,19 @@ export default function ClientProjectDetailPage() {
         />
       </div>
 
-      {/* Placeholder / anchor for Deliverables and PDF Report (Commit 3 & 4) */}
-      <div id="client-deliverables-section" />
+      {/* Section: Project Deliverables & Formal Signoff (US-22) */}
+      <div className="client-card" id="client-deliverables-section">
+        <div style={{ marginBottom: "16px" }}>
+          <h2 className="client-card-title" style={{ margin: 0 }}>
+            Project Deliverables & Signoff
+          </h2>
+          <p className="client-page-subtitle" style={{ marginTop: "4px" }}>
+            Review formal project deliverables, submit 1–5 star ratings, and execute formal signoffs.
+          </p>
+        </div>
+
+        <DeliverableTable projectId={projectId} />
+      </div>
     </div>
   );
 }

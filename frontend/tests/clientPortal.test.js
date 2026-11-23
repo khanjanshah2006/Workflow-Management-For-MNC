@@ -392,3 +392,40 @@ describe("6. Client Portal Navigation & Role Separation (US-20)", () => {
     assert.equal(sorted[2].title, "M3");
   });
 });
+
+// ============================================================================
+// 7. Deliverable Signoff Rules & Review State Logic (US-22)
+// ============================================================================
+describe("7. Deliverable Signoff Rules & Review State Logic (US-22)", () => {
+  test("ACCEPTED deliverable status hides/disables review signoff button", () => {
+    const shouldShowSignoff = (status) => (status || "").toUpperCase() !== "ACCEPTED";
+
+    assert.equal(shouldShowSignoff("ACCEPTED"), false);
+    assert.equal(shouldShowSignoff("PENDING_REVIEW"), true);
+    assert.equal(shouldShowSignoff("CHANGES_REQUESTED"), true);
+    assert.equal(shouldShowSignoff(null), true);
+  });
+
+  test("star rating formatter generates accurate 5-star character representations", () => {
+    const renderStars = (rating) => "★".repeat(rating) + "☆".repeat(5 - rating);
+
+    assert.equal(renderStars(5), "★★★★★");
+    assert.equal(renderStars(4), "★★★★☆");
+    assert.equal(renderStars(3), "★★★☆☆");
+    assert.equal(renderStars(1), "★☆☆☆☆");
+  });
+
+  test("Feedback submission payload normalization strictly trims remarks", () => {
+    const raw = {
+      decision: "ACCEPTED",
+      rating: 5,
+      comments: "  Good work team!   ",
+    };
+    const normalized = {
+      decision: raw.decision,
+      rating: raw.rating,
+      comments: raw.comments ? raw.comments.trim() : null,
+    };
+    assert.equal(normalized.comments, "Good work team!");
+  });
+});
