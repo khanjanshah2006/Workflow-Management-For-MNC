@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { calculateSLA } from "../../api/supportApi.js";
 import InternalNoteComposer from "./InternalNoteComposer.jsx";
+import { allowedActions, ACTIONS } from "./ticketStatusUtils.js";
 
 /**
  * TicketDetailDrawer Component (US-27: Inspect Support Ticket & Notes Console)
@@ -8,9 +9,9 @@ import InternalNoteComposer from "./InternalNoteComposer.jsx";
  * Slide-out drawer displaying comprehensive ticket details:
  * - Requester info (name, email, department)
  * - Detailed problem description
- * - Chronological activity timeline with real-time updates
- * - Embedded internal troubleshooting note composer
- * - Direct actions: Assign to Me, Reassign, Resolve, Escalate
+ * - Chronological activity timeline with notes
+ * - Embedded internal troubleshooting note composer (when in_progress)
+ * - Direct actions governed by ticketStatusUtils: Assign to Me, Reassign, Take Over, Resolve, Close, Reopen, Escalate
  */
 
 function formatTimestamp(isoStr) {
@@ -49,10 +50,10 @@ function StatusBadge({ status }) {
     escalated: "badge-status-escalated",
     closed: "badge-status-closed",
   };
-  return <span className={`badge-status ${classes[s] || classes.open}`}>{s.replace("_", " ")}</span>;
+  return <span className={`badge-status ${classes[s] || classes.open}`}>{s.replace("_", " ").toUpperCase()}</span>;
 }
 
-function ActivityTimelineItem({ activity }) {
+function ActivityTimelineItem({ activity, isReporter }) {
   const action = (activity.action || activity.activity_type || "").toUpperCase();
 
   const nodeIcons = {
@@ -61,6 +62,9 @@ function ActivityTimelineItem({ activity }) {
     NOTE_ADDED: { icon: "💬", class: "node-note", label: "Internal Troubleshooting Note" },
     STATUS_CHANGED: { icon: "🔄", class: "node-status", label: "Status Updated" },
     ESCALATED: { icon: "🚨", class: "node-escalated", label: "Escalated to SysAdmin" },
+    RESOLVED: { icon: "✅", class: "node-status", label: "Ticket Resolved" },
+    CLOSED: { icon: "🔒", class: "node-status", label: "Ticket Closed" },
+    REOPENED: { icon: "🔄", class: "node-status", label: "Ticket Reopened" },
   };
 
   const config = nodeIcons[action] || {
@@ -79,9 +83,13 @@ function ActivityTimelineItem({ activity }) {
           <span className="timeline-action-label">{config.label}</span>
           <span className="timeline-time">{formatTimestamp(activity.created_at)}</span>
         </div>
-        {activity.note && (
+        {activity.note ? (
           <p className="timeline-note-text">{activity.note}</p>
-        )}
+        ) : action === "NOTE_ADDED" && isReporter ? (
+          <p className="timeline-note-text timeline-note-masked" style={{ fontStyle: "italic", color: "#64748b" }}>
+            Troubleshooting note logged by IT specialist.
+          </p>
+        ) : null}
         {activity.actor_name && (
           <div className="timeline-actor-caption">
             by <strong>{activity.actor_name}</strong>
@@ -96,10 +104,15 @@ export default function TicketDetailDrawer({
   ticket,
   onClose,
   currentUserId,
+  userRole = "IT_SUPPORT",
+  isReporter = false,
   onAssignToMe,
   onOpenAssignModal,
   onOpenEscalateModal,
-  onResolveTicket,
+  onOpenResolveModal,
+  onTakeOver,
+  onCloseTicket,
+  onReopenTicket,
   onAddNote,
   isAssigning = false,
 }) {
@@ -114,10 +127,21 @@ export default function TicketDetailDrawer({
 
   if (!ticket) return null;
 
+  const userIsReporter =
+    Boolean(isReporter) ||
+    Boolean(currentUserId && (ticket.reporter_id === currentUserId || ticket.reporter_account_id === currentUserId));
+
   const isAssignedToMe =
     Boolean(currentUserId) &&
     (ticket.assigned_to === currentUserId ||
-      ticket.assigned_to_emp_id === currentUserId);
+      ticket.assigned_to_emp_id === currentUserId ||
+      ticket.assignee_account_id === currentUserId);
+
+  const actions = allowedActions(ticket, userRole, userIsReporter);
+  const isEscalatedWaiting =
+    ticket.status === "escalated" &&
+    !actions.includes(ACTIONS.TAKE_OVER) &&
+    !actions.includes(ACTIONS.RESOLVE);
 
   const sla = calculateSLA(ticket);
   const activities = ticket.activities || [];
@@ -137,8 +161,11 @@ export default function TicketDetailDrawer({
             <span className="drawer-ticket-number">{ticket.ticket_number}</span>
             <div className="drawer-badges-row">
               <StatusBadge status={ticket.status} />
+              {isEscalatedWaiting && (
+                <span className="badge-awaiting-sysadmin">⏳ Awaiting SysAdmin</span>
+              )}
               <PriorityBadge priority={ticket.priority} />
-              <span className="category-tag">{ticket.category.toUpperCase()}</span>
+              <span className="category-tag">{(ticket.category || "other").toUpperCase()}</span>
             </div>
           </div>
           <button
@@ -151,51 +178,116 @@ export default function TicketDetailDrawer({
           </button>
         </header>
 
-        {/* Drawer Action Bar */}
-        <div className="drawer-action-bar">
-          {!isAssignedToMe && ticket.status !== "resolved" && (
-            <button
-              type="button"
-              className="btn-drawer-action btn-drawer-action-primary"
-              onClick={() => onAssignToMe(ticket)}
-              disabled={isAssigning}
-              title="Assign this ticket to myself and set status to In Progress"
-            >
-              {isAssigning ? "Assigning..." : "Assign to Me"}
-            </button>
-          )}
-
-          <button
-            type="button"
-            className="btn-drawer-action btn-drawer-action-secondary"
-            onClick={() => onOpenAssignModal(ticket)}
-            title="Assign or reassign ticket to IT specialist"
+        {/* Escalated Notification Banner for IT_SUPPORT */}
+        {isEscalatedWaiting && (
+          <div
+            className="escalated-warning-banner"
+            style={{
+              padding: "10px 16px",
+              background: "#fef3c7",
+              borderBottom: "1px solid #fde68a",
+              color: "#92400e",
+              fontSize: "13px",
+              fontWeight: 500,
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
           >
-            {ticket.assigned_to ? "Reassign" : "Assign..."}
-          </button>
+            <span aria-hidden="true">⚠️</span>
+            <span>This ticket is escalated to System Administrator and is currently in read-only mode for IT Support.</span>
+          </div>
+        )}
 
-          {ticket.status !== "resolved" && (
-            <button
-              type="button"
-              className="btn-drawer-action btn-drawer-action-success"
-              onClick={() => onResolveTicket(ticket.id, "Resolved via IT Support Console")}
-              title="Mark ticket as resolved"
-            >
-              ✓ Resolve
-            </button>
-          )}
+        {/* Drawer Action Bar */}
+        {actions.length > 0 && (
+          <div className="drawer-action-bar">
+            {/* Assign to Me */}
+            {actions.includes(ACTIONS.ASSIGN_ME) && !isAssignedToMe && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-primary"
+                onClick={() => onAssignToMe?.(ticket)}
+                disabled={isAssigning}
+                title="Assign this ticket to myself and set status to In Progress"
+              >
+                {isAssigning ? "Assigning..." : "Assign to Me"}
+              </button>
+            )}
 
-          {ticket.status !== "resolved" && ticket.status !== "escalated" && (
-            <button
-              type="button"
-              className="btn-drawer-action btn-drawer-action-warning"
-              onClick={() => onOpenEscalateModal(ticket)}
-              title="Escalate ticket to System Administrator"
-            >
-              ⚠️ Escalate to SysAdmin
-            </button>
-          )}
-        </div>
+            {/* Assign / Reassign */}
+            {actions.includes(ACTIONS.ASSIGN_OTHER) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-secondary"
+                onClick={() => onOpenAssignModal?.(ticket)}
+                title="Assign or reassign ticket to IT specialist"
+              >
+                {ticket.assigned_to ? "Reassign" : "Assign..."}
+              </button>
+            )}
+
+            {/* SysAdmin Take Over */}
+            {actions.includes(ACTIONS.TAKE_OVER) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-primary"
+                onClick={() => onTakeOver?.(ticket)}
+                title="Take over escalated ticket (moves to In Progress)"
+              >
+                Take Over
+              </button>
+            )}
+
+            {/* Resolve */}
+            {actions.includes(ACTIONS.RESOLVE) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-success"
+                onClick={() => onOpenResolveModal?.(ticket)}
+                title="Mark ticket as resolved"
+              >
+                ✓ Resolve
+              </button>
+            )}
+
+            {/* Close */}
+            {actions.includes(ACTIONS.CLOSE) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-secondary"
+                onClick={() => onCloseTicket?.(ticket)}
+                title="Close resolved ticket"
+              >
+                Close Ticket
+              </button>
+            )}
+
+            {/* Reopen */}
+            {actions.includes(ACTIONS.REOPEN) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-warning"
+                onClick={() => onReopenTicket?.(ticket)}
+                title="Reopen resolved ticket"
+              >
+                🔄 Reopen Ticket
+              </button>
+            )}
+
+            {/* Escalate */}
+            {actions.includes(ACTIONS.ESCALATE) && (
+              <button
+                type="button"
+                className="btn-drawer-action btn-drawer-action-warning"
+                onClick={() => onOpenEscalateModal?.(ticket)}
+                title="Escalate ticket to System Administrator"
+              >
+                ⚠️ Escalate to SysAdmin
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Drawer Body */}
         <div className="drawer-body-scrollable">
@@ -252,13 +344,15 @@ export default function TicketDetailDrawer({
             </div>
           </section>
 
-          {/* Section: Internal Notes Composer */}
-          <section className="drawer-section">
-            <h4 className="drawer-section-title">Add Internal Troubleshooting Note</h4>
-            <InternalNoteComposer
-              onAddNote={(noteText) => onAddNote(ticket.id, noteText)}
-            />
-          </section>
+          {/* Section: Internal Notes Composer (IT Staff in_progress only) */}
+          {actions.includes(ACTIONS.ADD_NOTE) && (
+            <section className="drawer-section">
+              <h4 className="drawer-section-title">Add Internal Troubleshooting Note</h4>
+              <InternalNoteComposer
+                onAddNote={(noteText) => onAddNote?.(ticket.id, noteText)}
+              />
+            </section>
+          )}
 
           {/* Section: Activity & Notes Timeline */}
           <section className="drawer-section">
@@ -276,6 +370,7 @@ export default function TicketDetailDrawer({
                   <ActivityTimelineItem
                     key={act.id || act.activity_id || `${act.created_at}-${act.action}`}
                     activity={act}
+                    isReporter={userIsReporter}
                   />
                 ))}
               </div>
