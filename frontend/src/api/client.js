@@ -8,11 +8,18 @@ const BASE_URL =
   "http://localhost:8000";
 
 export class ApiError extends Error {
-  constructor(message, status = 0, data = null) {
+  /**
+   * @param {string} message
+   * @param {number} [status]
+   * @param {any} [data] Parsed response body
+   * @param {Headers|null} [headers] Response headers (e.g. to read Retry-After)
+   */
+  constructor(message, status = 0, data = null, headers = null) {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.data = data;
+    this.headers = headers;
   }
 }
 
@@ -184,14 +191,20 @@ async function request(endpoint, options = {}) {
     );
   }
 
-  // Handle 401 with silent refresh
+  // Handle 401 with silent refresh. Sign-in endpoints (including /auth/mfa/login) and
+  // requests made with a caller-supplied token (skipRefresh) report their 401 as-is.
   const isAuthEndpoint =
-    endpoint.includes("/api/v1/auth/refresh") ||
-    endpoint.includes("/api/v1/auth/login") ||
     url.includes("/api/v1/auth/refresh") ||
-    url.includes("/api/v1/auth/login");
+    url.includes("/api/v1/auth/login") ||
+    url.includes("/api/v1/auth/mfa/login");
 
-  if (response.status === 401 && !options._isRetry && !isAuthEndpoint && getStoredToken()) {
+  if (
+    response.status === 401 &&
+    !options._isRetry &&
+    !options.skipRefresh &&
+    !isAuthEndpoint &&
+    getStoredToken()
+  ) {
     try {
       const newToken = await executeTokenRefresh();
       const retryHeaders = {
@@ -246,7 +259,7 @@ async function request(endpoint, options = {}) {
       message = JSON.stringify(message);
     }
 
-    throw new ApiError(message, response.status, data);
+    throw new ApiError(message, response.status, data, response.headers || null);
   }
 
   if (options.includeHeaders) {
