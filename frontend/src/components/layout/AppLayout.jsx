@@ -20,7 +20,9 @@ export default function AppLayout() {
 
   const currentPage =
     activeNavigation.find((item) => item.path === location.pathname)?.label ??
-    (location.pathname.startsWith("/team-lead/leave")
+    (location.pathname.startsWith("/hr/leave-policies")
+      ? "Leave Policies"
+      : location.pathname.startsWith("/team-lead/leave")
       ? "Leave Triage"
       : location.pathname.startsWith("/pm")
       ? "Risk Dashboard"

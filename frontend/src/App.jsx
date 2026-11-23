@@ -26,6 +26,7 @@ import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
 import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
 import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
+import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
@@ -300,6 +301,14 @@ function App() {
                   }
                 />
                 {/* S4-FE-3 routes (HR Leave Policy & Quota Admin: /hr/leave-policies) */}
+                <Route
+                  path="/hr/leave-policies"
+                  element={
+                    <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
+                      <LeavePolicyAdminPage />
+                    </ProtectedRoute>
+                  }
+                />
                 {/* S5-FE-1 routes (PM Risk & Delivery Dashboard: /pm/risk-dashboard) */}
                 <Route
                   path="/pm/risk-dashboard"

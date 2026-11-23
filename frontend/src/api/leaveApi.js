@@ -55,18 +55,19 @@ export async function getMyLeaveBalances(params = {}) {
 }
 
 /**
- * Fetch active leave policies (leave types).
+ * Fetch leave policies (leave types) (US-18, S4-BE-2).
  * Endpoint: GET /api/v1/leave/policies
  *
- * Assumption note: In S4-BE-1, policies router is a stub placeholder awaiting S4-BE-2.
- * When backend returns 404 or is unavailable in DEV mode, this gracefully falls back
- * to standard leave policies from mockLeaveData.
- *
- * @returns {Promise<Array<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string, is_active: boolean }>>}
+ * @param {{ includeInactive?: boolean, include_inactive?: boolean }} [params] Optional query params (HR/ADMIN only)
+ * @returns {Promise<Array<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string|null, is_active: boolean }>>}
  */
-export async function getLeavePolicies() {
+export async function getLeavePolicies(params = {}) {
+  const includeInactive = Boolean(params?.includeInactive || params?.include_inactive);
+  const query = includeInactive ? "?include_inactive=true" : "";
+  const endpoint = `/api/v1/leave/policies${query}`;
+
   try {
-    const response = await apiClient.get("/api/v1/leave/policies");
+    const response = await apiClient.get(endpoint);
     // If backend returns wrapped object or array
     if (Array.isArray(response)) {
       return response;
@@ -80,10 +81,68 @@ export async function getLeavePolicies() {
     if ((err?.status === 404 || err?.status === 501 || err?.status === 0) &&
         typeof import.meta !== "undefined" && import.meta.env?.DEV) {
       console.warn("Backend /api/v1/leave/policies unavailable (S4-BE-2 pending); serving mock policies in DEV mode:", err.message);
-      return mockLeaveData.policies;
+      const policies = mockLeaveData.policies || [];
+      return includeInactive ? policies : policies.filter((p) => p.is_active !== false);
     }
     throw err;
   }
+}
+
+/**
+ * Create a new leave policy (US-18, S4-BE-2) [HR, ADMIN].
+ * Endpoint: POST /api/v1/leave/policies
+ *
+ * @param {{ name: string, yearly_quota: number, is_paid?: boolean, description?: string|null }} payload
+ * @returns {Promise<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string|null, is_active: boolean }>}
+ */
+export async function createLeavePolicy(payload) {
+  if (!payload) {
+    throw new Error("Policy payload is required");
+  }
+  const body = {
+    name: String(payload.name || "").trim(),
+    yearly_quota: Number(payload.yearly_quota),
+    is_paid: payload.is_paid !== undefined ? Boolean(payload.is_paid) : true,
+    description: payload.description !== undefined && payload.description !== null
+      ? String(payload.description).trim() || null
+      : null,
+  };
+  return await apiClient.post("/api/v1/leave/policies", body);
+}
+
+/**
+ * Update an existing leave policy (US-18, S4-BE-2) [HR, ADMIN].
+ * Endpoint: PUT /api/v1/leave/policies/{id}
+ *
+ * @param {number|string} leaveTypeId
+ * @param {{ name?: string, yearly_quota?: number, is_paid?: boolean, description?: string|null, is_active?: boolean }} payload
+ * @returns {Promise<{ leave_type_id: number, name: string, yearly_quota: number, is_paid: boolean, description: string|null, is_active: boolean }>}
+ */
+export async function updateLeavePolicy(leaveTypeId, payload = {}) {
+  if (leaveTypeId === undefined || leaveTypeId === null || String(leaveTypeId).trim() === "") {
+    throw new Error("Leave type ID is required for policy update");
+  }
+  const id = encodeURIComponent(String(leaveTypeId).trim());
+  const endpoint = `/api/v1/leave/policies/${id}`;
+
+  const body = {};
+  if (payload.name !== undefined && payload.name !== null) {
+    body.name = String(payload.name).trim();
+  }
+  if (payload.yearly_quota !== undefined && payload.yearly_quota !== null) {
+    body.yearly_quota = Number(payload.yearly_quota);
+  }
+  if (payload.is_paid !== undefined && payload.is_paid !== null) {
+    body.is_paid = Boolean(payload.is_paid);
+  }
+  if (payload.description !== undefined) {
+    body.description = payload.description === null ? null : String(payload.description).trim() || null;
+  }
+  if (payload.is_active !== undefined && payload.is_active !== null) {
+    body.is_active = Boolean(payload.is_active);
+  }
+
+  return await apiClient.put(endpoint, body);
 }
 
 /**
@@ -310,6 +369,8 @@ export async function reallocateLeaveTasks(leaveId, payload) {
 export const leaveApi = {
   getMyLeaveBalances,
   getLeavePolicies,
+  createLeavePolicy,
+  updateLeavePolicy,
   submitLeaveRequest,
   getMyLeaveRequests,
   cancelLeaveRequest,
