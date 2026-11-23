@@ -27,6 +27,7 @@ import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
 import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
 import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
+import DepartmentTeamsPage from "./features/hr/teams/DepartmentTeamsPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
@@ -302,6 +303,15 @@ function App() {
                   element={
                     <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
                       <LeavePolicyAdminPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* S1-FE-2 routes (HR Department Teams Console: /hr/teams) */}
+                <Route
+                  path="/hr/teams"
+                  element={
+                    <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
+                      <DepartmentTeamsPage />
                     </ProtectedRoute>
                   }
                 />

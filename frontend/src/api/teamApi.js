@@ -1,8 +1,9 @@
 import { apiClient } from "./client.js";
 
 /**
- * Team Management API Service (US-37)
- * Implements frontend integration with the team members endpoint.
+ * Team Management API Service (US-37, Issue #160)
+ * Implements frontend integration with team members, department teams,
+ * and employee search endpoints.
  */
 export const teamApi = {
   /**
@@ -83,3 +84,88 @@ export const teamApi = {
     };
   },
 };
+
+// ==========================================
+// Department Teams API (Issue #160)
+// ==========================================
+
+/**
+ * Fetch all departments.
+ * GET /api/v1/departments?limit=100
+ * @returns {Promise<Array>}
+ */
+export async function getDepartments() {
+  return apiClient.get("/api/v1/departments?limit=100");
+}
+
+/**
+ * Fetch teams for a department.
+ * GET /api/v1/departments/{deptId}/teams?include_disbanded={bool}
+ * @param {number} deptId
+ * @param {{ includeDisbanded?: boolean }} options
+ * @returns {Promise<Array>}
+ */
+export async function getDepartmentTeams(deptId, { includeDisbanded = false } = {}) {
+  const qs = includeDisbanded ? "?include_disbanded=true" : "";
+  return apiClient.get(`/api/v1/departments/${deptId}/teams${qs}`);
+}
+
+/**
+ * Create a team under a department.
+ * POST /api/v1/departments/{deptId}/teams
+ * @param {number} deptId
+ * @param {{ name: string, description?: string, lead_emp_id: number, member_emp_ids: number[] }} payload
+ * @returns {Promise<Object>}
+ */
+export async function createDepartmentTeam(deptId, payload) {
+  return apiClient.post(`/api/v1/departments/${deptId}/teams`, payload);
+}
+
+/**
+ * Update a team.
+ * PUT /api/v1/teams/{teamId}
+ * @param {number} teamId
+ * @param {Object} patch - Partial fields: name, description, lead_emp_id, status
+ * @returns {Promise<Object>}
+ */
+export async function updateTeam(teamId, patch) {
+  return apiClient.put(`/api/v1/teams/${teamId}`, patch);
+}
+
+/**
+ * Add members to a team (idempotent).
+ * POST /api/v1/teams/{teamId}/members
+ * @param {number} teamId
+ * @param {number[]} empIds
+ * @returns {Promise<Object>}
+ */
+export async function addTeamMembers(teamId, empIds) {
+  return apiClient.post(`/api/v1/teams/${teamId}/members`, { emp_ids: empIds });
+}
+
+/**
+ * Remove a member from a team.
+ * DELETE /api/v1/teams/{teamId}/members/{empId}
+ * Returns 409 if employee is the designated lead.
+ * @param {number} teamId
+ * @param {number} empId
+ * @returns {Promise<null>}
+ */
+export async function removeTeamMember(teamId, empId) {
+  return apiClient.delete(`/api/v1/teams/${teamId}/members/${empId}`);
+}
+
+/**
+ * Search employees by department and optional text query.
+ * GET /api/v1/employees?dept_id={deptId}&search={q}&status=ACTIVE&limit=50
+ * @param {{ deptId?: number, search?: string }} options
+ * @returns {Promise<Array>}
+ */
+export async function searchEmployees({ deptId, search } = {}) {
+  const params = new URLSearchParams();
+  params.set("status", "ACTIVE");
+  params.set("limit", "50");
+  if (deptId) params.set("dept_id", String(deptId));
+  if (search && search.trim()) params.set("search", search.trim());
+  return apiClient.get(`/api/v1/employees?${params.toString()}`);
+}

@@ -69,6 +69,12 @@ export const navConfig = [
     roles: ["HR", "ADMIN"],
   },
   {
+    path: "/hr/teams",
+    label: "Department Teams",
+    icon: "🏢",
+    roles: ["HR", "ADMIN"],
+  },
+  {
     path: "/support",
     label: "IT Support",
     icon: "🛠",
