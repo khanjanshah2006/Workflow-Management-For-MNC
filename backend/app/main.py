@@ -1,15 +1,17 @@
 import logging
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from sqlalchemy import text
+from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from app.db.session import SessionLocal
+from app.db.session import SessionLocal, get_db
 from app.features.auth.router import router as auth_router
 from app.features.departments.router import router as department_router, team_router
 from app.features.audit import audit_router
-from app.features.profile import profile_router
+from app.features.profile import profile_router, skill_requests_router
 from app.features.projects import project_router
 from app.features.employees import employee_router
 from app.features.admin import admin_router
@@ -23,8 +25,9 @@ from app.features.client_portal import (
 )
 from app.features.leave import leave_router
 from app.features.executive import executive_router
+from app.features.jobs.router import router as jobs_router
 
-logging.basicConfig(level=settings.log_level)
+logging.basicConfig(level=settings.LOG_LEVEL)
 
 
 @asynccontextmanager
@@ -65,6 +68,7 @@ app.include_router(department_router)
 app.include_router(team_router)
 app.include_router(audit_router)
 app.include_router(profile_router)
+app.include_router(skill_requests_router)
 app.include_router(project_router)
 app.include_router(employee_router)
 app.include_router(admin_router)
@@ -77,6 +81,7 @@ app.include_router(project_visibility_router)
 app.include_router(project_deliverables_router)
 app.include_router(leave_router)
 app.include_router(executive_router)
+app.include_router(jobs_router)
 
 
 @app.get("/", tags=["Root"])
@@ -90,6 +95,15 @@ def root():
 
 
 @app.get("/health", tags=["Health"])
-def health_check():
-    """Service health check endpoint."""
-    return {"status": "healthy"}
+def health_check(db: Session = Depends(get_db)):
+    """Service health check endpoint.
+    Runs SELECT 1 and returns {"status":"healthy","db":"ok"}, or 503 with "db":"unreachable".
+    """
+    try:
+        db.execute(text("SELECT 1"))
+        return {"status": "healthy", "db": "ok"}
+    except Exception:
+        return JSONResponse(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            content={"status": "unhealthy", "db": "unreachable"},
+        )

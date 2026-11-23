@@ -140,8 +140,8 @@ class OverdueService:
     @staticmethod
     def run_sweep(
         db: Session,
-        actor: UserAccount,
-        today: date,
+        actor: Optional[UserAccount] = None,
+        today: Optional[date] = None,
         now: Optional[datetime] = None,
         ip_address: Optional[str] = None,
     ) -> dict:
@@ -175,18 +175,20 @@ class OverdueService:
             task.overdue_notified_at = now
             newly_flagged += 1
 
+        today = today or date.today()
         result = {
             "evaluated_tasks": len(rows),
             "newly_flagged_overdue": newly_flagged,
             "already_flagged": already_flagged,
+            "notifications_sent": notifications_sent,
         }
         write_audit_log(
             db=db,
             action=AuditAction.UPDATE,
             entity_name="TASK_OVERDUE_SWEEP",
             entity_ref_id="sweep",
-            account_id=actor.account_id,
-            new_value={**result, "notifications_sent": notifications_sent, "as_of": today.isoformat()},
+            account_id=actor.account_id if actor else None,
+            new_value={**result, "as_of": today.isoformat()},
             ip_address=ip_address,
             commit=False,
         )

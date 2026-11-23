@@ -15,6 +15,7 @@ from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, Tabl
 from sqlalchemy.orm import Session
 
 from app.core.audit import write_audit_log
+from app.core.notification_types import DELIVERABLE_SHARED
 from app.features.client_portal.repository import ClientPortalRepository
 from app.features.client_portal.schemas import (
     ClientMilestoneResponse,
@@ -453,8 +454,6 @@ class ClientPortalService:
             file_url=payload.file_url,
             version=version,
         )
-        db.commit()
-        db.refresh(deliverable)
 
         write_audit_log(
             db=db,
@@ -471,6 +470,25 @@ class ClientPortalService:
             },
             ip_address=ip_address,
         )
+
+        # S6: Notify client account(s) of this project
+        if project.client_id:
+            client = ClientPortalRepository.get_client_by_id(db, project.client_id)
+            if client and client.account_id:
+                NotificationService.create_notification(
+                    db=db,
+                    user_id=client.account_id,
+                    type=DELIVERABLE_SHARED,
+                    title="New Deliverable Shared",
+                    message=(
+                        f"A new deliverable '{deliverable.title}' (v{deliverable.version}) "
+                        f"has been shared for project {project.project_code}."
+                    ),
+                    link=f"/client/projects/{project.project_id}/deliverables",
+                )
+
+        db.commit()
+        db.refresh(deliverable)
 
         return ClientPortalService._to_deliverable_out(deliverable, [])
 

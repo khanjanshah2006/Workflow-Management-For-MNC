@@ -319,11 +319,11 @@ def test_revoke_elevated_access_audited_and_effective(client, db):
     )
     db.add(employee)
     db.commit()
-    workload_url = f"/api/v1/employees/{employee.emp_id}/workload"
+    pm_url = "/api/v1/tasks/overdue"
     admin_headers = auth_headers(admin)
     grantee_headers = auth_headers(grantee)
 
-    assert client.get(workload_url, headers=grantee_headers).status_code == 403
+    assert client.get(pm_url, headers=grantee_headers).status_code == 403
     res = client.post(
         "/api/v1/admin/elevated-access",
         json={
@@ -336,7 +336,7 @@ def test_revoke_elevated_access_audited_and_effective(client, db):
     )
     assert res.status_code == 201
     grant_id = res.json()["id"]
-    assert client.get(workload_url, headers=grantee_headers).status_code == 200
+    assert client.get(pm_url, headers=grantee_headers).status_code == 200
 
     def notifications(type_: str) -> int:
         return (
@@ -353,7 +353,7 @@ def test_revoke_elevated_access_audited_and_effective(client, db):
     assert res.status_code == 200
     assert res.json()["revoked_at"] is not None
 
-    assert client.get(workload_url, headers=grantee_headers).status_code == 403
+    assert client.get(pm_url, headers=grantee_headers).status_code == 403
     res = client.delete(revoke_url, headers=admin_headers)
     assert res.status_code == 409
     assert res.json()["detail"] == "Grant is already revoked"

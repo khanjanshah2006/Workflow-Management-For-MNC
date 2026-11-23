@@ -776,7 +776,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Active Team Members",
+              "name": "200 OK \u2013 Active Team Members",
               "status": "OK",
               "code": 200,
               "header": [
@@ -789,7 +789,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "200 OK – Empty Team",
+              "name": "200 OK \u2013 Empty Team",
               "status": "OK",
               "code": 200,
               "header": [
@@ -802,7 +802,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team / Non-Lead",
+              "name": "403 Forbidden \u2013 Other Team / Non-Lead",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -815,7 +815,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "404 Not Found – Team Non-existent",
+              "name": "404 Not Found \u2013 Team Non-existent",
               "status": "Not Found",
               "code": 404,
               "header": [
@@ -897,7 +897,7 @@
           },
           "response": [
             {
-              "name": "200 OK – Tasks Stub",
+              "name": "200 OK \u2013 Tasks Stub",
               "status": "OK",
               "code": 200,
               "header": [
@@ -910,7 +910,7 @@
               "_postman_previewlanguage": "json"
             },
             {
-              "name": "403 Forbidden – Other Team",
+              "name": "403 Forbidden \u2013 Other Team",
               "status": "Forbidden",
               "code": 403,
               "header": [
@@ -923,6 +923,578 @@
               "_postman_previewlanguage": "json"
             }
           ]
+        },
+        {
+          "name": "POST Create Department Team as HR (201) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": [\n    16,\n    18,\n    19\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Create a new team under a department. Promotes lead to TEAM_LEAD if account is EMPLOYEE."
+          },
+          "response": [
+            {
+              "name": "201 Created",
+              "status": "Created",
+              "code": 201,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"project_id\": null,\n  \"name\": \"Payments Squad\",\n  \"description\": \"Card and wallet integrations\",\n  \"lead_emp_id\": 21,\n  \"lead_name\": \"Sarah Connor\",\n  \"status\": \"ACTIVE\",\n  \"created_at\": \"2026-11-22T10:00:00Z\",\n  \"member_count\": 4,\n  \"members\": []\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team as Employee (403) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Rogue Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Employee role is forbidden from creating department teams."
+          },
+          "response": [
+            {
+              "name": "403 Forbidden",
+              "status": "Forbidden",
+              "code": 403,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Access denied\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Create Team - Duplicate Name (409) (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 21,\n  \"member_emp_ids\": []\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ]
+            },
+            "description": "US-05: Team names are unique per department (case-insensitive)."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Team with name 'Payments Squad' already exists in department 1\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET List Department Teams (US-05)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/departments/{{dept_id}}/teams?include_disbanded=false",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "departments",
+                "{{dept_id}}",
+                "teams"
+              ],
+              "query": [
+                {
+                  "key": "include_disbanded",
+                  "value": "false"
+                }
+              ]
+            },
+            "description": "US-05: List teams in department with lead name and member count."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "[\n  {\n    \"team_id\": 1,\n    \"dept_id\": 1,\n    \"project_id\": null,\n    \"name\": \"Payments Squad\",\n    \"description\": \"Card and wallet integrations\",\n    \"lead_emp_id\": 21,\n    \"lead_name\": \"Sarah Connor\",\n    \"status\": \"ACTIVE\",\n    \"created_at\": \"2026-11-22T10:00:00Z\",\n    \"member_count\": 4\n  }\n]"
+            }
+          ]
+        },
+        {
+          "name": "PUT Change Team Lead & Status (US-05)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"lead_emp_id\": 22\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}"
+              ]
+            },
+            "description": "US-05: Partial update of team. Lead change promotes new lead and demotes previous lead if no other team."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"dept_id\": 1,\n  \"name\": \"Payments Squad\",\n  \"lead_emp_id\": 22,\n  \"lead_name\": \"John Reese\",\n  \"status\": \"ACTIVE\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "POST Add Members to Team (US-05)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"emp_ids\": [\n    23,\n    24\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members"
+              ]
+            },
+            "description": "US-05: Idempotent addition of team members."
+          },
+          "response": [
+            {
+              "name": "200 OK",
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"team_id\": 1,\n  \"member_count\": 6\n}"
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Regular Member (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{emp_id}}"
+              ]
+            },
+            "description": "US-05: Remove regular employee from team."
+          },
+          "response": [
+            {
+              "name": "204 No Content",
+              "status": "No Content",
+              "code": 204,
+              "body": ""
+            }
+          ]
+        },
+        {
+          "name": "DELETE Remove Lead Member (409 Conflict) (US-05)",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/teams/{{team_id}}/members/{{lead_emp_id}}",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "teams",
+                "{{team_id}}",
+                "members",
+                "{{lead_emp_id}}"
+              ]
+            },
+            "description": "US-05: Removing lead returns 409 Conflict. Must change lead first."
+          },
+          "response": [
+            {
+              "name": "409 Conflict",
+              "status": "Conflict",
+              "code": 409,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"detail\": \"Cannot remove lead employee from team. Change the lead first.\"\n}"
+            }
+          ]
+        },
+        {
+          "name": "GET Employee Workload (US-35)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/employees/1/workload",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "employees",
+                "1",
+                "workload"
+              ]
+            },
+            "description": "Retrieve cross-project workload metrics for an employee. Visibility restricted to self, HR/Admin, managing PM, and Team Lead (US-35)."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Propose Skill Change (US-34)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"action\": \"ADD\",\n    \"proposed_skill_name\": \"FastAPI\",\n    \"proficiency\": \"INTERMEDIATE\",\n    \"years_of_experience\": 2,\n    \"justification\": \"Built core backend microservices in recent sprints\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Submit a proposal to ADD, UPDATE, or REMOVE a skill rating. Triggers notifications and audit trail (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET My Skill Proposals (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/profile/me/skill-requests",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "me",
+                "skill-requests"
+              ]
+            },
+            "description": "Retrieve all skill proposals submitted by current authenticated employee, newest first (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Skill Proposals Review Queue (US-34)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests?status=PENDING&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Paginated review queue for pending skill change proposals. Scoped by role: HR/Admin see all; Team Leads see led team members (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Approve Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Approved based on sprint performance\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/approve",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "approve"
+              ]
+            },
+            "description": "Approve a pending skill change request and update employee skill profile. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reject Skill Proposal (US-34)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"remarks\": \"Please provide relevant certifications before upgrading to Expert\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/skill-requests/1/reject",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "skill-requests",
+                "1",
+                "reject"
+              ]
+            },
+            "description": "Reject a pending skill change request with mandatory remarks. Authorized for HR or requester Team Lead (US-34)."
+          },
+          "response": []
         }
       ]
     },
@@ -1773,7 +2345,7 @@
                 "comments"
               ]
             },
-            "description": "Adds a 1–2,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
+            "description": "Adds a 1\u20132,000 character task comment. Requires an assigned employee, project team member, project PM, or admin. Notifies the task counterpart.",
             "body": {
               "mode": "raw",
               "raw": "{\n  \"content\": \"The API implementation is ready for review.\"\n}"
@@ -2384,6 +2956,66 @@
               "body": "{\n  \"detail\": \"Access forbidden: requires one of ['TEAM_LEAD', 'PM', 'ADMIN', 'SYSTEM_ADMIN']\"\n}"
             }
           ]
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File (200 OK) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Download task submission deliverable file streamed from database bytea storage. Allowed: assignee, team lead, project manager, or admin."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Download Task Submission Deliverable File - Unauthorized (403 Forbidden) (US-11, S9)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{unauthorized_employee_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/tasks/{{task_id}}/submissions/{{submission_id}}/file",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "tasks",
+                "{{task_id}}",
+                "submissions",
+                "{{submission_id}}",
+                "file"
+              ]
+            },
+            "description": "Returns 403 Forbidden when an unauthorized employee attempts to download another employee's deliverable."
+          },
+          "response": []
         }
       ]
     },
@@ -5169,6 +5801,419 @@
             "description": "Ordinary employees cannot view tickets submitted by other employees (403 Forbidden)."
           },
           "response": []
+        },
+        {
+          "name": "GET IT Support Triage Queue (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets?status=&category=&priority=&assigned_to=&page=1&limit=20",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "key": "category",
+                  "value": ""
+                },
+                {
+                  "key": "priority",
+                  "value": ""
+                },
+                {
+                  "key": "assigned_to",
+                  "value": ""
+                },
+                {
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                }
+              ]
+            },
+            "description": "Lists support tickets for IT staff with filtering, pagination, and priority-first sorting."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Support Queue Metrics (US-27)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/queue/metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "queue",
+                "metrics"
+              ]
+            },
+            "description": "Returns aggregate ticket counts (open, in_progress, resolved, closed, escalated, unassigned, total)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign Support Ticket (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_account_id\": \"{{it_staff_account_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Assigns ticket to an IT staff member; transitions 'open' tickets to 'in_progress' and notifies assignee."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Add Internal Troubleshooting Note (US-27)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"note\": \"Replaced power supply unit and verified voltage rails.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/notes",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "notes"
+              ]
+            },
+            "description": "Adds an internal troubleshooting note visible to IT staff and hidden from reporter."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Update Ticket Status (US-27)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_note\": \"Replaced faulty RAM module and ran memtest diagnostics clean.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Transitions ticket status per state machine. Requires resolution note when resolving."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Escalate Support Ticket (US-28)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"reason\": \"Requires SysAdmin privileges to modify cluster ingress firewall rules.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/escalate",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "escalate"
+              ]
+            },
+            "description": "Escalates unresolved ticket to System Administrator."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Queue as employee (403)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{employee_access_token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets"
+              ]
+            },
+            "description": "Ordinary employees cannot view the IT triage queue (returns 403 Forbidden)."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Assign to non-IT (400)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"assignee_account_id\": \"{{employee_account_id}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/assign",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "assign"
+              ]
+            },
+            "description": "Assigning to an employee who is not IT staff returns 400 Bad Request."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Invalid transition (409)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"closed\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Direct transition from open to closed returns 409 Conflict per state machine."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT SysAdmin resolves escalated",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{sysadmin_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"resolved\",\n  \"resolution_note\": \"Root infrastructure firewall reconfigured and verified by System Administrator.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "Only SYSTEM_ADMIN can transition an escalated ticket to resolved."
+          },
+          "response": []
+        },
+        {
+          "name": "PUT Reporter reopens",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{reporter_access_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"open\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/v1/support/tickets/{{ticket_id}}/status",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "support",
+                "tickets",
+                "{{ticket_id}}",
+                "status"
+              ]
+            },
+            "description": "The ticket reporter reopens their own resolved ticket back to open."
+          },
+          "response": []
         }
       ]
     },
@@ -6053,6 +7098,57 @@
               ]
             },
             "description": "Admin password reset (US-48). Sets a new password for the account (bcrypt, audit logged). It also clears any active login lockout and failed-attempt counter, so a locked account can sign in with the new password. Restricted to ADMIN or SYSTEM_ADMIN."
+          },
+          "response": []
+        },
+        {
+          "name": "POST Internal Overdue Sweep Job (200 OK) (US-15, S9)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-Job-Token",
+                "value": "{{job_token}}",
+                "type": "text"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/v1/internal/jobs/overdue-sweep",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "internal",
+                "jobs",
+                "overdue-sweep"
+              ]
+            },
+            "description": "Runs scheduled overdue task sweep via internal secret token."
+          },
+          "response": []
+        },
+        {
+          "name": "GET Service Health Check (/health) (200 OK) (S9)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ]
+            },
+            "description": "Verifies service and database reachability (SELECT 1)."
           },
           "response": []
         }

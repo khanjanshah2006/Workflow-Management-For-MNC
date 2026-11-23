@@ -15,6 +15,7 @@ from app.features.employees.schemas import (
     EmployeeDetailResponse,
     EmployeeWorkloadResponse,
 )
+from app.features.employees.repository import EmployeeRepository
 from app.features.employees.service import (
     EmployeeService,
     EmployeeNotFoundError,
@@ -76,14 +77,29 @@ def get_employee(
 @router.get(
     "/{id}/workload",
     response_model=EmployeeWorkloadResponse,
-    summary="Get cross-project workload metrics for an employee (US-39)",
-    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Restricted to PMs and Admins.",
+    summary="Get cross-project workload metrics for an employee (US-35, US-39)",
+    description="Retrieve aggregate active projects count, open tasks count, and utilization percentage. Visibility restricted to self, HR, Admin, managing PM, and Team Lead.",
 )
 def get_employee_workload(
     id: int,
     db: Session = Depends(get_db),
-    current_user: UserAccount = Depends(require_role([roles.PM, roles.ADMIN])),
+    current_user: UserAccount = Depends(get_current_user),
 ) -> EmployeeWorkloadResponse:
+    # 1. US-35 Workload Visibility Rule (check access before 404 to avoid leaking employee IDs)
+    if not EmployeeService.check_workload_access(db=db, current_user=current_user, target_emp_id=id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You are not authorized to view this employee's workload",
+        )
+
+    # 2. Target employee must exist
+    target_emp = EmployeeRepository.get_by_id(db, id)
+    if not target_emp:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Employee with ID {id} not found",
+        )
+
     try:
         return EmployeeService.get_employee_workload(db=db, emp_id=id)
     except EmployeeNotFoundError as exc:

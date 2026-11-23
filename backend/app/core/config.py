@@ -134,6 +134,18 @@ class Settings:
         return self.env == "production"
 
     @property
+    def LOG_LEVEL(self) -> str:
+        return self.log_level
+
+    @property
+    def MAX_UPLOAD_MB(self) -> int:
+        return self.max_upload_mb
+
+    @property
+    def JOB_TOKEN(self) -> str:
+        return self.job_token
+
+    @property
     def database_url(self) -> str:
         return normalize_database_url(self.database_url_raw or DEFAULT_DATABASE_URL)
 

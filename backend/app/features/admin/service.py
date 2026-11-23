@@ -338,6 +338,8 @@ class AdminService:
         elif last_success:
             status_details += f" Last verified backup #{last_success.backup_id} completed."
 
+        mode = "github-actions" if (settings.is_production or settings.env == "production") else "manual"
+
         return BackupStatusResponse(
             status=overall_status,
             database="Supabase PostgreSQL (Enterprise)",
@@ -347,6 +349,7 @@ class AdminService:
             last_successful_backup=last_success.created_at if last_success else None,
             last_failed_backup=last_failure.created_at if last_failure else None,
             recent_failures_count=recent_failures_count,
+            mode=mode,
         )
 
     # ==========================================
@@ -547,6 +550,11 @@ class AdminService:
 
 
     def trigger_backup(db: Session, actor, ip_address: str | None = None):
+        if settings.is_production or settings.env == "production":
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Backups run nightly via GitHub Actions",
+            )
         log = AdminRepository.create_backup_log(db, actor.account_id)
         backup_dir = Path(settings.backup_dir).expanduser().resolve()
         filename = f"database_backup_{datetime.now(timezone.utc):%Y%m%dT%H%M%SZ}_{log.backup_id}.dump"

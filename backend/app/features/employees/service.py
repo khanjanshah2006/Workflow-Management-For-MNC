@@ -8,6 +8,7 @@ from app.models.employee import Employee
 from app.models.user_account import UserAccount
 from app.models.department import Department
 from app.models.enums import CommonStatus, UserType, AuditAction
+from app.core import scope
 from app.core.security import hash_password
 from app.core.audit import write_audit_log
 from app.features.employees.repository import EmployeeRepository
@@ -270,6 +271,40 @@ class EmployeeService:
         )
 
         return EmployeeService.get_employee(db, emp_id)
+
+    @staticmethod
+    def check_workload_access(db: Session, current_user: UserAccount, target_emp_id: int) -> bool:
+        """
+        US-35: Determine if current_user is authorized to view target employee's workload.
+        Allowed viewers:
+          - Self (caller's emp_id == target_emp_id)
+          - HR and ADMIN (Note: SYSTEM_ADMIN is excluded from workload visibility)
+          - PM managing a project the employee is actively staffed on
+          - Team Lead of an active team the employee belongs to
+        Everyone else is denied (returns False).
+        """
+        from app.core import roles
+
+        if current_user.user_type in (roles.HR, roles.ADMIN):
+            return True
+
+        caller_emp = scope.resolve_employee(db, current_user)
+        if caller_emp and caller_emp.emp_id == target_emp_id:
+            return True
+
+        if caller_emp and scope.is_team_lead_of(db, caller_emp.emp_id, target_emp_id):
+            return True
+
+        if current_user.account_id in scope.staffing_pm_account_ids_for(db, target_emp_id):
+            return True
+
+        caller_pm = scope.resolve_pm(db, current_user)
+        if caller_pm:
+            staffed_projects = scope.staffing_projects_for(db, target_emp_id)
+            if any(p.pm_id == caller_pm.pm_id for p in staffed_projects):
+                return True
+
+        return False
 
     @staticmethod
     def get_employee_workload(db: Session, emp_id: int) -> EmployeeWorkloadResponse:

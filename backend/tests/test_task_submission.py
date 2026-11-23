@@ -437,7 +437,7 @@ def test_submit_task_file_too_large(client, test_setup):
     )
 
     assert response.status_code == 400
-    assert "25MB limit" in response.json()["detail"]
+    assert "limit" in response.json()["detail"]
 
 
 def test_submit_task_missing_empty_remarks(client, test_setup):

@@ -58,6 +58,7 @@ from app.models.notification import Notification
 from app.models.project import Project, ProjectAssignment
 from app.models.project_manager import ProjectManager
 from app.models.skill import EmployeeSkill, Skill
+from app.models.stored_file import StoredFile
 from app.models.support import SupportTicket, TicketActivity
 from app.models.system_backup_log import SystemBackupLog
 from app.models.system_parameter import SystemParameter
@@ -1462,9 +1463,13 @@ def _seed_executive_reports(db: Session) -> None:
     for title, report_format, period_start, breakdown in REPORTS:
         existing = db.query(ExecutiveReport).filter_by(report_title=title).first()
         if existing is not None:
-            if Path(existing.file_path).is_file():
+            if existing.file_id and db.query(StoredFile).filter_by(file_id=existing.file_id).first():
+                continue
+            if existing.file_path and Path(existing.file_path).is_file():
                 continue
             db.query(AuditLog).filter_by(entity_name="EXECUTIVE_REPORT", entity_ref_id=str(existing.report_id)).delete()
+            if existing.file_id:
+                db.query(StoredFile).filter_by(file_id=existing.file_id).delete()
             db.delete(existing)
             db.commit()
         ExecutiveReportService.generate_report(

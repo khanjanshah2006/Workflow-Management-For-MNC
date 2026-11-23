@@ -42,7 +42,7 @@ project_visibility_router = APIRouter(
 # RBAC guards
 client_guard = require_role(["CLIENT"])
 pm_or_admin_guard = require_role(["PM", "ADMIN"])
-client_or_pm_guard = require_role(["CLIENT", "PM"])
+client_or_pm_guard = require_role(["CLIENT", "PM", "ADMIN"])
 
 
 # ==========================================

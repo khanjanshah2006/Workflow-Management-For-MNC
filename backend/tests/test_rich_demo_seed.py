@@ -18,6 +18,7 @@ from app.models.enums import AuditAction, LeaveStatus, ProjectStatus, TaskStatus
 from app.models.executive_report import ExecutiveReport
 from app.models.leave import LeaveRequest
 from app.models.project import Project
+from app.models.stored_file import StoredFile
 from app.models.support import SupportTicket
 from app.models.task import Task
 from app.models.team import Team
@@ -94,4 +95,4 @@ def test_rich_demo_seed_is_idempotent_and_covers_every_role_and_status(db, seed)
 
     reports = db.scalars(select(ExecutiveReport)).all()
     assert len(reports) == 3
-    assert all(Path(report.file_path).is_file() for report in reports)
+    assert all(report.file_id is not None and db.get(StoredFile, report.file_id) is not None for report in reports)
