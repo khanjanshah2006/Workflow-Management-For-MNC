@@ -29,6 +29,9 @@ import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
+import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
+import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
+import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
@@ -107,25 +110,18 @@ function App() {
               <Route path="/" element={<RootRedirect />} />
 
               {/* Client Portal Route Tree (strictly outside internal AppLayout shell) */}
-              {/* S6-FE-1 integration slot: Client Deliverables & Feedback */}
+              {/* S6-FE-1: Client Deliverables & Feedback (US-20, US-21, US-22, US-41) */}
               <Route
                 path="/client"
                 element={
                   <ProtectedRoute allowedRoles={["CLIENT"]}>
-                    <Outlet />
+                    <ClientPortalLayout />
                   </ProtectedRoute>
                 }
               >
                 <Route index element={<Navigate to="/client/projects" replace />} />
-                <Route
-                  path="projects"
-                  element={
-                    <PagePlaceholder
-                      title="Client Projects"
-                      description="Client portal workspace for deliverables and project tracking."
-                    />
-                  }
-                />
+                <Route path="projects" element={<ClientProjectListPage />} />
+                <Route path="projects/:projectId" element={<ClientProjectDetailPage />} />
                 <Route path="*" element={<Navigate to="/client/projects" replace />} />
               </Route>
 
