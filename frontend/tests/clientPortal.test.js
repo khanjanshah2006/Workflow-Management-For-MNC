@@ -429,3 +429,58 @@ describe("7. Deliverable Signoff Rules & Review State Logic (US-22)", () => {
     assert.equal(normalized.comments, "Good work team!");
   });
 });
+
+// ============================================================================
+// 8. Authenticated PDF Progress Report Export & Edge Cases (US-41)
+// ============================================================================
+describe("8. Authenticated PDF Progress Report Export & Edge Cases (US-41)", () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    clearSession();
+    setStoredToken("");
+  });
+
+  test("exportClientReportPdf streams PDF and sets default Project_Report_{id}.pdf filename", async () => {
+    setSession({ access_token: "client-export-token" });
+    setStoredToken("client-export-token");
+
+    let capturedUrl = "";
+    let capturedHeaders = {};
+
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedHeaders = options?.headers || {};
+      return new Response(new Blob(["%PDF-1.5 test document stream"], { type: "application/pdf" }), {
+        status: 200,
+        headers: {
+          "Content-Type": "application/pdf",
+        },
+      });
+    };
+
+    const result = await exportClientReportPdf(42);
+    assert.match(capturedUrl, /\/api\/v1\/client\/projects\/42\/report\/export$/);
+    assert.equal(capturedHeaders.Authorization, "Bearer client-export-token");
+    assert.equal(result.filename, "Project_Report_42.pdf");
+    assert.ok(result.blob instanceof Blob);
+  });
+
+  test("exportClientReportPdf rejects on 404 or 403 API errors", async () => {
+    setSession({ access_token: "client-export-token" });
+    setStoredToken("client-export-token");
+
+    globalThis.fetch = async () => {
+      return new Response(
+        JSON.stringify({ detail: "Project not found or not owned by client" }),
+        { status: 404, headers: { "Content-Type": "application/json" } }
+      );
+    };
+
+    await assert.rejects(
+      () => exportClientReportPdf(999),
+      (err) => err.status === 404 || /not found/i.test(err.message)
+    );
+  });
+});

@@ -1,20 +1,29 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { getClientProjects, getClientMilestones } from "../../api/clientPortalApi";
+import {
+  getClientProjects,
+  getClientMilestones,
+  exportClientReportPdf,
+} from "../../api/clientPortalApi";
+import { useToast } from "../../components/common/Toast";
 import { formatDate } from "./clientPortalUtils";
 import MilestoneRoadmap from "./MilestoneRoadmap";
 import DeliverableTable from "./DeliverableTable";
+import ClientReportDownloadCard from "./ClientReportDownloadCard";
 import "./clientPortal.css";
 
 /**
- * ClientProjectDetailPage Component (US-20, US-21)
+ * ClientProjectDetailPage Component (US-20, US-21, US-22, US-41)
  *
  * Detailed client view of a specific contracted project showing its delivery
- * milestone roadmap, completion metrics, and client deliverables.
+ * milestone roadmap, completion metrics, client deliverables, and PDF export.
  */
 export default function ClientProjectDetailPage() {
   const { projectId } = useParams();
+  const toast = useToast();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [isExporting, setIsExporting] = useState(false);
 
   // 1. Fetch contracted projects to verify ownership and retrieve metadata
   const {
@@ -88,6 +97,19 @@ export default function ClientProjectDetailPage() {
     project.milestones_summary?.completed ||
     milestones.filter((m) => (m.status || "").toLowerCase() === "completed").length;
 
+  const handleExportPdf = async () => {
+    setIsExporting(true);
+    try {
+      await exportClientReportPdf(projectId);
+      toast.success("Progress report PDF downloaded successfully!");
+    } catch (err) {
+      const msg = err?.message || "Failed to download progress report PDF.";
+      toast.error(msg);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <div className="client-container" data-testid="client-project-detail-view">
       {/* Navigation Breadcrumb */}
@@ -133,6 +155,18 @@ export default function ClientProjectDetailPage() {
               <p className="client-page-subtitle">{project.description}</p>
             )}
           </div>
+
+          <div>
+            <button
+              type="button"
+              className="btn-primary"
+              onClick={handleExportPdf}
+              disabled={isExporting}
+              data-testid="header-export-pdf-btn"
+            >
+              {isExporting ? "Generating PDF..." : "📄 Export Report (PDF)"}
+            </button>
+          </div>
         </div>
 
         {/* Project Meta Metrics */}
@@ -174,38 +208,96 @@ export default function ClientProjectDetailPage() {
         </div>
       </div>
 
-      {/* Section: Delivery Milestones Roadmap (US-21) */}
-      <div className="client-card">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <div>
+      {/* Tabs Navigation (US-20, US-21, US-22, US-41) */}
+      <div
+        className="client-tabs-bar"
+        style={{
+          display: "flex",
+          gap: "8px",
+          borderBottom: "1px solid #e2e8f0",
+          paddingBottom: "8px",
+        }}
+        role="tablist"
+      >
+        <button
+          type="button"
+          onClick={() => setActiveTab("overview")}
+          className={`client-nav-item ${activeTab === "overview" ? "active" : ""}`}
+          style={{ border: "none", cursor: "pointer" }}
+          role="tab"
+          aria-selected={activeTab === "overview"}
+        >
+          Overview & Milestones
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("deliverables")}
+          className={`client-nav-item ${activeTab === "deliverables" ? "active" : ""}`}
+          style={{ border: "none", cursor: "pointer" }}
+          role="tab"
+          aria-selected={activeTab === "deliverables"}
+        >
+          Deliverables
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveTab("reports")}
+          className={`client-nav-item ${activeTab === "reports" ? "active" : ""}`}
+          style={{ border: "none", cursor: "pointer" }}
+          role="tab"
+          aria-selected={activeTab === "reports"}
+        >
+          Reports
+        </button>
+      </div>
+
+      {/* Tab Panel 1: Overview & Milestones (US-21) */}
+      {activeTab === "overview" && (
+        <div className="client-card" role="tabpanel">
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div>
+              <h2 className="client-card-title" style={{ margin: 0 }}>
+                Milestone Roadmap
+              </h2>
+              <p className="client-page-subtitle" style={{ marginTop: "4px" }}>
+                High-level milestone schedule and release tracking.
+              </p>
+            </div>
+          </div>
+
+          <MilestoneRoadmap
+            milestones={milestones}
+            isLoading={isLoadingMilestones}
+          />
+        </div>
+      )}
+
+      {/* Tab Panel 2: Deliverables & Formal Signoff (US-22) */}
+      {activeTab === "deliverables" && (
+        <div className="client-card" id="client-deliverables-section" role="tabpanel">
+          <div style={{ marginBottom: "16px" }}>
             <h2 className="client-card-title" style={{ margin: 0 }}>
-              Milestone Roadmap
+              Project Deliverables & Signoff
             </h2>
             <p className="client-page-subtitle" style={{ marginTop: "4px" }}>
-              High-level milestone schedule and release tracking.
+              Review formal project deliverables, submit 1–5 star ratings, and execute formal signoffs.
             </p>
           </div>
+
+          <DeliverableTable projectId={projectId} />
         </div>
+      )}
 
-        <MilestoneRoadmap
-          milestones={milestones}
-          isLoading={isLoadingMilestones}
-        />
-      </div>
-
-      {/* Section: Project Deliverables & Formal Signoff (US-22) */}
-      <div className="client-card" id="client-deliverables-section">
-        <div style={{ marginBottom: "16px" }}>
-          <h2 className="client-card-title" style={{ margin: 0 }}>
-            Project Deliverables & Signoff
-          </h2>
-          <p className="client-page-subtitle" style={{ marginTop: "4px" }}>
-            Review formal project deliverables, submit 1–5 star ratings, and execute formal signoffs.
-          </p>
+      {/* Tab Panel 3: Authenticated Progress Report Export (US-41) */}
+      {activeTab === "reports" && (
+        <div role="tabpanel">
+          <ClientReportDownloadCard
+            projectId={projectId}
+            projectCode={project.project_code}
+            projectName={project.name}
+          />
         </div>
-
-        <DeliverableTable projectId={projectId} />
-      </div>
+      )}
     </div>
   );
 }
