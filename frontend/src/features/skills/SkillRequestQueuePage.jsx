@@ -446,6 +446,7 @@ export default function SkillRequestQueuePage() {
 
       {/* Decision Modal Component */}
       <SkillDecisionModal
+        key={`${selectedRequest?.request_id || "none"}-${decisionAction}`}
         isOpen={isDecisionModalOpen}
         action={decisionAction}
         request={selectedRequest}
