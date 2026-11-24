@@ -73,7 +73,7 @@ export default function SubmissionHistory({ taskId, task }) {
   // RBAC Check: Assignee, Team Lead, PM, Admin
   const role = normalizeRole(user?.role || user?.user_type || "");
   const isTL = role === "TEAM_LEAD" || role === "LEAD";
-  const isPM = role === "PM" || role === "PROJECT_MANAGER";
+  const isPM = role === "PM";
   const isAdminRole = role === "ADMIN" || role === "SYSTEM_ADMIN";
   const isAssignee = Boolean(
     user &&

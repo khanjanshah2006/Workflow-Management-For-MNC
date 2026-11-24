@@ -34,7 +34,6 @@ import {
   isValidUrl,
   ALLOWED_FILE_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
-  MAX_UPLOAD_BYTES,
   openDeliverable,
 } from "../src/api/tasksApi.js";
 import { apiClient } from "../src/api/client.js";
@@ -792,7 +791,7 @@ describe("9. Task Submission & Deliverable Validation (submitTask & US-11)", () 
       ".jpeg",
       ".docx",
     ]);
-    assert.equal(MAX_FILE_SIZE_BYTES, 25 * 1024 * 1024);
+    assert.equal(MAX_FILE_SIZE_BYTES, 5242880);
   });
 
   test("rejects taskId when missing, null or empty", async () => {
