@@ -22,7 +22,7 @@ export default function ReassignTaskModal({
   const [reason, setReason] = useState("");
   const [validationError, setValidationError] = useState(null);
 
-  const teamId = task?.team_id || 1;
+  const teamId = task?.team_id;
 
   // Fetch live team members for the task's team
   const { data: rawTeamMembers = [], isLoading: isLoadingMembers } = useQuery({

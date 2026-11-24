@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { getReviewQueue } from "../../api/tasksApi";
+import { getReviewQueue, openDeliverable } from "../../api/tasksApi";
 
 /**
  * TaskReviewQueue Component (US-12 & US-13)
@@ -17,6 +17,42 @@ import { getReviewQueue } from "../../api/tasksApi";
 export default function TaskReviewQueue({ onReviewTask }) {
   const [priorityFilter, setPriorityFilter] = useState("ALL");
   const [searchQuery, setSearchQuery] = useState("");
+  const [downloadingUrl, setDownloadingUrl] = useState(null);
+  const [downloadToast, setDownloadToast] = useState(null);
+
+  useEffect(() => {
+    if (!downloadToast) return;
+    const timer = setTimeout(() => setDownloadToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [downloadToast]);
+
+  const handleOpenDeliverable = async (e, url, fallbackName) => {
+    e.preventDefault();
+    if (!url || downloadingUrl) return;
+    setDownloadingUrl(url);
+    try {
+      await openDeliverable(url, fallbackName);
+    } catch (err) {
+      if (err?.status === 403 || err?.message?.includes("403")) {
+        setDownloadToast({
+          type: "error",
+          message: "You don't have access to this file",
+        });
+      } else if (err?.status === 404 || err?.message?.includes("404")) {
+        setDownloadToast({
+          type: "error",
+          message: "File not found",
+        });
+      } else {
+        setDownloadToast({
+          type: "error",
+          message: err?.message || "Failed to download deliverable",
+        });
+      }
+    } finally {
+      setDownloadingUrl(null);
+    }
+  };
 
   const {
     data: queueItems = [],
@@ -99,6 +135,24 @@ export default function TaskReviewQueue({ onReviewTask }) {
           </button>
         </div>
       </div>
+
+      {/* Toast Feedback for authenticated download */}
+      {downloadToast && (
+        <div
+          className={`alert-banner ${
+            downloadToast.type === "error"
+              ? "alert-banner-danger"
+              : "alert-banner-success"
+          }`}
+          role="alert"
+          style={{ marginBottom: 16 }}
+        >
+          <span className="alert-icon">
+            {downloadToast.type === "error" ? "⚠️" : "✓"}
+          </span>
+          <span>{downloadToast.message}</span>
+        </div>
+      )}
 
       {/* Loading state */}
       {isLoading && (
@@ -196,16 +250,41 @@ export default function TaskReviewQueue({ onReviewTask }) {
                   {deliverableUrl ? (
                     <div className="queue-deliverable-attachment">
                       <span className="attachment-label">Attached Deliverable:</span>
-                      <a
-                        href={deliverableUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
+                      <button
+                        type="button"
+                        onClick={(e) =>
+                          handleOpenDeliverable(
+                            e,
+                            deliverableUrl,
+                            `deliverable-task-${item.task_id}`
+                          )
+                        }
                         className="attachment-link"
+                        disabled={downloadingUrl === deliverableUrl}
+                        title={
+                          downloadingUrl === deliverableUrl
+                            ? "Downloading..."
+                            : "Download or open deliverable"
+                        }
+                        style={{
+                          background: "none",
+                          border: "none",
+                          padding: 0,
+                          cursor: downloadingUrl === deliverableUrl ? "wait" : "pointer",
+                          font: "inherit",
+                          textAlign: "left",
+                        }}
                       >
-                        <span className="attachment-icon">📁</span>
-                        <span className="attachment-name">{deliverableUrl}</span>
+                        <span className="attachment-icon">
+                          {downloadingUrl === deliverableUrl ? "⏳" : "📁"}
+                        </span>
+                        <span className="attachment-name">
+                          {downloadingUrl === deliverableUrl
+                            ? "Downloading file..."
+                            : deliverableUrl.split("/").pop()}
+                        </span>
                         <span className="attachment-arrow">↗</span>
-                      </a>
+                      </button>
                     </div>
                   ) : (
                     <div className="queue-no-deliverable">

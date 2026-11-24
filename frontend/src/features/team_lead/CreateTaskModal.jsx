@@ -22,13 +22,17 @@ export default function CreateTaskModal({
   defaultTeamId = null,
 }) {
   const { user } = useAuth();
+  const ledTeamIds = user?.led_team_ids || [];
+  const initialTeamId = defaultTeamId
+    ? String(defaultTeamId)
+    : (ledTeamIds.length > 0 ? String(ledTeamIds[0]) : (user?.team_id ? String(user.team_id) : ""));
 
   const [formData, setFormData] = useState({
     title: "",
     description: "",
     priority: "MEDIUM",
     project_id: defaultProjectId ? String(defaultProjectId) : "",
-    team_id: defaultTeamId ? String(defaultTeamId) : (user?.team_id ? String(user.team_id) : "1"),
+    team_id: initialTeamId,
     milestone_id: "",
     assigned_to: "",
     start_date: "",
@@ -69,7 +73,9 @@ export default function CreateTaskModal({
       description: "",
       priority: "MEDIUM",
       project_id: defaultProjectId ? String(defaultProjectId) : "",
-      team_id: defaultTeamId ? String(defaultTeamId) : (user?.team_id ? String(user.team_id) : "1"),
+      team_id: defaultTeamId
+        ? String(defaultTeamId)
+        : (ledTeamIds.length > 0 ? String(ledTeamIds[0]) : (user?.team_id ? String(user.team_id) : "")),
       milestone_id: "",
       assigned_to: "",
       start_date: "",

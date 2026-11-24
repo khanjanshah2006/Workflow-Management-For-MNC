@@ -124,8 +124,8 @@ describe("1. Role-Aware Navigation Filtering (filterNavForRole)", () => {
     assert.notEqual(result, frozenSample);
   });
 
-  test("filters default application navConfig cleanly across actual roles", () => {
-    // EMPLOYEE check
+  test("filters default application navConfig cleanly across all 9 canonical roles", () => {
+    // 1. EMPLOYEE
     const empNav = filterNavForRole(navConfig, "EMPLOYEE");
     const empPaths = empNav.map((i) => i.path);
     assert.equal(empPaths.includes("/dashboard"), true);
@@ -133,28 +133,72 @@ describe("1. Role-Aware Navigation Filtering (filterNavForRole)", () => {
     assert.equal(empPaths.includes("/leave"), true);
     assert.equal(empPaths.includes("/team"), true);
     assert.equal(empPaths.includes("/profile"), true);
-    assert.equal(empPaths.includes("/support"), true);
     assert.equal(empPaths.includes("/projects"), false);
+    assert.equal(empPaths.includes("/pm/risk-dashboard"), false);
     assert.equal(empPaths.includes("/team-lead/tasks"), false);
     assert.equal(empPaths.includes("/admin/users"), false);
+    assert.equal(empPaths.includes("/admin/security"), false);
+    assert.equal(empPaths.includes("/it-support"), false);
 
-    // TEAM_LEAD check
+    // 2. TEAM_LEAD
     const tlNav = filterNavForRole(navConfig, "TEAM_LEAD");
     const tlPaths = tlNav.map((i) => i.path);
     assert.equal(tlPaths.includes("/team-lead/tasks"), true);
+    assert.equal(tlPaths.includes("/team-lead/leave"), true);
     assert.equal(tlPaths.includes("/leave"), true);
+    assert.equal(tlPaths.includes("/projects"), false);
+    assert.equal(tlPaths.includes("/pm/risk-dashboard"), false);
 
-    // PM check (supports PM and PROJECT_MANAGER)
+    // 3. PM
     const pmNav = filterNavForRole(navConfig, "PM");
-    assert.equal(pmNav.some((i) => i.path === "/projects"), true);
-    const projMgrNav = filterNavForRole(navConfig, "PROJECT_MANAGER");
-    assert.equal(projMgrNav.some((i) => i.path === "/projects"), true);
+    const pmPaths = pmNav.map((i) => i.path);
+    assert.equal(pmPaths.includes("/projects"), true);
+    assert.equal(pmPaths.includes("/pm/risk-dashboard"), true);
+    assert.equal(pmPaths.includes("/team-lead/tasks"), true);
+    assert.equal(pmPaths.includes("/admin/users"), false);
+    assert.equal(pmPaths.includes("/admin/security"), false);
 
-    // ADMIN check
+    // 4. HR
+    const hrNav = filterNavForRole(navConfig, "HR");
+    const hrPaths = hrNav.map((i) => i.path);
+    assert.equal(hrPaths.includes("/hr/leave-policies"), true);
+    assert.equal(hrPaths.includes("/team-lead/leave"), true);
+    assert.equal(hrPaths.includes("/projects"), false);
+    assert.equal(hrPaths.includes("/pm/risk-dashboard"), false);
+
+    // 5. IT_SUPPORT
+    const itNav = filterNavForRole(navConfig, "IT_SUPPORT");
+    const itPaths = itNav.map((i) => i.path);
+    assert.equal(itPaths.includes("/it-support"), true);
+    assert.equal(itPaths.includes("/projects"), false);
+    assert.equal(itPaths.includes("/admin/users"), false);
+
+    // 6. ADMIN (sees Security Ops, Users, Projects, Risk Dashboard, Executive)
     const adminNav = filterNavForRole(navConfig, "ADMIN");
-    assert.equal(adminNav.some((i) => i.path === "/admin/users"), true);
+    const adminPaths = adminNav.map((i) => i.path);
+    assert.equal(adminPaths.includes("/admin/users"), true);
+    assert.equal(adminPaths.includes("/admin/security"), true);
+    assert.equal(adminPaths.includes("/projects"), true);
+    assert.equal(adminPaths.includes("/pm/risk-dashboard"), true);
+    assert.equal(adminPaths.includes("/executive/console"), true);
 
-    // CLIENT check: no internal nav items
+    // 7. SYSTEM_ADMIN (sees Security Ops and Users, but NEVER Projects or Risk Dashboard)
+    const sysAdminNav = filterNavForRole(navConfig, "SYSTEM_ADMIN");
+    const sysAdminPaths = sysAdminNav.map((i) => i.path);
+    assert.equal(sysAdminPaths.includes("/admin/users"), true);
+    assert.equal(sysAdminPaths.includes("/admin/security"), true);
+    assert.equal(sysAdminPaths.includes("/it-support"), true);
+    assert.equal(sysAdminPaths.includes("/projects"), false);
+    assert.equal(sysAdminPaths.includes("/pm/risk-dashboard"), false);
+
+    // 8. MNC_EXECUTIVE
+    const execNav = filterNavForRole(navConfig, "MNC_EXECUTIVE");
+    const execPaths = execNav.map((i) => i.path);
+    assert.equal(execPaths.includes("/executive/console"), true);
+    assert.equal(execPaths.includes("/projects"), false);
+    assert.equal(execPaths.includes("/admin/users"), false);
+
+    // 9. CLIENT (sees 0 internal navigation entries)
     const clientNav = filterNavForRole(navConfig, "CLIENT");
     assert.equal(clientNav.length, 0);
   });
@@ -213,9 +257,8 @@ describe("2. Role-Based Home-Page Redirects (getHomeRouteForRole)", () => {
     assert.equal(getHomeRouteForRole("team_lead"), "/dashboard");
   });
 
-  test("maps PM and PROJECT_MANAGER to /dashboard", () => {
+  test("maps PM to /dashboard", () => {
     assert.equal(getHomeRouteForRole("PM"), "/dashboard");
-    assert.equal(getHomeRouteForRole("PROJECT_MANAGER"), "/dashboard");
   });
 
   test("maps HR to /dashboard", () => {
@@ -355,12 +398,13 @@ describe("3. Content-Disposition Filename Parsing (parseContentDisposition)", ()
 // 4. Session Role Helper Utilities
 // ============================================================================
 describe("4. Session Role Helpers", () => {
-  test("INTERNAL_ROLES contains all internal roles and strictly excludes CLIENT", () => {
+  test("INTERNAL_ROLES contains all internal roles and strictly excludes CLIENT and legacy aliases", () => {
     assert.equal(INTERNAL_ROLES.includes("CLIENT"), false);
+    assert.equal(INTERNAL_ROLES.includes("PROJECT_MANAGER"), false);
+    assert.equal(INTERNAL_ROLES.includes("HR_MANAGER"), false);
     assert.equal(INTERNAL_ROLES.includes("EMPLOYEE"), true);
     assert.equal(INTERNAL_ROLES.includes("TEAM_LEAD"), true);
     assert.equal(INTERNAL_ROLES.includes("PM"), true);
-    assert.equal(INTERNAL_ROLES.includes("PROJECT_MANAGER"), true);
     assert.equal(INTERNAL_ROLES.includes("HR"), true);
     assert.equal(INTERNAL_ROLES.includes("ADMIN"), true);
     assert.equal(INTERNAL_ROLES.includes("SYSTEM_ADMIN"), true);

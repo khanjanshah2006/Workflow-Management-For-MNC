@@ -5,6 +5,7 @@ import {
   validateTeamForm,
   buildCreatePayload,
   diffMembers,
+  calculateDepartmentTeamCount,
 } from "../src/features/hr/teams/teamFormUtils.js";
 
 import {
@@ -15,7 +16,6 @@ import {
   addTeamMembers,
   removeTeamMember,
   searchEmployees,
-  teamApi,
 } from "../src/api/teamApi.js";
 
 import {
@@ -23,7 +23,7 @@ import {
   filterNavForRole,
 } from "../src/components/layout/navConfig.js";
 
-import { setSession, clearSession } from "../src/auth/session.js";
+import { ROLES, clearSession } from "../src/auth/session.js";
 
 // ============================================================================
 // 1. Team Form Validation (validateTeamForm)
@@ -101,7 +101,7 @@ describe("1. Team Form Validation (validateTeamForm)", () => {
 });
 
 // ============================================================================
-// 2. Create Payload Construction (buildCreatePayload)
+// 2. Create Payload Construction (buildCreatePayload) & Form Stability
 // ============================================================================
 describe("2. Create Payload Construction (buildCreatePayload)", () => {
   test("trims name and sets null for empty description", () => {
@@ -136,6 +136,21 @@ describe("2. Create Payload Construction (buildCreatePayload)", () => {
       memberEmpIds: [10, 10, 11, 11, null, undefined],
     });
     assert.deepEqual(payload.member_emp_ids.sort((a, b) => a - b), [10, 11]);
+  });
+
+  test("acceptance verification: preserves Payments Squad payload with lead and 2 members", () => {
+    const formInputs = {
+      name: "Payments Squad",
+      description: "Checkout and payment gateway processing",
+      leadEmpId: 44,
+      memberEmpIds: [44, 101, 102],
+    };
+
+    const payload = buildCreatePayload(formInputs);
+    assert.equal(payload.name, "Payments Squad");
+    assert.equal(payload.description, "Checkout and payment gateway processing");
+    assert.equal(payload.lead_emp_id, 44);
+    assert.deepEqual(payload.member_emp_ids.sort((a, b) => a - b), [44, 101, 102]);
   });
 });
 
@@ -174,9 +189,48 @@ describe("3. Member Diffing Helper (diffMembers)", () => {
 });
 
 // ============================================================================
-// 4. Department Teams API Integration (teamApi)
+// 4. Department Team Count Calculation (calculateDepartmentTeamCount)
 // ============================================================================
-describe("4. Department Teams API Integration", () => {
+describe("4. Department Team Count Calculation (calculateDepartmentTeamCount)", () => {
+  test("derives active team count excluding disbanded teams", () => {
+    const dept = { dept_id: 1, name: "Engineering", team_count: 0 };
+    const teams = [
+      { team_id: 1, name: "Frontend", status: "ACTIVE" },
+      { team_id: 2, name: "Backend", status: "ACTIVE" },
+      { team_id: 3, name: "Legacy", status: "DISBANDED" },
+      { team_id: 4, name: "DevOps", status: "ACTIVE" },
+    ];
+
+    assert.equal(calculateDepartmentTeamCount(dept, teams), 3);
+  });
+
+  test("returns 0 for departments with no teams", () => {
+    const dept = { dept_id: 2, name: "Marketing", team_count: 0 };
+    assert.equal(calculateDepartmentTeamCount(dept, []), 0);
+  });
+
+  test("returns 0 for departments with only disbanded teams", () => {
+    const dept = { dept_id: 3, name: "Archived Dept", team_count: 0 };
+    const teams = [
+      { team_id: 10, name: "Disbanded Team A", status: "DISBANDED" },
+      { team_id: 11, name: "Disbanded Team B", status: "DISBANDED" },
+    ];
+    assert.equal(calculateDepartmentTeamCount(dept, teams), 0);
+  });
+
+  test("falls back to dept.team_count if teams query has not loaded yet", () => {
+    const deptWithCount = { dept_id: 4, name: "Sales", team_count: 5 };
+    assert.equal(calculateDepartmentTeamCount(deptWithCount, undefined), 5);
+
+    const deptWithZero = { dept_id: 5, name: "HR", team_count: 0 };
+    assert.equal(calculateDepartmentTeamCount(deptWithZero, undefined), 0);
+  });
+});
+
+// ============================================================================
+// 5. Department Teams API Integration (teamApi)
+// ============================================================================
+describe("5. Department Teams API Integration", () => {
   const originalFetch = globalThis.fetch;
 
   afterEach(() => {
@@ -188,9 +242,9 @@ describe("4. Department Teams API Integration", () => {
     let capturedUrl = "";
     let capturedMethod = "";
 
-    globalThis.fetch = async (url, options) => {
-      capturedUrl = url;
-      capturedMethod = options.method;
+    globalThis.fetch = async (url, options = {}) => {
+      capturedUrl = String(url);
+      capturedMethod = options.method || "GET";
       return new Response(JSON.stringify([{ dept_id: 1, name: "Engineering", team_count: 3 }]), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -198,7 +252,9 @@ describe("4. Department Teams API Integration", () => {
     };
 
     const res = await getDepartments();
-    assert.equal(capturedUrl, "/api/v1/departments?limit=100");
+    const parsed = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed.pathname, "/api/v1/departments");
+    assert.equal(parsed.searchParams.get("limit"), "100");
     assert.equal(capturedMethod, "GET");
     assert.equal(res.length, 1);
     assert.equal(res[0].name, "Engineering");
@@ -208,7 +264,7 @@ describe("4. Department Teams API Integration", () => {
     let capturedUrl = "";
 
     globalThis.fetch = async (url) => {
-      capturedUrl = url;
+      capturedUrl = String(url);
       return new Response(JSON.stringify([{ team_id: 10, name: "Alpha", status: "ACTIVE" }]), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -217,11 +273,15 @@ describe("4. Department Teams API Integration", () => {
 
     // Default: without includeDisbanded
     await getDepartmentTeams(4);
-    assert.equal(capturedUrl, "/api/v1/departments/4/teams");
+    const parsedDefault = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsedDefault.pathname, "/api/v1/departments/4/teams");
+    assert.equal(parsedDefault.searchParams.get("include_disbanded"), null);
 
     // With includeDisbanded = true
     await getDepartmentTeams(4, { includeDisbanded: true });
-    assert.equal(capturedUrl, "/api/v1/departments/4/teams?include_disbanded=true");
+    const parsedWithDisbanded = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsedWithDisbanded.pathname, "/api/v1/departments/4/teams");
+    assert.equal(parsedWithDisbanded.searchParams.get("include_disbanded"), "true");
   });
 
   test("createDepartmentTeam dispatches POST /api/v1/departments/{id}/teams", async () => {
@@ -229,8 +289,8 @@ describe("4. Department Teams API Integration", () => {
     let capturedMethod = "";
     let capturedBody = null;
 
-    globalThis.fetch = async (url, options) => {
-      capturedUrl = url;
+    globalThis.fetch = async (url, options = {}) => {
+      capturedUrl = String(url);
       capturedMethod = options.method;
       capturedBody = JSON.parse(options.body);
       return new Response(
@@ -247,7 +307,8 @@ describe("4. Department Teams API Integration", () => {
     };
 
     const res = await createDepartmentTeam(2, payload);
-    assert.equal(capturedUrl, "/api/v1/departments/2/teams");
+    const parsed = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed.pathname, "/api/v1/departments/2/teams");
     assert.equal(capturedMethod, "POST");
     assert.deepEqual(capturedBody, payload);
     assert.equal(res.team_id, 99);
@@ -258,8 +319,8 @@ describe("4. Department Teams API Integration", () => {
     let capturedMethod = "";
     let capturedBody = null;
 
-    globalThis.fetch = async (url, options) => {
-      capturedUrl = url;
+    globalThis.fetch = async (url, options = {}) => {
+      capturedUrl = String(url);
       capturedMethod = options.method;
       capturedBody = JSON.parse(options.body);
       return new Response(JSON.stringify({ team_id: 15, ...capturedBody }), {
@@ -270,13 +331,16 @@ describe("4. Department Teams API Integration", () => {
 
     // Update fields
     await updateTeam(15, { name: "Renamed Team", lead_emp_id: 25 });
-    assert.equal(capturedUrl, "/api/v1/teams/15");
+    const parsed1 = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed1.pathname, "/api/v1/teams/15");
     assert.equal(capturedMethod, "PUT");
     assert.equal(capturedBody.name, "Renamed Team");
     assert.equal(capturedBody.lead_emp_id, 25);
 
     // Disband status update
     await updateTeam(15, { status: "DISBANDED" });
+    const parsed2 = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed2.pathname, "/api/v1/teams/15");
     assert.equal(capturedBody.status, "DISBANDED");
   });
 
@@ -284,8 +348,8 @@ describe("4. Department Teams API Integration", () => {
     let capturedUrl = "";
     let capturedBody = null;
 
-    globalThis.fetch = async (url, options) => {
-      capturedUrl = url;
+    globalThis.fetch = async (url, options = {}) => {
+      capturedUrl = String(url);
       capturedBody = JSON.parse(options.body);
       return new Response(JSON.stringify({ message: "Members added" }), {
         status: 200,
@@ -294,7 +358,8 @@ describe("4. Department Teams API Integration", () => {
     };
 
     await addTeamMembers(12, [3, 4, 5]);
-    assert.equal(capturedUrl, "/api/v1/teams/12/members");
+    const parsed = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed.pathname, "/api/v1/teams/12/members");
     assert.deepEqual(capturedBody, { emp_ids: [3, 4, 5] });
   });
 
@@ -302,14 +367,15 @@ describe("4. Department Teams API Integration", () => {
     let capturedUrl = "";
     let capturedMethod = "";
 
-    globalThis.fetch = async (url, options) => {
-      capturedUrl = url;
+    globalThis.fetch = async (url, options = {}) => {
+      capturedUrl = String(url);
       capturedMethod = options.method;
       return new Response(null, { status: 204 });
     };
 
     await removeTeamMember(12, 7);
-    assert.equal(capturedUrl, "/api/v1/teams/12/members/7");
+    const parsed = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsed.pathname, "/api/v1/teams/12/members/7");
     assert.equal(capturedMethod, "DELETE");
   });
 
@@ -317,7 +383,7 @@ describe("4. Department Teams API Integration", () => {
     let capturedUrl = "";
 
     globalThis.fetch = async (url) => {
-      capturedUrl = url;
+      capturedUrl = String(url);
       return new Response(JSON.stringify([{ emp_id: 8, full_name: "Alice Smith" }]), {
         status: 200,
         headers: { "Content-Type": "application/json" },
@@ -325,27 +391,47 @@ describe("4. Department Teams API Integration", () => {
     };
 
     await searchEmployees({ deptId: 3, search: "Alice" });
-    assert.equal(
-      capturedUrl,
-      "/api/v1/employees?status=ACTIVE&limit=50&dept_id=3&search=Alice"
-    );
+    const parsedWithSearch = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsedWithSearch.pathname, "/api/v1/employees");
+    assert.equal(parsedWithSearch.searchParams.get("status"), "ACTIVE");
+    assert.equal(parsedWithSearch.searchParams.get("limit"), "50");
+    assert.equal(parsedWithSearch.searchParams.get("dept_id"), "3");
+    assert.equal(parsedWithSearch.searchParams.get("search"), "Alice");
 
     // Without search query
     await searchEmployees({ deptId: 3 });
-    assert.equal(capturedUrl, "/api/v1/employees?status=ACTIVE&limit=50&dept_id=3");
+    const parsedWithoutSearch = new URL(capturedUrl, "http://localhost:8000");
+    assert.equal(parsedWithoutSearch.pathname, "/api/v1/employees");
+    assert.equal(parsedWithoutSearch.searchParams.get("status"), "ACTIVE");
+    assert.equal(parsedWithoutSearch.searchParams.get("limit"), "50");
+    assert.equal(parsedWithoutSearch.searchParams.get("dept_id"), "3");
+    assert.equal(parsedWithoutSearch.searchParams.get("search"), null);
   });
 });
 
 // ============================================================================
-// 5. Navigation Configuration & Role Filtering (/hr/teams)
+// 6. Navigation Configuration & Role Filtering (/hr/teams)
 // ============================================================================
-describe("5. Navigation Configuration & Role Filtering (/hr/teams)", () => {
-  test("navConfig contains /hr/teams with correct metadata and roles", () => {
+describe("6. Navigation Configuration & Role Filtering (/hr/teams)", () => {
+  test("navConfig contains /hr/teams with correct metadata and canonical roles", () => {
     const teamsNav = navConfig.find((item) => item.path === "/hr/teams");
     assert.notEqual(teamsNav, undefined);
     assert.equal(teamsNav.label, "Department Teams");
     assert.equal(teamsNav.icon, "🏢");
-    assert.deepEqual(teamsNav.roles, ["HR", "ADMIN"]);
+    assert.deepEqual(teamsNav.roles, [ROLES.HR, ROLES.ADMIN]);
+  });
+
+  test("preserves navigation order: Department Teams -> Skill Requests -> IT Support", () => {
+    const teamsIdx = navConfig.findIndex((item) => item.path === "/hr/teams");
+    const skillsIdx = navConfig.findIndex((item) => item.path === "/skill-requests");
+    const supportIdx = navConfig.findIndex((item) => item.path === "/it-support");
+
+    assert.ok(teamsIdx !== -1, "Department Teams must exist in navConfig");
+    assert.ok(skillsIdx !== -1, "Skill Requests must exist in navConfig");
+    assert.ok(supportIdx !== -1, "IT Support must exist in navConfig");
+
+    assert.ok(teamsIdx < skillsIdx, "Department Teams must precede Skill Requests");
+    assert.ok(skillsIdx < supportIdx, "Skill Requests must precede IT Support");
   });
 
   test("HR role sees /hr/teams in navigation", () => {

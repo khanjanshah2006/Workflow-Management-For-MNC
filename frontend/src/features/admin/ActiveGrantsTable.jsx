@@ -2,7 +2,10 @@ import { useState, useEffect, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { adminApi } from "../../api/adminApi";
 import { useAuth, normalizeRole } from "../../hooks/useAuth";
+import { PLATFORM_ADMINS } from "../../auth/session";
 import "./admin.css";
+
+const ACTIVE_GRANTS_KEY = ["admin", "elevated-access", "active"];
 
 /**
  * Computes remaining time and status classification relative to current timestamp.
@@ -81,7 +84,8 @@ export function formatTimestamp(isoStr) {
 export function ActiveGrantsTable({ onOpenGrantModal }) {
   const queryClient = useQueryClient();
   const { user } = useAuth();
-  const isSystemAdmin = normalizeRole(user?.role || user?.user_type) === "SYSTEM_ADMIN";
+  // The backend lets ADMIN and SYSTEM_ADMIN grant and revoke elevated access (US-45)
+  const isPlatformAdmin = PLATFORM_ADMINS.includes(normalizeRole(user?.role || user?.user_type));
 
   const [currentTime, setCurrentTime] = useState(() => Date.now());
   const [confirmRevokeTarget, setConfirmRevokeTarget] = useState(null);
@@ -104,7 +108,7 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
     refetch,
     isFetching,
   } = useQuery({
-    queryKey: ["admin", "elevated-access", "active"],
+    queryKey: ACTIVE_GRANTS_KEY,
     queryFn: adminApi.getActiveElevatedGrants,
     staleTime: 15 * 1000,
   });
@@ -115,45 +119,56 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
     return grants.filter((g) => !g.revoked_at);
   }, [grants]);
 
-  // Revoke elevated access mutation
+  // Revoke elevated access mutation: DELETE /api/v1/admin/elevated-access/{grant_id}
   const revokeMutation = useMutation({
-    mutationFn: (grantId) => adminApi.revokeElevatedGrant(grantId),
-    onSuccess: (_, grantId) => {
-      queryClient.invalidateQueries({ queryKey: ["admin", "elevated-access", "active"] });
+    mutationFn: (grant) => adminApi.revokeElevatedGrant(grant.id),
+    onSuccess: (_, grant) => {
+      // Drop the row right away, then refetch to stay in sync with the backend
+      queryClient.setQueryData(ACTIVE_GRANTS_KEY, (current) =>
+        Array.isArray(current) ? current.filter((g) => g.id !== grant.id) : current
+      );
+      queryClient.invalidateQueries({ queryKey: ACTIVE_GRANTS_KEY });
       setConfirmRevokeTarget(null);
       setActionFeedback({
         type: "success",
-        message: `Elevated access grant #${grantId} was successfully revoked.`,
+        message: `Revoked ${grant.granted_role} access for ${grant.user_email || grant.user_id}.`,
       });
       setTimeout(() => setActionFeedback(null), 6000);
     },
     onError: (err) => {
       setConfirmRevokeTarget(null);
+      if (err?.status === 409) {
+        // Already revoked or expired: refresh the list so the stale row goes away
+        queryClient.invalidateQueries({ queryKey: ACTIVE_GRANTS_KEY });
+        setActionFeedback({
+          type: "error",
+          message: err.message || "This grant was already revoked or has expired. The list has been refreshed.",
+        });
+        return;
+      }
       setActionFeedback({
         type: "error",
-        message:
-          err.message ||
-          "Failed to revoke elevated access grant. Please verify router endpoints.",
+        message: err?.message || "Failed to revoke elevated access grant.",
       });
     },
   });
 
   const handleConfirmRevoke = () => {
     if (!confirmRevokeTarget) return;
-    if (!isSystemAdmin) {
+    if (!isPlatformAdmin) {
       setActionFeedback({
         type: "error",
-        message: "Permission denied. Only SYSTEM_ADMIN users can revoke elevated access.",
+        message: "Permission denied. Only ADMIN and SYSTEM_ADMIN users can revoke elevated access.",
       });
       setConfirmRevokeTarget(null);
       return;
     }
-    revokeMutation.mutate(confirmRevokeTarget.id);
+    revokeMutation.mutate(confirmRevokeTarget);
   };
 
   const getRoleBadgeClass = (role) => {
     const r = (role || "").toUpperCase();
-    if (r === "PM" || r === "PROJECT_MANAGER") return "role-badge role-badge-pm";
+    if (r === "PM") return "role-badge role-badge-pm";
     if (r === "ADMIN" || r === "SYSTEM_ADMIN") return "role-badge role-badge-admin";
     if (r === "HR") return "role-badge role-badge-hr";
     if (r === "IT" || r === "DEVOPS") return "role-badge role-badge-it";
@@ -176,7 +191,7 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
           <span className="admin-card-badge" title="Active Grants Count">
             {activeGrants.length} Active
           </span>
-          {onOpenGrantModal && isSystemAdmin && (
+          {onOpenGrantModal && isPlatformAdmin && (
             <button
               type="button"
               className="btn btn-primary"
@@ -272,8 +287,8 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
                   color: "#64748b",
                 }}
               >
-                This action is immediate and will terminate active elevated
-                sessions.
+                This takes effect immediately: the user loses the elevated role on
+                their next request.
               </p>
             </div>
             <div className="modal-footer">
@@ -447,7 +462,7 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
                       </span>
                     </td>
                     <td style={{ textAlign: "right", whiteSpace: "nowrap" }}>
-                      {!isSystemAdmin ? (
+                      {!isPlatformAdmin ? (
                         <span style={{ fontSize: "12px", color: "#94a3b8" }}>
                           Read-only
                         </span>
@@ -458,7 +473,7 @@ export function ActiveGrantsTable({ onOpenGrantModal }) {
                           onClick={() => setConfirmRevokeTarget(grant)}
                           disabled={
                             revokeMutation.isPending &&
-                            confirmRevokeTarget?.id === grant.id
+                            revokeMutation.variables?.id === grant.id
                           }
                           title={`Revoke ${grant.granted_role} privilege for this user`}
                         >

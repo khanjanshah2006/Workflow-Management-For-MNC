@@ -2237,3 +2237,239 @@
   background: #fef2f2;
   border-radius: 6px;
 }
+
+/* ==========================================================================
+   Kanban Badges & Submission History (Issue #162 / S3-FE-5)
+   ========================================================================== */
+
+/* Kanban Badges */
+.badge-blocked {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2.5px 7.5px;
+  border-radius: 6px;
+  background: #fef2f2;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  cursor: help;
+}
+
+.badge-rejected {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2.5px 7.5px;
+  border-radius: 6px;
+  background: #fff7ed;
+  color: #c2410c;
+  border: 1px solid #fed7aa;
+  white-space: nowrap;
+  letter-spacing: 0.2px;
+  cursor: help;
+}
+
+/* Submission History Section in Task Drawer */
+.submission-history-section {
+  border-top: 1px solid #f1f5f9;
+  padding-top: 20px;
+}
+
+.submission-history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.submission-count-badge {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  background: #f1f5f9;
+  padding: 2px 8px;
+  border-radius: 12px;
+}
+
+.submission-loading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12.5px;
+  color: #64748b;
+  padding: 12px 0;
+}
+
+.submission-spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid #e2e8f0;
+  border-top-color: #2563eb;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+.submission-empty-text {
+  font-size: 12.5px;
+  color: #94a3b8;
+  font-style: italic;
+  margin: 0;
+  padding: 8px 0;
+}
+
+.submission-attempts-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.submission-attempt-card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  transition: border-color 150ms ease;
+}
+
+.submission-attempt-card:hover {
+  border-color: #cbd5e1;
+}
+
+.submission-attempt-latest {
+  border-color: #93c5fd;
+  background: #fbfdff;
+}
+
+.submission-attempt-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.submission-attempt-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.submission-attempt-number {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.submission-attempt-date {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.submission-remarks-block {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.submission-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.submission-remarks-text {
+  font-size: 12.5px;
+  color: #334155;
+  line-height: 1.45;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 6px;
+  padding: 8px 12px;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.submission-feedback-block {
+  background: #fff7ed;
+  border: 1px solid #fed7aa;
+  border-radius: 6px;
+  padding: 8px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.submission-feedback-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: #c2410c;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.submission-feedback-text {
+  font-size: 12px;
+  color: #9a3412;
+  line-height: 1.4;
+}
+
+.submission-download-row {
+  display: flex;
+  align-items: center;
+  padding-top: 4px;
+}
+
+.btn-download-deliverable {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #15803d;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 120ms ease;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.btn-download-deliverable:hover:not(:disabled) {
+  background: #dcfce7;
+  border-color: #86efac;
+  color: #166534;
+}
+
+.btn-download-deliverable:disabled {
+  opacity: 0.65;
+  cursor: wait;
+}
+
+.submission-file-size {
+  font-size: 11px;
+  color: #4ade80;
+  margin-left: 4px;
+}
+
+.submission-no-file {
+  padding-top: 2px;
+}

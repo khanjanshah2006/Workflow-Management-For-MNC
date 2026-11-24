@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createDepartmentTeam,
@@ -13,6 +13,8 @@ import {
   buildCreatePayload,
   diffMembers,
 } from "./teamFormUtils.js";
+
+const NO_MEMBERS = Object.freeze([]);
 
 /**
  * TeamFormModal (Issue #160 — HR Department Teams Console)
@@ -38,8 +40,11 @@ export default function TeamFormModal({
   const [errors, setErrors] = useState({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Fetch team members if editing
-  const { data: rawTeamMembers = [] } = useQuery({
+  const prevOpenRef = useRef(false);
+  const prevEditingTeamIdRef = useRef(null);
+
+  // Fetch team members if editing (stable NO_MEMBERS fallback prevents re-renders)
+  const { data: rawTeamMembers = NO_MEMBERS } = useQuery({
     queryKey: ["teamMembers", editingTeam?.team_id],
     queryFn: () => teamApi.getTeamMembers(editingTeam.team_id),
     enabled: isOpen && !!editingTeam?.team_id,
@@ -52,40 +57,73 @@ export default function TeamFormModal({
     enabled: isOpen && !!deptId,
   });
 
-  // Populate or reset form fields
+  // Populate or reset form fields strictly when modal opens or target team changes
   useEffect(() => {
     if (!isOpen) {
+      prevOpenRef.current = false;
+      prevEditingTeamIdRef.current = null;
       setErrors({});
       setIsSubmitting(false);
       return;
     }
 
-    if (editingTeam) {
-      setName(editingTeam.name || "");
-      setDescription(editingTeam.description || "");
-      const leadId = editingTeam.lead_emp_id || null;
-      setLeadEmpId(leadId);
+    const wasClosed = !prevOpenRef.current;
+    const currentTeamId = editingTeam?.team_id ?? null;
+    const teamChanged = currentTeamId !== prevEditingTeamIdRef.current;
 
-      const existingMemberIds = rawTeamMembers
+    if (wasClosed || teamChanged) {
+      prevOpenRef.current = true;
+      prevEditingTeamIdRef.current = currentTeamId;
+
+      if (editingTeam) {
+        setName(editingTeam.name || "");
+        setDescription(editingTeam.description || "");
+        const leadId = editingTeam.lead_emp_id || null;
+        setLeadEmpId(leadId);
+
+        const existingMemberIds = rawTeamMembers
+          .map((m) => m.emp_id || m.employee_id || m.id)
+          .filter((id) => id != null);
+
+        if (leadId && !existingMemberIds.includes(leadId)) {
+          existingMemberIds.push(leadId);
+        }
+
+        setMemberEmpIds(existingMemberIds);
+        setInitialMemberIds(existingMemberIds);
+      } else {
+        setName("");
+        setDescription("");
+        setLeadEmpId(null);
+        setMemberEmpIds([]);
+        setInitialMemberIds([]);
+        setEmployeeSearch("");
+      }
+      setErrors({});
+    }
+  }, [isOpen, editingTeam]);
+
+  // When editing, populate members once rawTeamMembers resolves asynchronously
+  useEffect(() => {
+    if (
+      isOpen &&
+      editingTeam &&
+      rawTeamMembers.length > 0 &&
+      initialMemberIds.length === 0
+    ) {
+      const leadId = editingTeam.lead_emp_id || null;
+      const loadedMemberIds = rawTeamMembers
         .map((m) => m.emp_id || m.employee_id || m.id)
         .filter((id) => id != null);
 
-      if (leadId && !existingMemberIds.includes(leadId)) {
-        existingMemberIds.push(leadId);
+      if (leadId && !loadedMemberIds.includes(leadId)) {
+        loadedMemberIds.push(leadId);
       }
 
-      setMemberEmpIds(existingMemberIds);
-      setInitialMemberIds(existingMemberIds);
-    } else {
-      setName("");
-      setDescription("");
-      setLeadEmpId(null);
-      setMemberEmpIds([]);
-      setInitialMemberIds([]);
-      setEmployeeSearch("");
+      setMemberEmpIds(loadedMemberIds);
+      setInitialMemberIds(loadedMemberIds);
     }
-    setErrors({});
-  }, [isOpen, editingTeam, rawTeamMembers]);
+  }, [isOpen, editingTeam, rawTeamMembers, initialMemberIds.length]);
 
   if (!isOpen) return null;
 

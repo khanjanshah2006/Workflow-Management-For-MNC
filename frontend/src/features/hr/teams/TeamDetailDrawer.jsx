@@ -46,7 +46,12 @@ export default function TeamDetailDrawer({
 
   const isDisbanded = team.status === "DISBANDED";
 
-  const handleRemoveMember = async (empId, memberName) => {
+  const handleRemoveMember = async (empId, memberName, isLead) => {
+    if (isLead) {
+      toast.error("Change the team lead before removing them");
+      return;
+    }
+
     setRemovingEmpId(empId);
     try {
       await removeTeamMember(team.team_id, empId);
@@ -60,7 +65,7 @@ export default function TeamDetailDrawer({
       toast.success(`${memberName || "Member"} removed from team.`);
     } catch (err) {
       if (err.status === 409) {
-        toast.error("Change the team lead before removing them.");
+        toast.error("Change the team lead before removing them");
       } else {
         toast.error(err.message || "Failed to remove team member.");
       }
@@ -197,14 +202,14 @@ export default function TeamDetailDrawer({
                         <button
                           type="button"
                           className="dt-btn-remove"
-                          disabled={isLead || isRemovingThis || isDisbanding}
+                          disabled={isRemovingThis || isDisbanding}
                           title={
                             isLead
-                              ? "Cannot remove designated team lead. Reassign lead first."
+                              ? "Change the team lead before removing them"
                               : "Remove member from team"
                           }
                           onClick={() =>
-                            handleRemoveMember(member.emp_id, member.name)
+                            handleRemoveMember(member.emp_id, member.name, isLead)
                           }
                         >
                           {isRemovingThis ? "..." : "Remove"}

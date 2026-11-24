@@ -72,3 +72,20 @@ export function diffMembers(before = [], after = [], currentLeadId = null) {
 
   return { toAdd, toRemove };
 }
+
+/**
+ * Calculates active team count for a department, preferring live query data
+ * when available, falling back to dept.team_count if present.
+ * @param {Object} dept
+ * @param {Array|undefined} teamsList
+ * @returns {number}
+ */
+export function calculateDepartmentTeamCount(dept, teamsList) {
+  if (Array.isArray(teamsList)) {
+    return teamsList.filter((t) => t && t.status !== "DISBANDED").length;
+  }
+  if (typeof dept?.team_count === "number" && dept.team_count > 0) {
+    return dept.team_count;
+  }
+  return dept?.team_count ?? 0;
+}

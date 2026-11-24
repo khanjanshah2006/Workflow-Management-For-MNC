@@ -132,7 +132,25 @@ function TaskCard({ task, onSelectTask, onUpdateProgress }) {
     >
       <div className="kanban-card-top">
         <span className="kanban-card-id">#{task.task_id}</span>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
+          {(task.status === "BLOCKED" || task.blocker_reason) && (
+            <span
+              className="badge-blocked"
+              title={task.blocker_reason || "Task is blocked"}
+              role="status"
+            >
+              Blocked
+            </span>
+          )}
+          {task.rejection_count > 0 && (
+            <span
+              className="badge-rejected"
+              title={`Rejected ${task.rejection_count} time${task.rejection_count === 1 ? "" : "s"}`}
+              role="status"
+            >
+              Rejected {task.rejection_count}×
+            </span>
+          )}
           <StatusBadge status={task.status} />
           <PriorityBadge priority={task.priority} />
         </div>

@@ -1,22 +1,23 @@
 import React from "react";
 import { normalizeRole } from "../../hooks/useAuth";
+import { formatLockedUntil } from "./lockState";
 
 const ROLE_DISPLAY_NAMES = {
   ADMIN: "System Admin",
   SYSTEM_ADMIN: "System Admin",
   PM: "Project Manager",
-  PROJECT_MANAGER: "Project Manager",
   EMPLOYEE: "Employee",
-  HR: "HR Manager",
-  HR_MANAGER: "HR Manager",
+  HR: "HR",
   CLIENT: "Client",
   IT_SUPPORT: "IT Support",
   TEAM_LEAD: "Team Lead",
+  MNC_EXECUTIVE: "MNC Executive",
 };
 
 export const UserTable = ({
   users = [],
   isLoading = false,
+  isError = false,
   currentUser = null,
   page = 1,
   totalPages = 1,
@@ -25,6 +26,8 @@ export const UserTable = ({
   onToggleStatus,
   onChangeRole,
   onResetPassword,
+  onUnlock,
+  unlockingAccountId = null,
 }) => {
   const currentAdminEmail = currentUser?.email?.toLowerCase();
   const currentAdminId = currentUser?.account_id;
@@ -41,6 +44,9 @@ export const UserTable = ({
       </div>
     );
   }
+
+  // On a failed request the page shows its error banner (with Retry); don't claim there are no users.
+  if (isError) return null;
 
   if (!users || users.length === 0) {
     return (
@@ -175,6 +181,29 @@ export const UserTable = ({
                     />
                     {user.is_active ? "Active" : "Deactivated"}
                   </span>
+                  {user.is_locked && (
+                    <div style={{ marginTop: "4px" }}>
+                      <span
+                        data-testid={`locked-badge-${user.account_id}`}
+                        title={`Locked after repeated failed sign-ins until ${new Date(user.locked_until).toLocaleString()}`}
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          gap: "4px",
+                          fontSize: "11px",
+                          fontWeight: "700",
+                          padding: "2px 8px",
+                          borderRadius: "999px",
+                          background: "#fff7ed",
+                          color: "#9a3412",
+                          border: "1px solid #fed7aa",
+                          whiteSpace: "nowrap",
+                        }}
+                      >
+                        🔒 Locked until {formatLockedUntil(user.locked_until)}
+                      </span>
+                    </div>
+                  )}
                 </td>
 
                 <td>
@@ -214,6 +243,28 @@ export const UserTable = ({
 
                 <td style={{ textAlign: "right" }}>
                   <div style={{ display: "inline-flex", alignItems: "center", gap: "6px" }}>
+                    {/* Unlock Button (US-48): only for accounts locked by failed sign-ins */}
+                    {user.is_locked && onUnlock && (
+                      <button
+                        type="button"
+                        className="btn"
+                        style={{
+                          fontSize: "12px",
+                          padding: "5px 10px",
+                          background: "#fff7ed",
+                          border: "1px solid #fed7aa",
+                          color: "#9a3412",
+                          borderRadius: "6px",
+                          fontWeight: "600",
+                        }}
+                        onClick={() => onUnlock(user)}
+                        disabled={unlockingAccountId === user.account_id}
+                        title="Clear the failed sign-in lock on this account"
+                      >
+                        {unlockingAccountId === user.account_id ? "Unlocking..." : "Unlock"}
+                      </button>
+                    )}
+
                     {/* Role Change Button */}
                     <button
                       type="button"

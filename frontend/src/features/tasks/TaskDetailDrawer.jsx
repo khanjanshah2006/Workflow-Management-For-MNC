@@ -5,6 +5,7 @@ import RejectionFeedbackBanner from "./components/RejectionFeedbackBanner";
 import SubmitTaskModal from "./components/SubmitTaskModal";
 import ResubmitTaskModal from "./components/ResubmitTaskModal";
 import TaskCommentThread from "./components/TaskCommentThread";
+import SubmissionHistory from "./components/SubmissionHistory";
 
 /**
  * Formats an ISO date/timestamp into a readable string.
@@ -489,6 +490,9 @@ export default function TaskDetailDrawer({
                 </div>
               </div>
 
+              {/* Submission History Section (US-11, US-12 / Issue #162) */}
+              <SubmissionHistory taskId={taskId} task={task} />
+
               {/* Task Comments Discussion Thread (US-33) */}
               <div className="drawer-comments-section" aria-label="Task Discussion">
                 <TaskCommentThread taskId={taskId} />
@@ -502,6 +506,7 @@ export default function TaskDetailDrawer({
                 onClose={() => setIsSubmitModalOpen(false)}
                 onSuccess={(result) => {
                   queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] });
+                  queryClient.invalidateQueries({ queryKey: ["task-submissions", taskId] });
                   queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
                   refetch();
                   setActionToast({
@@ -529,6 +534,7 @@ export default function TaskDetailDrawer({
                   const updatedStatus =
                     result?.status === "IN_REVIEW" ? result.status : "IN_REVIEW";
                   queryClient.invalidateQueries({ queryKey: ["task-detail", taskId] });
+                  queryClient.invalidateQueries({ queryKey: ["task-submissions", taskId] });
                   queryClient.invalidateQueries({ queryKey: ["my-tasks"] });
                   refetch();
                   setActionToast({

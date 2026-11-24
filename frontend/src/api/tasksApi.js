@@ -1,4 +1,5 @@
 import { apiClient } from "./client.js";
+import { downloadAuthenticatedFile } from "./download.js";
 
 /**
  * Tasks API Service (WorkSphere S3 / US-10 & US-32)
@@ -42,9 +43,7 @@ export function getProgressFillClass(status) {
  * - Task Title (case-insensitive substring)
  * - Task ID (exact or partial numeric match)
  * - Project ID (exact or partial numeric match)
- *
- * NOTE: blocker_reason is intentionally NOT searched because GET /api/v1/tasks/my-tasks
- * returns TaskSummaryResponse which does not include blocker_reason.
+ * - Blocker Reason (case-insensitive substring)
  *
  * @param {Object} task
  * @param {string} query
@@ -63,8 +62,11 @@ export function matchesTaskSearch(task, query) {
     task.project_id !== undefined &&
     task.project_id !== null &&
     String(task.project_id).includes(q);
+  const blockerMatch = Boolean(
+    task.blocker_reason && task.blocker_reason.toLowerCase().includes(q)
+  );
 
-  return titleMatch || taskIdMatch || projectIdMatch;
+  return titleMatch || taskIdMatch || projectIdMatch || blockerMatch;
 }
 
 /**
@@ -376,14 +378,15 @@ export const ALLOWED_FILE_EXTENSIONS = [
 ];
 
 /**
- * Maximum deliverable attachment file size in bytes (25MB).
+ * Maximum deliverable attachment file size in bytes (5MB).
  */
-export const MAX_FILE_SIZE_BYTES = 25 * 1024 * 1024; // 26,214,400 bytes
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024; // 5,242,880 bytes
+export const MAX_FILE_SIZE_BYTES = MAX_UPLOAD_BYTES;
 
 /**
  * Validates a file's format and size against WorkSphere deliverable standards.
  * Allowed types: .pdf, .zip, .tar.gz, .png, .jpg, .jpeg, .docx
- * Max size: 25 MB
+ * Max size: 5 MB
  *
  * @param {File|{ name: string, size: number }|null} file
  * @returns {{ valid: boolean, error?: string }}
@@ -404,15 +407,40 @@ export function validateDeliverableFile(file) {
     };
   }
 
-  if (file.size > MAX_FILE_SIZE_BYTES) {
+  if (file.size > MAX_UPLOAD_BYTES) {
     const sizeMb = (file.size / (1024 * 1024)).toFixed(1);
     return {
       valid: false,
-      error: `File size exceeds the 25MB limit (current size: ${sizeMb} MB).`,
+      error: `File size exceeds the 5MB limit (current size: ${sizeMb} MB).`,
     };
   }
 
   return { valid: true };
+}
+
+/**
+ * Opens or downloads a deliverable attachment (Issue #162).
+ * - If url starts with /api/, routes to downloadAuthenticatedFile with auth headers.
+ * - Otherwise, for link-only/external submissions, opens in a new tab with noopener,noreferrer.
+ *
+ * @param {string} url Deliverable file endpoint or external link
+ * @param {string} [fallbackName="deliverable"] Recommended fallback filename
+ * @returns {Promise<any>}
+ */
+export async function openDeliverable(url, fallbackName = "deliverable") {
+  if (!url) return;
+  if (url.startsWith("/api/")) {
+    return downloadAuthenticatedFile(url, fallbackName);
+  }
+  // Legacy uploads (e.g. /uploads/...) are not served by the backend, so there is nothing to open.
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(
+      "This file was uploaded before attachments moved to the database and is no longer available."
+    );
+  }
+  if (typeof window !== "undefined") {
+    window.open(url, "_blank", "noopener,noreferrer");
+  }
 }
 
 /**
@@ -424,7 +452,7 @@ export function validateDeliverableFile(file) {
  * @param {number|string} taskId
  * @param {Object} payload
  * @param {string} payload.remarks Mandatory remarks describing deliverables
- * @param {File} [payload.file] Optional attached file (max 25MB)
+ * @param {File} [payload.file] Optional attached file (max 5MB)
  * @returns {Promise<Object>} TaskSubmissionResponse
  */
 export async function submitTask(taskId, { remarks, file } = {}) {
@@ -903,6 +931,8 @@ export const tasksApi = {
   getOverdueTasks,
   ALLOWED_FILE_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
+  MAX_UPLOAD_BYTES,
+  openDeliverable,
 };
 
 export default tasksApi;

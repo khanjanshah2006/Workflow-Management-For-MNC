@@ -1,8 +1,9 @@
 import { useState } from "react";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import NotificationBell from "../common/NotificationBell";
 import { useAuth } from "../../context/AuthContext";
 import { navConfig, filterNavForRole } from "./navConfig";
+import { ROUTES } from "../../routes";
 
 export default function AppLayout() {
   const [collapsed, setCollapsed] = useState(false);
@@ -38,6 +39,8 @@ export default function AppLayout() {
       ? "IT Support"
       : location.pathname.startsWith("/admin")
       ? "User Admin"
+      : location.pathname.startsWith("/account/security")
+      ? "Account Security"
       : "Dashboard");
 
   return (
@@ -134,6 +137,13 @@ export default function AppLayout() {
                 >
                   {role || "User"}
                 </span>
+                <Link
+                  to={ROUTES.ACCOUNT_SECURITY}
+                  className="account-security-link"
+                  title="Account security and MFA"
+                >
+                  Security
+                </Link>
                 <button
                   onClick={handleLogout}
                   style={{

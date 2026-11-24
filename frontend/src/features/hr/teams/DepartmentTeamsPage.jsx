@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueries } from "@tanstack/react-query";
 import { useAuth } from "../../../context/AuthContext.jsx";
 import { normalizeRole } from "../../../auth/session.js";
 import {
@@ -8,6 +8,7 @@ import {
   getDepartmentTeams,
 } from "../../../api/teamApi.js";
 import { useToast } from "../../../components/common/Toast.jsx";
+import { calculateDepartmentTeamCount } from "./teamFormUtils.js";
 import TeamFormModal from "./TeamFormModal.jsx";
 import TeamDetailDrawer from "./TeamDetailDrawer.jsx";
 import "./teams.css";
@@ -55,6 +56,16 @@ export default function DepartmentTeamsPage() {
     queryKey: ["departments"],
     queryFn: getDepartments,
     enabled: isAuthorized,
+  });
+
+  // Query teams for all departments to derive accurate active team counts
+  const deptTeamQueries = useQueries({
+    queries: departments.map((d) => ({
+      queryKey: ["departmentTeams", d.dept_id, false],
+      queryFn: () => getDepartmentTeams(d.dept_id, { includeDisbanded: false }),
+      enabled: isAuthorized && Boolean(d.dept_id),
+      staleTime: 30000,
+    })),
   });
 
   // Determine active department ID
@@ -193,8 +204,10 @@ export default function DepartmentTeamsPage() {
             </div>
           ) : (
             <ul className="dt-dept-list">
-              {departments.map((dept) => {
+              {departments.map((dept, index) => {
                 const isActive = dept.dept_id === activeDeptId;
+                const teamsData = deptTeamQueries[index]?.data;
+                const count = calculateDepartmentTeamCount(dept, teamsData);
                 return (
                   <li
                     key={`dept-${dept.dept_id}`}
@@ -202,9 +215,7 @@ export default function DepartmentTeamsPage() {
                     onClick={() => handleSelectDepartment(dept.dept_id)}
                   >
                     <span>{dept.name}</span>
-                    <span className="dt-dept-count">
-                      {dept.team_count !== undefined ? dept.team_count : 0}
-                    </span>
+                    <span className="dt-dept-count">{count}</span>
                   </li>
                 );
               })}

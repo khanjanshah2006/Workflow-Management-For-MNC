@@ -3,8 +3,9 @@
  *
  * Provides responsive multi-dimensional filtering for incoming IT support tickets:
  * - Category filter (hardware, software, network, access, other)
- * - Status filter (open, in_progress, resolved, escalated)
+ * - Status filter (open, in_progress, escalated, resolved, closed)
  * - Priority filter (critical, high, medium, low)
+ * - Assigned to filter (ALL, me, unassigned, or custom uuid)
  * - Text search (ticket number, subject, reporter)
  */
 
@@ -21,8 +22,9 @@ const STATUS_OPTIONS = [
   { value: "ALL", label: "All Statuses" },
   { value: "open", label: "Open" },
   { value: "in_progress", label: "In Progress" },
-  { value: "resolved", label: "Resolved" },
   { value: "escalated", label: "Escalated" },
+  { value: "resolved", label: "Resolved" },
+  { value: "closed", label: "Closed" },
 ];
 
 const PRIORITY_OPTIONS = [
@@ -33,23 +35,32 @@ const PRIORITY_OPTIONS = [
   { value: "LOW", label: "Low" },
 ];
 
+const ASSIGNED_TO_OPTIONS = [
+  { value: "ALL", label: "All Tickets" },
+  { value: "me", label: "Assigned to Me" },
+  { value: "unassigned", label: "Unassigned" },
+];
+
 export default function TicketFilterBar({
-  categoryFilter,
+  categoryFilter = "ALL",
   onCategoryChange,
-  statusFilter,
+  statusFilter = "ALL",
   onStatusChange,
-  priorityFilter,
+  priorityFilter = "ALL",
   onPriorityChange,
-  searchQuery,
+  assignedToFilter = "ALL",
+  onAssignedToChange,
+  searchQuery = "",
   onSearchChange,
   onResetFilters,
-  totalCount,
-  filteredCount,
+  totalCount = 0,
+  filteredCount = 0,
 }) {
   const hasActiveFilters =
     categoryFilter !== "ALL" ||
     statusFilter !== "ALL" ||
     priorityFilter !== "ALL" ||
+    (assignedToFilter && assignedToFilter !== "ALL") ||
     searchQuery.trim().length > 0;
 
   return (
@@ -129,6 +140,29 @@ export default function TicketFilterBar({
             ))}
           </select>
         </div>
+
+        {/* Assigned To Filter */}
+        {onAssignedToChange && (
+          <div className="filter-field">
+            <label htmlFor="filter-assigned-to" className="filter-label">Assignee</label>
+            <select
+              id="filter-assigned-to"
+              className="filter-select"
+              value={assignedToFilter || "ALL"}
+              onChange={(e) => onAssignedToChange(e.target.value)}
+            >
+              {ASSIGNED_TO_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+              {assignedToFilter &&
+                !ASSIGNED_TO_OPTIONS.some((opt) => opt.value === assignedToFilter) && (
+                  <option value={assignedToFilter}>Custom ({assignedToFilter})</option>
+                )}
+            </select>
+          </div>
+        )}
 
         {/* Reset Filters Button */}
         {hasActiveFilters && (
