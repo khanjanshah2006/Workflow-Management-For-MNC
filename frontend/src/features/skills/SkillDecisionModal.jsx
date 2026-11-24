@@ -195,12 +195,6 @@ export default function SkillDecisionModal({
                 </span>
               </div>
               <div className="skill-decision-summary-row">
-                <span className="skill-decision-label">Department</span>
-                <span className="skill-decision-val">
-                  {request.department || request.department_name || "—"}
-                </span>
-              </div>
-              <div className="skill-decision-summary-row">
                 <span className="skill-decision-label">Action</span>
                 <span>
                   <span className={`skill-action-tag ${getActionBadgeClass(request.action)}`}>

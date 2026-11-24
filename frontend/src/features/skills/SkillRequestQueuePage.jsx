@@ -313,7 +313,6 @@ export default function SkillRequestQueuePage() {
                 <thead>
                   <tr>
                     <th>Employee</th>
-                    <th>Department</th>
                     <th>Action</th>
                     <th>Skill</th>
                     <th>Justification</th>
@@ -341,14 +340,7 @@ export default function SkillRequestQueuePage() {
                           </div>
                         </td>
 
-                        {/* 2. Department */}
-                        <td>
-                          <span style={{ color: "#475569" }}>
-                            {req.department || req.department_name || "—"}
-                          </span>
-                        </td>
-
-                        {/* 3. Action */}
+                        {/* 2. Action */}
                         <td>
                           <span className={`skill-action-tag ${getActionBadgeClass(action)}`}>
                             {action}
