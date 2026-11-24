@@ -315,7 +315,7 @@ function App() {
                 <Route
                   path={ROUTES.SKILL_REQUESTS}
                   element={
-                    <ProtectedRoute allowedRoles={["HR", "TEAM_LEAD", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={["HR", "TEAM_LEAD", "ADMIN", "SYSTEM_ADMIN"]}>
                       <SkillRequestQueuePage />
                     </ProtectedRoute>
                   }
