@@ -281,7 +281,7 @@ export default function TaskReviewQueue({ onReviewTask }) {
                         <span className="attachment-name">
                           {downloadingUrl === deliverableUrl
                             ? "Downloading file..."
-                            : deliverableUrl}
+                            : deliverableUrl.split("/").pop()}
                         </span>
                         <span className="attachment-arrow">↗</span>
                       </button>

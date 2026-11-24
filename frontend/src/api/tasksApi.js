@@ -432,6 +432,12 @@ export async function openDeliverable(url, fallbackName = "deliverable") {
   if (url.startsWith("/api/")) {
     return downloadAuthenticatedFile(url, fallbackName);
   }
+  // Legacy uploads (e.g. /uploads/...) are not served by the backend, so there is nothing to open.
+  if (!/^https?:\/\//i.test(url)) {
+    throw new Error(
+      "This file was uploaded before attachments moved to the database and is no longer available."
+    );
+  }
   if (typeof window !== "undefined") {
     window.open(url, "_blank", "noopener,noreferrer");
   }
@@ -446,7 +452,7 @@ export async function openDeliverable(url, fallbackName = "deliverable") {
  * @param {number|string} taskId
  * @param {Object} payload
  * @param {string} payload.remarks Mandatory remarks describing deliverables
- * @param {File} [payload.file] Optional attached file (max 25MB)
+ * @param {File} [payload.file] Optional attached file (max 5MB)
  * @returns {Promise<Object>} TaskSubmissionResponse
  */
 export async function submitTask(taskId, { remarks, file } = {}) {

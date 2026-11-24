@@ -1814,4 +1814,20 @@ describe("16. Authenticated Deliverable Downloads & openDeliverable (Issue #162)
     assert.equal(openedTarget, "_blank");
     assert.equal(openedFeatures, "noopener,noreferrer");
   });
+
+  test("openDeliverable rejects legacy /uploads/ paths instead of opening the frontend origin", async () => {
+    let opened = false;
+    globalThis.window = {
+      open: () => {
+        opened = true;
+        return {};
+      },
+    };
+
+    await assert.rejects(
+      () => openDeliverable("/uploads/task_submissions/purchase-order-approval-workflow-v2.pdf"),
+      /uploaded before attachments moved to the database/
+    );
+    assert.equal(opened, false);
+  });
 });
