@@ -6,6 +6,7 @@ import {
   SKILL_PROFICIENCIES,
   SKILL_STATUSES,
   PROFICIENCY_LABELS,
+  DEFAULT_CATALOG_SKILLS,
   validateProposal,
   validateRejectionRemarks,
   describeChange,
@@ -153,6 +154,24 @@ describe("1. Skill Proposal Form Validation (validateProposal)", () => {
       });
       assert.equal(res.isValid, true);
       assert.deepEqual(res.errors, {});
+    });
+
+    test("passes with typed proposed_skill_name without hardcoded skill_id", () => {
+      const res = validateProposal("ADD", {
+        proposed_skill_name: "Kubernetes",
+        proficiency: "INTERMEDIATE",
+        years_of_experience: 2,
+        justification: "Configured Kubernetes clusters for production deployments.",
+      });
+      assert.equal(res.isValid, true);
+      assert.deepEqual(res.errors, {});
+    });
+
+    test("DEFAULT_CATALOG_SKILLS contains skill names without hardcoded IDs", () => {
+      assert.ok(Array.isArray(DEFAULT_CATALOG_SKILLS));
+      assert.ok(DEFAULT_CATALOG_SKILLS.includes("Kubernetes"));
+      assert.ok(DEFAULT_CATALOG_SKILLS.includes("Selenium"));
+      assert.ok(DEFAULT_CATALOG_SKILLS.every((item) => typeof item === "string"));
     });
   });
 

@@ -1,30 +1,14 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   SKILL_ACTIONS,
   SKILL_PROFICIENCIES,
   PROFICIENCY_LABELS,
+  DEFAULT_CATALOG_SKILLS,
   validateProposal,
 } from "../skills/skillRequestUtils.js";
 import { proposeSkillChange } from "../../api/profileApi.js";
 
-// Common catalog skills available for quick selection in ADD mode
-const DEFAULT_CATALOG_SKILLS = [
-  { skill_id: 1, name: "Python" },
-  { skill_id: 2, name: "JavaScript" },
-  { skill_id: 3, name: "TypeScript" },
-  { skill_id: 4, name: "React" },
-  { skill_id: 5, name: "Node.js" },
-  { skill_id: 6, name: "FastAPI" },
-  { skill_id: 7, name: "SQL" },
-  { skill_id: 8, name: "PostgreSQL" },
-  { skill_id: 9, name: "Docker" },
-  { skill_id: 10, name: "Kubernetes" },
-  { skill_id: 11, name: "AWS" },
-  { skill_id: 12, name: "Git" },
-  { skill_id: 13, name: "System Design" },
-  { skill_id: 14, name: "Agile / Scrum" },
-  { skill_id: 15, name: "Project Management" },
-];
+export { DEFAULT_CATALOG_SKILLS };
 
 /**
  * ProposeSkillModal Component (US-34 / Issue #161)
@@ -39,11 +23,23 @@ export default function ProposeSkillModal({
   mode = "ADD",
   skill = null,
   availableCatalog = DEFAULT_CATALOG_SKILLS,
+  isLoadingCatalog = false,
   onClose,
   onSuccess,
   onError,
 }) {
   const currentMode = (mode || "ADD").toUpperCase();
+
+  // Normalize catalog to unique valid skill name strings (no hardcoded IDs)
+  const catalogSkills = useMemo(() => {
+    if (!Array.isArray(availableCatalog)) return [];
+    return availableCatalog
+      .map((item) => {
+        if (typeof item === "string") return item.trim();
+        return (item?.name || item?.proposed_skill_name || item?.skill_name || "").trim();
+      })
+      .filter((name) => Boolean(name));
+  }, [availableCatalog]);
 
   // Skill entry type for ADD mode: "CATALOG" | "CUSTOM"
   const [skillEntryType, setSkillEntryType] = useState("CATALOG");
@@ -88,19 +84,19 @@ export default function ProposeSkillModal({
       });
       setSkillEntryType("CATALOG");
     } else {
-      // ADD mode defaults
+      // ADD mode defaults: rely on proposed_skill_name, no hardcoded IDs
       setFormData({
-        skill_id: availableCatalog.length > 0 ? String(availableCatalog[0].skill_id) : "",
+        skill_id: "",
         proposed_skill_name: "",
         proficiency: "INTERMEDIATE",
         years_of_experience: 1,
         justification: "",
       });
-      setSkillEntryType(availableCatalog.length > 0 ? "CATALOG" : "CUSTOM");
+      setSkillEntryType(catalogSkills.length > 0 ? "CATALOG" : "CUSTOM");
     }
     setFieldErrors({});
     setServerError(null);
-  }, [isOpen, currentMode, skill, availableCatalog]);
+  }, [isOpen, currentMode, skill, catalogSkills.length]);
 
   if (!isOpen) return null;
 
@@ -111,11 +107,33 @@ export default function ProposeSkillModal({
       [name]: value,
     }));
 
-    if (fieldErrors[name] || fieldErrors.skill) {
+    if (name === "years_of_experience") {
+      const num = Number(value);
+      if (value !== "" && (isNaN(num) || num < 0 || num > 50)) {
+        setFieldErrors((prev) => ({
+          ...prev,
+          years_of_experience: "Years of experience must be an integer between 0 and 50.",
+        }));
+      } else {
+        setFieldErrors((prev) => {
+          const next = { ...prev };
+          delete next.years_of_experience;
+          return next;
+        });
+      }
+    }
+
+    if (
+      fieldErrors[name] ||
+      fieldErrors.skill ||
+      (name === "proposed_skill_name" && (fieldErrors.proposed_skill_name || fieldErrors.skill_id))
+    ) {
       setFieldErrors((prev) => {
         const next = { ...prev };
         delete next[name];
         delete next.skill;
+        delete next.proposed_skill_name;
+        delete next.skill_id;
         return next;
       });
     }
@@ -146,11 +164,7 @@ export default function ProposeSkillModal({
     };
 
     if (currentMode === SKILL_ACTIONS.ADD) {
-      if (skillEntryType === "CATALOG") {
-        validationForm.skill_id = formData.skill_id ? Number(formData.skill_id) : undefined;
-      } else {
-        validationForm.proposed_skill_name = formData.proposed_skill_name.trim();
-      }
+      validationForm.proposed_skill_name = formData.proposed_skill_name?.trim() || "";
       validationForm.proficiency = formData.proficiency;
       validationForm.years_of_experience = formData.years_of_experience;
     } else if (currentMode === SKILL_ACTIONS.UPDATE) {
@@ -177,11 +191,7 @@ export default function ProposeSkillModal({
       };
 
       if (currentMode === SKILL_ACTIONS.ADD) {
-        if (skillEntryType === "CATALOG") {
-          payload.skill_id = Number(formData.skill_id);
-        } else {
-          payload.proposed_skill_name = formData.proposed_skill_name.trim();
-        }
+        payload.proposed_skill_name = formData.proposed_skill_name.trim();
         payload.proficiency = formData.proficiency;
         payload.years_of_experience = Number(formData.years_of_experience);
       } else if (currentMode === SKILL_ACTIONS.UPDATE) {
@@ -321,23 +331,35 @@ export default function ProposeSkillModal({
 
                 {skillEntryType === "CATALOG" ? (
                   <div style={{ marginTop: "10px" }}>
-                    <select
-                      id="skill-select-catalog"
-                      name="skill_id"
-                      className={`skill-select ${fieldErrors.skill || fieldErrors.skill_id ? "skill-input-error" : ""}`}
-                      value={formData.skill_id}
-                      onChange={handleInputChange}
-                      disabled={isSubmitting}
-                      aria-invalid={Boolean(fieldErrors.skill || fieldErrors.skill_id)}
-                      data-testid="skill-catalog-select"
-                    >
-                      <option value="">-- Choose a skill --</option>
-                      {availableCatalog.map((item) => (
-                        <option key={item.skill_id} value={item.skill_id}>
-                          {item.name}
-                        </option>
-                      ))}
-                    </select>
+                    {isLoadingCatalog ? (
+                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }} data-testid="skill-catalog-loading">
+                        Loading available skills...
+                      </p>
+                    ) : catalogSkills.length === 0 ? (
+                      <p style={{ margin: "4px 0", fontSize: "13px", color: "#64748b" }} data-testid="skill-catalog-empty">
+                        No catalog skills available. Please enter a custom skill name below.
+                      </p>
+                    ) : (
+                      <select
+                        id="skill-select-catalog"
+                        name="proposed_skill_name"
+                        className={`skill-select ${
+                          fieldErrors.skill || fieldErrors.proposed_skill_name ? "skill-input-error" : ""
+                        }`}
+                        value={formData.proposed_skill_name}
+                        onChange={handleInputChange}
+                        disabled={isSubmitting}
+                        aria-invalid={Boolean(fieldErrors.skill || fieldErrors.proposed_skill_name)}
+                        data-testid="skill-catalog-select"
+                      >
+                        <option value="">-- Choose a skill --</option>
+                        {catalogSkills.map((skillName) => (
+                          <option key={skillName} value={skillName}>
+                            {skillName}
+                          </option>
+                        ))}
+                      </select>
+                    )}
                   </div>
                 ) : (
                   <div style={{ marginTop: "10px" }}>

@@ -27,6 +27,37 @@ export const PROFICIENCY_LABELS = Object.freeze({
 });
 
 /**
+ * Common catalog skill names available for quick selection in ADD mode.
+ * Contains standard technical, cloud, data, quality and leadership skills matching backend seeds.
+ * Does not contain hardcoded IDs to ensure consistent name-based proposal creation.
+ */
+export const DEFAULT_CATALOG_SKILLS = Object.freeze([
+  "Python",
+  "Java",
+  "React",
+  "TypeScript",
+  "Kotlin",
+  "Swift",
+  "SQL",
+  "Apache Spark",
+  "Power BI",
+  "Selenium",
+  "AWS",
+  "Kubernetes",
+  "Terraform",
+  "Penetration Testing",
+  "ITIL",
+  "Docker",
+  "Node.js",
+  "FastAPI",
+  "PostgreSQL",
+  "Git",
+  "System Design",
+  "Agile / Scrum",
+  "Project Management",
+]);
+
+/**
  * Validates a skill change proposal form according to action mode and business rules.
  *
  * @param {"ADD"|"UPDATE"|"REMOVE"} mode Proposal mode
