@@ -34,6 +34,8 @@ import {
   isValidUrl,
   ALLOWED_FILE_EXTENSIONS,
   MAX_FILE_SIZE_BYTES,
+  MAX_UPLOAD_BYTES,
+  openDeliverable,
 } from "../src/api/tasksApi.js";
 import { apiClient } from "../src/api/client.js";
 
@@ -174,16 +176,15 @@ describe("2. Supported-Field Search & Filtering Contract", () => {
     assert.equal(matchesTaskSearch(task, "2"), true);
   });
 
-  test("CONTRACT CHECK: does NOT search blocker_reason (GET /api/v1/tasks/my-tasks contract)", () => {
-    // Even if an object carries a blocker_reason property, search MUST NOT match on it
+  test("matches blocker_reason in client-side search (Issue #162)", () => {
     const taskWithBlocker = {
       ...SAMPLE_SUMMARY_TASKS[2],
       blocker_reason: "Specialized IT SecOps network egress allowance pending approval",
     };
 
-    // "SecOps" and "egress" only exist in blocker_reason, NOT in title, task_id (103), or project_id (2)
-    assert.equal(matchesTaskSearch(taskWithBlocker, "SecOps"), false);
-    assert.equal(matchesTaskSearch(taskWithBlocker, "egress"), false);
+    // "SecOps" and "egress" exist in blocker_reason and must now match
+    assert.equal(matchesTaskSearch(taskWithBlocker, "SecOps"), true);
+    assert.equal(matchesTaskSearch(taskWithBlocker, "egress"), true);
 
     // Title words must still match
     assert.equal(matchesTaskSearch(taskWithBlocker, "Webhook"), true);
@@ -855,25 +856,25 @@ describe("9. Task Submission & Deliverable Validation (submitTask & US-11)", () 
     }
   });
 
-  test("validates file size at and above the 25MB boundary", () => {
-    const exactly25MB = 25 * 1024 * 1024;
-    const over25MB = 25 * 1024 * 1024 + 1;
-    const under25MB = 25 * 1024 * 1024 - 1;
+  test("validates file size at and above the 5MB boundary (Issue #162)", () => {
+    const exactly5MB = 5 * 1024 * 1024;
+    const over5MB = 5 * 1024 * 1024 + 1;
+    const under5MB = 5 * 1024 * 1024 - 1;
 
-    // At or under 25MB passes
+    // At or under 5MB passes
     assert.equal(
-      validateDeliverableFile({ name: "deliverable.zip", size: exactly25MB }).valid,
+      validateDeliverableFile({ name: "deliverable.zip", size: exactly5MB }).valid,
       true
     );
     assert.equal(
-      validateDeliverableFile({ name: "deliverable.zip", size: under25MB }).valid,
+      validateDeliverableFile({ name: "deliverable.zip", size: under5MB }).valid,
       true
     );
 
-    // Above 25MB fails
-    const overCheck = validateDeliverableFile({ name: "deliverable.zip", size: over25MB });
+    // Above 5MB fails
+    const overCheck = validateDeliverableFile({ name: "deliverable.zip", size: over5MB });
     assert.equal(overCheck.valid, false);
-    assert.match(overCheck.error, /File size exceeds the 25MB limit/);
+    assert.match(overCheck.error, /File size exceeds the 5MB limit/);
   });
 
   test("dispatches correct multipart fields, auth bearer header, and credentials without manual Content-Type", async () => {
@@ -1737,5 +1738,77 @@ describe("15. Task Discussion Thread & Comment API Contract (US-33)", () => {
     assert.equal(optimisticComment.author_role, "Team Lead");
     assert.equal(optimisticComment.isOptimistic, true);
     assert.match(optimisticComment.comment_id, /^temp-/);
+  });
+
+  describe("Issue #162: Authenticated Deliverable Downloads & openDeliverable", () => {
+    let originalFetch;
+    let originalWindow;
+    let originalLocalStorage;
+
+    afterEach(() => {
+      if (originalFetch) globalThis.fetch = originalFetch;
+      if (originalWindow) globalThis.window = originalWindow;
+      if (originalLocalStorage) globalThis.localStorage = originalLocalStorage;
+    });
+
+    test("openDeliverable sends /api/... URLs to downloadAuthenticatedFile with Bearer token", async () => {
+      let capturedUrl = null;
+      let capturedHeaders = null;
+
+      originalFetch = globalThis.fetch;
+      originalLocalStorage = globalThis.localStorage;
+
+      globalThis.fetch = async (url, options) => {
+        capturedUrl = url;
+        capturedHeaders = options.headers;
+        return {
+          ok: true,
+          status: 200,
+          headers: {
+            get: (name) => {
+              if (name.toLowerCase() === "content-disposition") {
+                return 'attachment; filename="deliverable.pdf"';
+              }
+              return null;
+            },
+          },
+          blob: async () => ({ size: 1024, type: "application/pdf" }),
+        };
+      };
+
+      globalThis.localStorage = {
+        getItem: (k) => (k === "wms_access_token" ? "jwt-test-bearer-token" : null),
+        setItem: () => {},
+        removeItem: () => {},
+      };
+
+      await openDeliverable("/api/v1/tasks/42/submissions/5/file", "fallback.pdf");
+
+      assert.ok(capturedUrl.includes("/api/v1/tasks/42/submissions/5/file"));
+      assert.equal(capturedHeaders["Authorization"], "Bearer jwt-test-bearer-token");
+    });
+
+    test("openDeliverable routes external URLs to window.open with noopener,noreferrer", async () => {
+      let openedUrl = null;
+      let openedTarget = null;
+      let openedFeatures = null;
+
+      originalWindow = globalThis.window;
+      globalThis.window = {
+        open: (url, target, features) => {
+          openedUrl = url;
+          openedTarget = target;
+          openedFeatures = features;
+          return {};
+        },
+      };
+
+      const externalLink = "https://github.com/organization/repo/pull/123";
+      await openDeliverable(externalLink);
+
+      assert.equal(openedUrl, externalLink);
+      assert.equal(openedTarget, "_blank");
+      assert.equal(openedFeatures, "noopener,noreferrer");
+    });
   });
 });

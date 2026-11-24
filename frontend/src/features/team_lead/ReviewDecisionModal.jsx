@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { reviewTask, validateRejectionFeedback } from "../../api/tasksApi";
+import { reviewTask, validateRejectionFeedback, openDeliverable } from "../../api/tasksApi";
 
 /**
  * ReviewDecisionModal Component (US-12)
@@ -24,12 +24,53 @@ export default function ReviewDecisionModal({
   const [mode, setMode] = useState("VIEW");
   const [feedback, setFeedback] = useState("");
   const [validationError, setValidationError] = useState(null);
+  const [downloadingUrl, setDownloadingUrl] = useState(null);
+  const [downloadToast, setDownloadToast] = useState(null);
+
+  useEffect(() => {
+    if (!downloadToast) return;
+    const timer = setTimeout(() => setDownloadToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [downloadToast]);
 
   const handleClose = () => {
     setMode("VIEW");
     setFeedback("");
     setValidationError(null);
+    setDownloadingUrl(null);
+    setDownloadToast(null);
     if (onClose) onClose();
+  };
+
+  const handleOpenDeliverable = async (e) => {
+    e.preventDefault();
+    if (!deliverableUrl || downloadingUrl) return;
+    setDownloadingUrl(deliverableUrl);
+    try {
+      await openDeliverable(
+        deliverableUrl,
+        `deliverable-task-${task.task_id}`
+      );
+    } catch (err) {
+      if (err?.status === 403 || err?.message?.includes("403")) {
+        setDownloadToast({
+          type: "error",
+          message: "You don't have access to this file",
+        });
+      } else if (err?.status === 404 || err?.message?.includes("404")) {
+        setDownloadToast({
+          type: "error",
+          message: "File not found",
+        });
+      } else {
+        setDownloadToast({
+          type: "error",
+          message: err?.message || "Failed to download file",
+        });
+      }
+    } finally {
+      setDownloadingUrl(null);
+    }
   };
 
   const reviewMutation = useMutation({
@@ -113,6 +154,22 @@ export default function ReviewDecisionModal({
         </div>
 
         <div className="modal-body">
+          {downloadToast && (
+            <div
+              className={`alert-banner ${
+                downloadToast.type === "error"
+                  ? "alert-banner-danger"
+                  : "alert-banner-success"
+              }`}
+              role="alert"
+            >
+              <span className="alert-icon">
+                {downloadToast.type === "error" ? "⚠️" : "✓"}
+              </span>
+              <span>{downloadToast.message}</span>
+            </div>
+          )}
+
           {validationError && (
             <div className="alert-banner alert-banner-danger" role="alert">
               <span className="alert-icon">⚠️</span>
@@ -136,16 +193,35 @@ export default function ReviewDecisionModal({
             <div className="inspection-link-section">
               <span className="inspection-subhead">Deliverable Link / File:</span>
               {deliverableUrl ? (
-                <a
-                  href={deliverableUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
+                <button
+                  type="button"
+                  onClick={handleOpenDeliverable}
+                  disabled={downloadingUrl === deliverableUrl}
                   className="deliverable-external-link"
+                  title={
+                    downloadingUrl === deliverableUrl
+                      ? "Downloading..."
+                      : "Download or open deliverable"
+                  }
+                  style={{
+                    background: "none",
+                    border: "none",
+                    padding: 0,
+                    cursor: downloadingUrl === deliverableUrl ? "wait" : "pointer",
+                    font: "inherit",
+                    textAlign: "left",
+                  }}
                 >
-                  <span className="link-icon">🔗</span>
-                  <span className="link-text">{deliverableUrl}</span>
+                  <span className="link-icon">
+                    {downloadingUrl === deliverableUrl ? "⏳" : "🔗"}
+                  </span>
+                  <span className="link-text">
+                    {downloadingUrl === deliverableUrl
+                      ? "Downloading deliverable..."
+                      : deliverableUrl}
+                  </span>
                   <span className="link-arrow">↗</span>
-                </a>
+                </button>
               ) : (
                 <span className="text-muted-italic">No deliverable URL attached with submission.</span>
               )}
