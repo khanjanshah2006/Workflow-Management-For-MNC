@@ -22,7 +22,7 @@ function formatFileSize(bytes) {
  *
  * Allows an assigned employee to submit task deliverables for review:
  * - Remarks textarea (mandatory, non-empty)
- * - Optional drag-and-drop deliverable file attachment (max 25MB, approved extensions)
+ * - Optional drag-and-drop deliverable file attachment (max 5MB, approved extensions)
  * - Instant client-side validation and feedback
  * - Preserves form inputs on request failure
  * - Accessible dialog semantics and keyboard navigation
@@ -147,9 +147,17 @@ export default function SubmitTaskModal({ task, onClose, onSuccess }) {
       onClose();
     } catch (err) {
       // Preserve form values on error (remarks and file remain in state)
-      setErrorMessage(
-        err.message || "Failed to submit deliverable. Please try again."
-      );
+      if (
+        err?.status === 413 ||
+        err?.message?.includes("413") ||
+        err?.message?.toLowerCase().includes("larger than")
+      ) {
+        setErrorMessage("File is larger than 5 MB");
+      } else {
+        setErrorMessage(
+          err.message || "Failed to submit deliverable. Please try again."
+        );
+      }
     } finally {
       setIsSubmitting(false);
     }
@@ -257,7 +265,7 @@ export default function SubmitTaskModal({ task, onClose, onSuccess }) {
               <label className="form-label">
                 <span>Deliverable Attachment (Optional)</span>
                 <span style={{ fontSize: 11, fontWeight: 500, color: "#64748b" }}>
-                  Max 25 MB
+                  Max 5 MB
                 </span>
               </label>
 
@@ -299,7 +307,7 @@ export default function SubmitTaskModal({ task, onClose, onSuccess }) {
                     <strong>Click to browse</strong> or drag and drop deliverable
                   </p>
                   <p className="file-dropzone-hint">
-                    Supported: PDF, ZIP, TAR.GZ, PNG, JPG, JPEG, DOCX (up to 25MB)
+                    Supported: PDF, ZIP, TAR.GZ, PNG, JPG, JPEG, DOCX (up to 5MB)
                   </p>
                 </div>
               ) : (
