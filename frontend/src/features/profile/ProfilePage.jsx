@@ -1,8 +1,13 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { profileApi } from "../../api/profileApi";
 import { useAuth } from "../../hooks/useAuth";
+import ProposeSkillModal from "./ProposeSkillModal";
+import MySkillRequestsList from "./MySkillRequestsList";
+import {
+  PROFICIENCY_LABELS,
+} from "../skills/skillRequestUtils";
 import "./profile.css";
 
 /**
@@ -193,6 +198,96 @@ export default function ProfilePage() {
       showToast("error", "Update Failed", message);
     },
   });
+
+  // 3. Fetch current employee skills: GET /api/v1/profile/me/skills (US-34)
+  const {
+    data: skills = [],
+    isLoading: isLoadingSkills,
+    isError: isErrorSkills,
+    error: skillsError,
+    refetch: _refetchSkills,
+  } = useQuery({
+    queryKey: ["profile", "skills"],
+    queryFn: profileApi.getMySkills,
+    retry: 1,
+    enabled: Boolean(profile),
+  });
+
+  // 4. Fetch current employee skill requests: GET /api/v1/profile/me/skill-requests (US-34)
+  const {
+    data: skillRequests = [],
+    isLoading: isLoadingSkillRequests,
+    isError: isErrorSkillRequests,
+    error: skillRequestsError,
+    refetch: refetchSkillRequests,
+  } = useQuery({
+    queryKey: ["profile", "skill-requests"],
+    queryFn: profileApi.getMySkillRequests,
+    retry: 1,
+    enabled: Boolean(profile),
+  });
+
+  // Modal state for proposing skill changes (ADD / UPDATE / REMOVE)
+  const [isSkillModalOpen, setIsSkillModalOpen] = useState(false);
+  const [skillModalMode, setSkillModalMode] = useState("ADD");
+  const [selectedSkillForModal, setSelectedSkillForModal] = useState(null);
+
+  // Set of skill IDs that currently have a PENDING request
+  const pendingSkillIds = useMemo(() => {
+    const ids = new Set();
+    if (Array.isArray(skillRequests)) {
+      skillRequests.forEach((req) => {
+        if (req?.status === "PENDING" && req.skill_id) {
+          ids.add(Number(req.skill_id));
+        }
+      });
+    }
+    return ids;
+  }, [skillRequests]);
+
+  const handleAddSkillClick = () => {
+    setSkillModalMode("ADD");
+    setSelectedSkillForModal(null);
+    setIsSkillModalOpen(true);
+  };
+
+  const handleProposeChange = (skillItem) => {
+    setSkillModalMode("UPDATE");
+    setSelectedSkillForModal(skillItem);
+    setIsSkillModalOpen(true);
+  };
+
+  const handleProposeRemoval = (skillItem) => {
+    setSkillModalMode("REMOVE");
+    setSelectedSkillForModal(skillItem);
+    setIsSkillModalOpen(true);
+  };
+
+  const handleSkillProposalSuccess = (createdRequest, mode) => {
+    queryClient.invalidateQueries({ queryKey: ["profile", "skill-requests"] });
+    queryClient.invalidateQueries({ queryKey: ["profile", "skills"] });
+    queryClient.invalidateQueries({ queryKey: ["profile", "me"] });
+    const actionLabel = mode === "REMOVE" ? "removal" : mode === "UPDATE" ? "change" : "addition";
+    showToast(
+      "success",
+      "Proposal Submitted",
+      `Your skill ${actionLabel} proposal has been submitted to your Team Lead and HR.`
+    );
+  };
+
+  const handleSkillProposalError = (err) => {
+    const errMsg = err?.data?.detail || err?.message || "";
+    const isConflict =
+      err?.status === 409 ||
+      errMsg.toLowerCase().includes("pending request already exists");
+    if (isConflict) {
+      showToast(
+        "error",
+        "Duplicate Proposal",
+        "A pending proposal already exists for this skill."
+      );
+    }
+  };
 
   const handleStartEdit = () => {
     if (profile) {
@@ -821,6 +916,174 @@ export default function ProfilePage() {
               </div>
             </div>
           </form>
+
+          {/* ============================================================== */}
+          {/* SECTION 3: SKILLS & PROFICIENCIES (US-34 / Issue #161)         */}
+          {/* ============================================================== */}
+          <div className="profile-skills-card" data-testid="profile-skills-section">
+            <div className="profile-skills-header">
+              <div className="profile-skills-title-group">
+                <h3>
+                  <span aria-hidden="true">🎯</span> Skills & Proficiencies
+                </h3>
+                <p className="profile-skills-subtitle">
+                  Official organizational skill competencies verified by Team Leads and Human Resources.
+                </p>
+              </div>
+              <button
+                type="button"
+                className="btn-primary"
+                onClick={handleAddSkillClick}
+                data-testid="propose-new-skill-btn"
+                style={{
+                  fontSize: "12.5px",
+                  padding: "6px 14px",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: "6px",
+                }}
+              >
+                <span>+</span> Add Skill
+              </button>
+            </div>
+
+            {/* Loading state for skills */}
+            {isLoadingSkills && (
+              <div style={{ textAlign: "center", padding: "24px 0", color: "#64748b", fontSize: "13.5px" }}>
+                Loading skills...
+              </div>
+            )}
+
+            {/* Error state for skills */}
+            {isErrorSkills && (
+              <div className="skill-alert-banner skill-alert-error" style={{ margin: "12px 0" }}>
+                <span className="skill-alert-icon">⚠️</span>
+                <div className="skill-alert-body">
+                  <strong>Unable to load employee skills</strong>
+                  <p>{skillsError?.message || "Server error occurred while loading skills."}</p>
+                </div>
+              </div>
+            )}
+
+            {/* Empty state for skills */}
+            {!isLoadingSkills && !isErrorSkills && skills.length === 0 && (
+              <div
+                style={{
+                  padding: "24px",
+                  textAlign: "center",
+                  background: "#f8fafc",
+                  borderRadius: "8px",
+                  border: "1px dashed #cbd5e1",
+                  color: "#64748b",
+                  fontSize: "13.5px",
+                }}
+                data-testid="no-skills-empty"
+              >
+                No skills assigned to your profile yet. Click <strong>"+ Add Skill"</strong> above to propose a new skill rating.
+              </div>
+            )}
+
+            {/* Table of assigned skills */}
+            {!isLoadingSkills && !isErrorSkills && skills.length > 0 && (
+              <div className="profile-table-container">
+                <table className="profile-skills-table" aria-label="Assigned employee skills">
+                  <thead>
+                    <tr>
+                      <th>Skill</th>
+                      <th>Category</th>
+                      <th>Proficiency</th>
+                      <th>Experience</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {skills.map((s) => {
+                      const isPending = pendingSkillIds.has(Number(s.skill_id));
+                      const profKey = (s.proficiency || "INTERMEDIATE").toUpperCase();
+                      const profClass = `proficiency-${profKey.toLowerCase()}`;
+
+                      return (
+                        <tr key={s.skill_id} data-testid={`skill-row-${s.skill_id}`}>
+                          <td className="skill-name-col">
+                            <span className="skill-name-text">{s.name}</span>
+                            {isPending && (
+                              <span
+                                className="skill-pending-chip"
+                                title="A proposal for this skill is pending review"
+                                data-testid={`pending-chip-${s.skill_id}`}
+                              >
+                                ⏳ Pending
+                              </span>
+                            )}
+                          </td>
+                          <td>
+                            <span className="skill-category-tag">{s.category || "General"}</span>
+                          </td>
+                          <td>
+                            <span className={`skill-proficiency-badge ${profClass}`}>
+                              {PROFICIENCY_LABELS[profKey] || profKey}
+                            </span>
+                          </td>
+                          <td>{s.years_of_experience ?? 0} yrs</td>
+                          <td className="skill-actions-cell">
+                            <div className="skill-row-actions">
+                              <button
+                                type="button"
+                                className="skill-btn-action"
+                                onClick={() => handleProposeChange(s)}
+                                disabled={isPending}
+                                title={
+                                  isPending
+                                    ? "A proposal for this skill is currently pending review"
+                                    : "Propose change"
+                                }
+                                data-testid={`propose-change-${s.skill_id}`}
+                              >
+                                Propose change
+                              </button>
+                              <button
+                                type="button"
+                                className="skill-btn-action action-danger"
+                                onClick={() => handleProposeRemoval(s)}
+                                disabled={isPending}
+                                title={
+                                  isPending
+                                    ? "A proposal for this skill is currently pending review"
+                                    : "Propose removal"
+                                }
+                                data-testid={`propose-removal-${s.skill_id}`}
+                              >
+                                Propose removal
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* My Skill Proposals List underneath the skills table (Requirement 4.B) */}
+            <MySkillRequestsList
+              requests={skillRequests}
+              isLoading={isLoadingSkillRequests}
+              isError={isErrorSkillRequests}
+              error={skillRequestsError}
+              onRefresh={refetchSkillRequests}
+            />
+          </div>
+
+          {/* Propose Skill Modal (ADD / UPDATE / REMOVE modes) */}
+          <ProposeSkillModal
+            isOpen={isSkillModalOpen}
+            mode={skillModalMode}
+            skill={selectedSkillForModal}
+            onClose={() => setIsSkillModalOpen(false)}
+            onSuccess={handleSkillProposalSuccess}
+            onError={handleSkillProposalError}
+          />
         </>
       )}
     </section>

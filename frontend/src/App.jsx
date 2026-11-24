@@ -31,6 +31,8 @@ import LeaveDashboardPage from "./features/leave/LeaveDashboardPage";
 import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
+import SkillRequestQueuePage from "./features/skills/SkillRequestQueuePage";
+import { ROUTES } from "./routes.js";
 import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
 import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
 import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
@@ -347,6 +349,15 @@ function App() {
                   element={
                     <ProtectedRoute allowedRoles={[ROLES.HR, ROLES.ADMIN]}>
                       <LeavePolicyAdminPage />
+                    </ProtectedRoute>
+                  }
+                />
+                {/* US-34 / Issue #161 routes (Skill Change Proposals Review Queue: /skill-requests) */}
+                <Route
+                  path={ROUTES.SKILL_REQUESTS}
+                  element={
+                    <ProtectedRoute allowedRoles={[ROLES.HR, ROLES.TEAM_LEAD, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
+                      <SkillRequestQueuePage />
                     </ProtectedRoute>
                   }
                 />
