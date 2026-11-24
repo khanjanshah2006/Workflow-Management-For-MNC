@@ -1739,76 +1739,80 @@ describe("15. Task Discussion Thread & Comment API Contract (US-33)", () => {
     assert.equal(optimisticComment.isOptimistic, true);
     assert.match(optimisticComment.comment_id, /^temp-/);
   });
+});
 
-  describe("Issue #162: Authenticated Deliverable Downloads & openDeliverable", () => {
-    let originalFetch;
-    let originalWindow;
-    let originalLocalStorage;
+describe("16. Authenticated Deliverable Downloads & openDeliverable (Issue #162)", () => {
+  const originalFetch = globalThis.fetch;
+  const originalWindow = globalThis.window;
+  const originalLocalStorage = globalThis.localStorage;
 
-    afterEach(() => {
-      if (originalFetch) globalThis.fetch = originalFetch;
-      if (originalWindow) globalThis.window = originalWindow;
-      if (originalLocalStorage) globalThis.localStorage = originalLocalStorage;
-    });
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    if (originalWindow !== undefined) {
+      globalThis.window = originalWindow;
+    } else {
+      delete globalThis.window;
+    }
+    if (originalLocalStorage !== undefined) {
+      globalThis.localStorage = originalLocalStorage;
+    } else {
+      delete globalThis.localStorage;
+    }
+  });
 
-    test("openDeliverable sends /api/... URLs to downloadAuthenticatedFile with Bearer token", async () => {
-      let capturedUrl = null;
-      let capturedHeaders = null;
+  test("openDeliverable sends /api/... URLs to downloadAuthenticatedFile with Bearer token", async () => {
+    let capturedUrl = null;
+    let capturedHeaders = null;
 
-      originalFetch = globalThis.fetch;
-      originalLocalStorage = globalThis.localStorage;
-
-      globalThis.fetch = async (url, options) => {
-        capturedUrl = url;
-        capturedHeaders = options.headers;
-        return {
-          ok: true,
-          status: 200,
-          headers: {
-            get: (name) => {
-              if (name.toLowerCase() === "content-disposition") {
-                return 'attachment; filename="deliverable.pdf"';
-              }
-              return null;
-            },
+    globalThis.fetch = async (url, options) => {
+      capturedUrl = url;
+      capturedHeaders = options.headers;
+      return {
+        ok: true,
+        status: 200,
+        headers: {
+          get: (name) => {
+            if (name.toLowerCase() === "content-disposition") {
+              return 'attachment; filename="deliverable.pdf"';
+            }
+            return null;
           },
-          blob: async () => ({ size: 1024, type: "application/pdf" }),
-        };
-      };
-
-      globalThis.localStorage = {
-        getItem: (k) => (k === "wms_access_token" ? "jwt-test-bearer-token" : null),
-        setItem: () => {},
-        removeItem: () => {},
-      };
-
-      await openDeliverable("/api/v1/tasks/42/submissions/5/file", "fallback.pdf");
-
-      assert.ok(capturedUrl.includes("/api/v1/tasks/42/submissions/5/file"));
-      assert.equal(capturedHeaders["Authorization"], "Bearer jwt-test-bearer-token");
-    });
-
-    test("openDeliverable routes external URLs to window.open with noopener,noreferrer", async () => {
-      let openedUrl = null;
-      let openedTarget = null;
-      let openedFeatures = null;
-
-      originalWindow = globalThis.window;
-      globalThis.window = {
-        open: (url, target, features) => {
-          openedUrl = url;
-          openedTarget = target;
-          openedFeatures = features;
-          return {};
         },
+        blob: async () => ({ size: 1024, type: "application/pdf" }),
       };
+    };
 
-      const externalLink = "https://github.com/organization/repo/pull/123";
-      await openDeliverable(externalLink);
+    globalThis.localStorage = {
+      getItem: (k) => (k === "wms_access_token" ? "jwt-test-bearer-token" : null),
+      setItem: () => {},
+      removeItem: () => {},
+    };
 
-      assert.equal(openedUrl, externalLink);
-      assert.equal(openedTarget, "_blank");
-      assert.equal(openedFeatures, "noopener,noreferrer");
-    });
+    await openDeliverable("/api/v1/tasks/42/submissions/5/file", "fallback.pdf");
+
+    assert.ok(capturedUrl.includes("/api/v1/tasks/42/submissions/5/file"));
+    assert.equal(capturedHeaders["Authorization"], "Bearer jwt-test-bearer-token");
+  });
+
+  test("openDeliverable routes external URLs to window.open with noopener,noreferrer", async () => {
+    let openedUrl = null;
+    let openedTarget = null;
+    let openedFeatures = null;
+
+    globalThis.window = {
+      open: (url, target, features) => {
+        openedUrl = url;
+        openedTarget = target;
+        openedFeatures = features;
+        return {};
+      },
+    };
+
+    const externalLink = "https://github.com/organization/repo/pull/123";
+    await openDeliverable(externalLink);
+
+    assert.equal(openedUrl, externalLink);
+    assert.equal(openedTarget, "_blank");
+    assert.equal(openedFeatures, "noopener,noreferrer");
   });
 });

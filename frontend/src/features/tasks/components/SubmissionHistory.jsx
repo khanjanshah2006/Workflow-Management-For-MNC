@@ -12,7 +12,7 @@ function formatSubmissionDate(dateStr) {
   if (!dateStr) return "—";
   try {
     const d = new Date(dateStr);
-    if (isNaN(d.getTime())) return dateStr;
+    if (Number.isNaN(d.getTime())) return dateStr;
     return d.toLocaleString(undefined, {
       month: "short",
       day: "numeric",
@@ -91,7 +91,6 @@ export default function SubmissionHistory({ taskId, task }) {
     data,
     isLoading,
     isError,
-    error,
     refetch,
   } = useQuery({
     queryKey: ["task-submissions", taskId],

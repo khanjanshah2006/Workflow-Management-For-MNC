@@ -19,6 +19,7 @@ export default function ReviewDecisionModal({
   onSuccess,
 }) {
   const queryClient = useQueryClient();
+  const deliverableUrl = task?.deliverable_file_url || task?.file_url;
 
   // Mode: "VIEW" | "REJECT_FORM"
   const [mode, setMode] = useState("VIEW");
@@ -44,7 +45,7 @@ export default function ReviewDecisionModal({
 
   const handleOpenDeliverable = async (e) => {
     e.preventDefault();
-    if (!deliverableUrl || downloadingUrl) return;
+    if (!deliverableUrl || downloadingUrl || !task) return;
     setDownloadingUrl(deliverableUrl);
     try {
       await openDeliverable(
@@ -137,8 +138,6 @@ export default function ReviewDecisionModal({
         timeStyle: "short",
       })
     : "Recently submitted";
-
-  const deliverableUrl = task.deliverable_file_url || task.file_url;
 
   return (
     <div className="modal-backdrop" onClick={handleClose} role="dialog" aria-modal="true" aria-labelledby="review-modal-title">
