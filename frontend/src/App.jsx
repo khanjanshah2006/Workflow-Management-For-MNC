@@ -30,7 +30,7 @@ import LeavePolicyAdminPage from "./features/hr/LeavePolicyAdminPage";
 import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage";
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import SkillRequestQueuePage from "./features/skills/SkillRequestQueuePage";
-import { ROUTES } from "./constants/routes";
+import { ROUTES } from "./routes.js";
 import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
 import "./App.css";
 
