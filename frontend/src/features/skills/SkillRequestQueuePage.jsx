@@ -105,15 +105,37 @@ export default function SkillRequestQueuePage() {
     setIsDecisionModalOpen(true);
   };
 
-  const handleDecisionSuccess = (updatedRequest, actionType) => {
+  const handleQueueRefresh = async () => {
+    if (items.length <= 1 && page > 1) {
+      setPage((prev) => Math.max(1, prev - 1));
+    } else {
+      const result = await refetch();
+      const updatedItems = result?.data?.items || result?.data || [];
+      if (Array.isArray(updatedItems) && updatedItems.length === 0 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      }
+    }
+  };
+
+  const handleDecisionSuccess = async (updatedRequest, actionType) => {
     setIsDecisionModalOpen(false);
     setSelectedRequest(null);
-    refetch();
     const actionLabel = actionType === "APPROVE" ? "approved" : "rejected";
     showToast(
       `Skill proposal for ${updatedRequest?.employee_name || "employee"} successfully ${actionLabel}.`,
       "success"
     );
+
+    // If the current page had only 1 item remaining and is not the first page, automatically navigate back
+    if (items.length <= 1 && page > 1) {
+      setPage((prev) => Math.max(1, prev - 1));
+    } else {
+      const result = await refetch();
+      const updatedItems = result?.data?.items || result?.data || [];
+      if (Array.isArray(updatedItems) && updatedItems.length === 0 && page > 1) {
+        setPage((prev) => Math.max(1, prev - 1));
+      }
+    }
   };
 
   if (!isAuthorized) {
@@ -447,7 +469,7 @@ export default function SkillRequestQueuePage() {
           setSelectedRequest(null);
         }}
         onSuccess={handleDecisionSuccess}
-        onRefresh={() => refetch()}
+        onRefresh={handleQueueRefresh}
         onShowToast={showToast}
       />
     </section>
