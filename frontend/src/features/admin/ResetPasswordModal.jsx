@@ -191,6 +191,21 @@ export const ResetPasswordModal = ({
               >
                 ⚠ Confirming will overwrite the existing credentials and terminate all active sessions for this user.
               </div>
+
+              <div
+                data-testid="reset-clears-lock-note"
+                style={{
+                  padding: "10px 12px",
+                  background: user.is_locked ? "#fff7ed" : "#f8fafc",
+                  border: `1px solid ${user.is_locked ? "#fed7aa" : "#e2e8f0"}`,
+                  borderRadius: "6px",
+                  fontSize: "12.5px",
+                  color: user.is_locked ? "#9a3412" : "#475569",
+                }}
+              >
+                🔓 Resetting the password also clears any failed sign-in lock on this account
+                {user.is_locked ? " (currently locked)." : "."}
+              </div>
             </div>
 
             <footer className="modal-footer" style={{ marginTop: "24px", display: "flex", justifyContent: "flex-end", gap: "10px" }}>

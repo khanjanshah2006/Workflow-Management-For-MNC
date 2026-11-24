@@ -1403,3 +1403,117 @@
     width: 100%;
   }
 }
+
+/* ==========================================================================
+   S8-FE-3: Triage Live Queue & Reporter Extensions
+   ========================================================================== */
+
+.metric-bubble-unassigned {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.badge-awaiting-sysadmin {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 9999px;
+  background: #fef3c7;
+  color: #92400e;
+  border: 1px solid #fde68a;
+  white-space: nowrap;
+}
+
+.table-pagination-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  padding: 14px 16px;
+  background: #ffffff;
+  border: 1px solid #e7ebf2;
+  border-top: none;
+  border-radius: 0 0 12px 12px;
+}
+
+.table-pagination-bar .btn-page,
+.support-dashboard-page .btn-page {
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 550;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  color: #334155;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.table-pagination-bar .btn-page:hover:not(:disabled),
+.support-dashboard-page .btn-page:hover:not(:disabled) {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+}
+
+.table-pagination-bar .btn-page:disabled,
+.support-dashboard-page .btn-page:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.page-indicator {
+  font-size: 13px;
+  color: #64748b;
+}
+
+.btn-action-takeover {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4338ca;
+  background: #e0e7ff;
+  border: 1px solid #c7d2fe;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn-action-takeover:hover {
+  background: #c7d2fe;
+}
+
+.btn-action-close {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn-action-close:hover {
+  background: #e2e8f0;
+}
+
+.btn-action-resolve {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #065f46;
+  background: #d1fae5;
+  border: 1px solid #a7f3d0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 120ms ease;
+}
+
+.btn-action-resolve:hover {
+  background: #a7f3d0;
+}
+

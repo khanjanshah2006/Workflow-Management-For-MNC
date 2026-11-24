@@ -2,17 +2,67 @@
  * In-memory session adapter for WorkSphere frontend.
  *
  * Requirements:
- * - Integrates with shared apiClient (client.js) token handling.
+ * - Integrates with shared apiClient (client.js) token handling and silent refresh.
  * - Stores access token and user information in module memory and synchronizes with wms_access_token.
  * - Exposes setSession(tokenResponse), getSession(), clearSession().
  * - getSession() returns a stable, immutable snapshot between updates for useSyncExternalStore.
- * - Snapshots change on setSession() and clearSession().
- * - Avoids exposing mutable internal session data via Object.freeze.
+ * - Canonical role definitions mirroring backend/app/core/roles.py.
  * - Exposes window.__wmsSession in development mode only (import.meta.env.DEV).
  */
 
 import { useSyncExternalStore } from "react";
-import { getStoredToken, setStoredToken, setTokenGetter } from "../api/client.js";
+import {
+  getStoredToken,
+  setStoredToken,
+  setTokenGetter,
+  setTokenRefreshHandler,
+  setSessionClearHandler,
+} from "../api/client.js";
+
+/**
+ * Canonical system roles mirroring backend/app/core/roles.py.
+ */
+export const ROLES = Object.freeze({
+  ADMIN: "ADMIN",
+  SYSTEM_ADMIN: "SYSTEM_ADMIN",
+  HR: "HR",
+  PM: "PM",
+  TEAM_LEAD: "TEAM_LEAD",
+  EMPLOYEE: "EMPLOYEE",
+  IT_SUPPORT: "IT_SUPPORT",
+  MNC_EXECUTIVE: "MNC_EXECUTIVE",
+  CLIENT: "CLIENT",
+});
+
+/**
+ * All internal workforce roles (every valid enterprise role except CLIENT).
+ */
+export const INTERNAL_ROLES = Object.freeze([
+  ROLES.EMPLOYEE,
+  ROLES.TEAM_LEAD,
+  ROLES.PM,
+  ROLES.HR,
+  ROLES.ADMIN,
+  ROLES.IT_SUPPORT,
+  ROLES.SYSTEM_ADMIN,
+  ROLES.MNC_EXECUTIVE,
+]);
+
+/**
+ * Roles with platform administrative authority across security and system ops.
+ */
+export const PLATFORM_ADMINS = Object.freeze([
+  ROLES.ADMIN,
+  ROLES.SYSTEM_ADMIN,
+]);
+
+/**
+ * Roles authorized to access IT support operations and ticket resolution.
+ */
+export const IT_STAFF = Object.freeze([
+  ROLES.IT_SUPPORT,
+  ROLES.SYSTEM_ADMIN,
+]);
 
 // In-memory stable snapshot reference
 function getInitialSnapshot() {
@@ -27,6 +77,25 @@ const listeners = new Set();
 // Register session's access token getter with shared apiClient
 setTokenGetter(() => currentSnapshot?.access_token || getStoredToken());
 
+if (typeof setTokenRefreshHandler === "function") {
+  setTokenRefreshHandler((newToken) => {
+    if (currentSnapshot) {
+      currentSnapshot = Object.freeze({
+        ...currentSnapshot,
+        access_token: newToken,
+      });
+    }
+    emitChange();
+  });
+}
+
+if (typeof setSessionClearHandler === "function") {
+  setSessionClearHandler(() => {
+    currentSnapshot = null;
+    emitChange();
+  });
+}
+
 function emitChange() {
   for (const listener of listeners) {
     listener();
@@ -35,21 +104,33 @@ function emitChange() {
 
 /**
  * Creates an immutable snapshot from the given token response.
+ * Preserves user profile fields including emp_id, led_team_ids, team_ids, active_elevated_roles.
  * @param {Object} tokenResponse
  * @returns {Readonly<Object>|null}
  */
-function createSnapshot(tokenResponse) {
+export function createSnapshot(tokenResponse) {
   if (!tokenResponse) {
     return null;
   }
 
-  const user = tokenResponse.user
+  const rawUser = tokenResponse.user;
+  const user = rawUser
     ? Object.freeze({
-        account_id: tokenResponse.user.account_id || "",
-        email: tokenResponse.user.email || "",
-        user_type: tokenResponse.user.user_type || "",
-        role: tokenResponse.user.role || tokenResponse.user.user_type || "",
-        is_active: Boolean(tokenResponse.user.is_active),
+        account_id: rawUser.account_id || "",
+        email: rawUser.email || "",
+        user_type: rawUser.user_type || "",
+        role: rawUser.role || rawUser.user_type || "",
+        is_active: Boolean(rawUser.is_active),
+        emp_id: rawUser.emp_id ?? null,
+        led_team_ids: Array.isArray(rawUser.led_team_ids)
+          ? Object.freeze([...rawUser.led_team_ids])
+          : Object.freeze([]),
+        team_ids: Array.isArray(rawUser.team_ids)
+          ? Object.freeze([...rawUser.team_ids])
+          : Object.freeze([]),
+        active_elevated_roles: Array.isArray(rawUser.active_elevated_roles)
+          ? Object.freeze([...rawUser.active_elevated_roles])
+          : Object.freeze([]),
       })
     : null;
 
@@ -64,18 +145,13 @@ function createSnapshot(tokenResponse) {
 
 /**
  * Sets the active in-memory session, syncs with shared token store, and notifies listeners.
- * @param {Object} tokenResponse Expected shape from POST /api/v1/auth/login:
+ * @param {Object} tokenResponse Expected shape from auth response:
  * {
  *   access_token: string,
- *   refresh_token: string,
- *   token_type: string,
- *   expires_in: number,
- *   user: {
- *     account_id: string,
- *     email: string,
- *     user_type: "EMPLOYEE" | "PM" | "ADMIN" | "HR" | "CLIENT",
- *     is_active: boolean
- *   }
+ *   refresh_token?: string,
+ *   token_type?: string,
+ *   expires_in?: number,
+ *   user?: Object
  * }
  */
 export function setSession(tokenResponse) {
@@ -128,7 +204,7 @@ export function useSession() {
 /**
  * Normalizes role string for consistent comparison.
  * Converts to uppercase and replaces spaces and hyphens with underscores.
- * E.g. "Project Manager" -> "PROJECT_MANAGER", "PM" -> "PM", "Admin" -> "ADMIN".
+ * E.g. "PM" -> "PM", "Admin" -> "ADMIN".
  * @param {string} role
  * @returns {string}
  */
@@ -150,23 +226,23 @@ export function getUserRole(user) {
 }
 
 /**
- * Checks if the role represents a Project Manager ("PM" or "PROJECT_MANAGER").
+ * Checks if the role represents a Project Manager ("PM").
  * @param {Object|string} roleOrUser
  * @returns {boolean}
  */
 export function isProjectManager(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  return norm === "PM" || norm === "PROJECT_MANAGER";
+  return norm === ROLES.PM;
 }
 
 /**
- * Checks if the role represents a System Admin ("ADMIN" or "SYSTEM_ADMIN").
+ * Checks if the role represents a Platform Admin ("ADMIN" or "SYSTEM_ADMIN").
  * @param {Object|string} roleOrUser
  * @returns {boolean}
  */
 export function isAdmin(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  return norm === "ADMIN" || norm === "SYSTEM_ADMIN";
+  return PLATFORM_ADMINS.includes(norm);
 }
 
 /**
@@ -179,28 +255,13 @@ export function canCreateProject(roleOrUser) {
 }
 
 /**
- * Canonical list of internal roles (all valid enterprise roles except CLIENT).
- */
-export const INTERNAL_ROLES = Object.freeze([
-  "EMPLOYEE",
-  "TEAM_LEAD",
-  "PM",
-  "PROJECT_MANAGER",
-  "HR",
-  "ADMIN",
-  "IT_SUPPORT",
-  "SYSTEM_ADMIN",
-  "MNC_EXECUTIVE",
-]);
-
-/**
  * Checks if the role represents an MNC Executive ("MNC_EXECUTIVE").
  * @param {Object|string} roleOrUser
  * @returns {boolean}
  */
 export function isExecutive(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  return norm === "MNC_EXECUTIVE";
+  return norm === ROLES.MNC_EXECUTIVE;
 }
 
 /**
@@ -210,7 +271,7 @@ export function isExecutive(roleOrUser) {
  */
 export function isClient(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  return norm === "CLIENT";
+  return norm === ROLES.CLIENT;
 }
 
 /**
@@ -220,7 +281,7 @@ export function isClient(roleOrUser) {
  */
 export function isHr(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  return norm === "HR";
+  return norm === ROLES.HR;
 }
 
 /**
@@ -244,10 +305,10 @@ export function isInternalRole(roleOrUser) {
  */
 export function getHomeRouteForRole(roleOrUser) {
   const norm = typeof roleOrUser === "string" ? normalizeRole(roleOrUser) : getUserRole(roleOrUser);
-  if (norm === "CLIENT") {
+  if (norm === ROLES.CLIENT) {
     return "/client/projects";
   }
-  if (norm === "MNC_EXECUTIVE") {
+  if (norm === ROLES.MNC_EXECUTIVE) {
     return "/executive/console";
   }
   if (INTERNAL_ROLES.includes(norm)) {

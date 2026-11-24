@@ -1,7 +1,21 @@
 import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { adminApi } from "../../api/adminApi";
+import { useToast } from "../../components/common/Toast";
+import { ACCOUNT_LOCKED_ALERT, formatLockedUntil } from "./lockState";
+import useUnlockAccount from "./useUnlockAccount";
 import "./admin.css";
+
+/**
+ * Icon and badge label per backend alert_type. Unknown types fall back to the severity styling.
+ */
+const ALERT_TYPE_META = {
+  ACCOUNT_LOCKED: { icon: "🔒", label: "ACCOUNT LOCKED" },
+  FAILED_LOGIN_BURST: { icon: "🚨", label: "FAILED LOGIN SPIKE", critical: true },
+  SUSPICIOUS_FAILED_LOGINS: { icon: "🚨", label: "FAILED LOGIN SPIKE", critical: true },
+  PRIVILEGE_ESCALATION: { icon: "⬆️", label: "PRIVILEGE ESCALATION" },
+  BACKUP_FAILURE: { icon: "💾", label: "BACKUP FAILURE" },
+};
 
 /**
  * Format timestamp to readable string.
@@ -30,6 +44,10 @@ function formatAlertTime(isoStr) {
  */
 export function AnomalyAlertsBanner() {
   const [dismissedAlertIds, setDismissedAlertIds] = useState(() => new Set());
+  const toast = useToast();
+  const unlockMutation = useUnlockAccount((type, message) =>
+    type === "success" ? toast.success(message) : toast.error(message)
+  );
 
   // Polling query every 30 seconds for real-time security alerts
   const {
@@ -142,12 +160,18 @@ export function AnomalyAlertsBanner() {
       aria-label="Security anomaly alerts"
     >
       {activeAlerts.map((alert) => {
+        const typeMeta = ALERT_TYPE_META[alert.alert_type] || null;
         const isFailedLoginSpike =
-          alert.alert_type === "SUSPICIOUS_FAILED_LOGINS" ||
+          Boolean(typeMeta?.critical) ||
           (alert.title &&
             alert.title.toLowerCase().includes("failed-login"));
         const isCritical =
           alert.severity === "CRITICAL" || isFailedLoginSpike;
+        const isAccountLocked = alert.alert_type === ACCOUNT_LOCKED_ALERT;
+        const lockedAccountId = alert.account_id || alert.target_account_id;
+        const isUnlocking =
+          unlockMutation.isPending &&
+          unlockMutation.variables?.accountId === lockedAccountId;
 
         const cardClass = isCritical
           ? "anomaly-alert-card anomaly-alert-critical"
@@ -166,7 +190,7 @@ export function AnomalyAlertsBanner() {
           >
             <div className="anomaly-alert-content">
               <span className="anomaly-alert-icon" aria-hidden="true">
-                {isCritical ? "🚨" : "⚠️"}
+                {typeMeta?.icon || (isCritical ? "🚨" : "⚠️")}
               </span>
               <div className="anomaly-alert-body">
                 <div className="anomaly-alert-title-row">
@@ -174,15 +198,15 @@ export function AnomalyAlertsBanner() {
                   <span className={badgeClass}>
                     {alert.severity || "HIGH"}
                   </span>
-                  {isFailedLoginSpike && (
+                  {(typeMeta || isFailedLoginSpike) && (
                     <span
                       className="anomaly-severity-badge"
                       style={{
-                        background: "#7f1d1d",
-                        color: "#fee2e2",
+                        background: isFailedLoginSpike ? "#7f1d1d" : "#334155",
+                        color: isFailedLoginSpike ? "#fee2e2" : "#f1f5f9",
                       }}
                     >
-                      FAILED LOGIN SPIKE
+                      {typeMeta?.label || "FAILED LOGIN SPIKE"}
                     </span>
                   )}
                 </div>
@@ -225,6 +249,15 @@ export function AnomalyAlertsBanner() {
                     </div>
                   )}
 
+                  {isAccountLocked && alert.last_timestamp && (
+                    <div className="anomaly-meta-item">
+                      <span className="anomaly-meta-label">Locked Until:</span>
+                      <span className="anomaly-meta-val">
+                        {formatLockedUntil(alert.last_timestamp)}
+                      </span>
+                    </div>
+                  )}
+
                   <div className="anomaly-meta-item">
                     <span className="anomaly-meta-label">Detected:</span>
                     <span>{formatAlertTime(alert.timestamp)}</span>
@@ -234,6 +267,23 @@ export function AnomalyAlertsBanner() {
             </div>
 
             <div className="anomaly-alert-actions">
+              {isAccountLocked && lockedAccountId && (
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() =>
+                    unlockMutation.mutate({
+                      accountId: lockedAccountId,
+                      email: alert.attempted_email || alert.target_account,
+                    })
+                  }
+                  disabled={isUnlocking}
+                  style={{ fontSize: "11.5px", padding: "4px 9px" }}
+                  title="Clear the failed sign-in lock on this account"
+                >
+                  {isUnlocking ? "Unlocking..." : "Unlock"}
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary"

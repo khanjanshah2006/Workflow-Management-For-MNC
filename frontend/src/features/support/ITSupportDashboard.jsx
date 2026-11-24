@@ -1,24 +1,32 @@
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { Link } from "react-router-dom";
-import { useSession, normalizeRole } from "../../auth/session.js";
+import { Link, useSearchParams } from "react-router-dom";
+import { useSession, normalizeRole, IT_STAFF } from "../../auth/session.js";
 import { useAuth } from "../../hooks/useAuth.js";
 import { supportApi, calculateSLA } from "../../api/supportApi.js";
+import {
+  buildAssignPayload,
+  buildNotePayload,
+  buildStatusPayload,
+  filtersToQueryString,
+  filtersFromQueryString,
+} from "./ticketStatusUtils.js";
 import TicketFilterBar from "./TicketFilterBar.jsx";
 import TicketQueueTable from "./TicketQueueTable.jsx";
 import TicketDetailDrawer from "./TicketDetailDrawer.jsx";
 import AssignTicketModal from "./AssignTicketModal.jsx";
 import EscalateTicketModal from "./EscalateTicketModal.jsx";
+import ResolveTicketModal from "./ResolveTicketModal.jsx";
 import "./support.css";
 
 /**
- * ITSupportDashboard (US-27 & US-28 / Issue #76)
+ * ITSupportDashboard (US-27 & US-28 / Issue #163)
  *
  * IT Support Console for inspecting incoming tickets, filtering by category/status,
  * assigning tickets to self or teammates, logging troubleshooting notes,
  * and resolving or escalating to System Administrator.
  */
 
-const ALLOWED_SUPPORT_ROLES = ["IT_SUPPORT", "ADMIN", "SYSTEM_ADMIN"];
+const ALLOWED_SUPPORT_ROLES = IT_STAFF;
 
 // Priority rank order for sorting
 const PRIORITY_ORDER = {
@@ -40,28 +48,67 @@ const STATUS_ORDER = {
 export default function ITSupportDashboard() {
   const session = useSession();
   const auth = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   // Active user resolution
   const user = session?.user || auth?.user || null;
   const rawRole = user?.role || user?.user_type || "";
   const normalizedUserRole = normalizeRole(rawRole);
+  const effectiveRole = normalizedUserRole;
+  const isAuthorized = ALLOWED_SUPPORT_ROLES.includes(effectiveRole);
+  const currentUserId = user?.account_id || user?.id || user?.emp_id || "";
 
-  // In DEV environment, allow role switching for testing accessibility
-  const [devRoleOverride, setDevRoleOverride] = useState(() => {
-    if (typeof window !== "undefined" && window.__wmsDevSupportRole) {
-      return window.__wmsDevSupportRole;
-    }
-    return "";
-  });
+  // Parse filters from URL query string
+  const urlFilters = useMemo(() => filtersFromQueryString(searchParams), [searchParams]);
 
-  const effectiveRole = devRoleOverride || normalizedUserRole;
-  const isAuthorized =
-    ALLOWED_SUPPORT_ROLES.includes(effectiveRole) ||
-    // Default to authorized in DEV mode if no role is explicitly set
-    (import.meta.env?.DEV && !effectiveRole);
+  const [categoryFilter, setCategoryFilter] = useState(urlFilters.category);
+  const [statusFilter, setStatusFilter] = useState(urlFilters.status);
+  const [priorityFilter, setPriorityFilter] = useState(urlFilters.priority);
+  const [assignedToFilter, setAssignedToFilter] = useState(urlFilters.assigned_to);
+  const [page, setPage] = useState(urlFilters.page);
+  const [limit, setLimit] = useState(urlFilters.limit);
+  const [searchQuery, setSearchQuery] = useState("");
 
-  // Tickets state
+  // Keep state in sync with URL searchParams
+  useEffect(() => {
+    setCategoryFilter(urlFilters.category);
+    setStatusFilter(urlFilters.status);
+    setPriorityFilter(urlFilters.priority);
+    setAssignedToFilter(urlFilters.assigned_to);
+    setPage(urlFilters.page);
+    setLimit(urlFilters.limit);
+  }, [urlFilters]);
+
+  // Synchronize state changes to URL query string
+  const syncFiltersToUrl = useCallback(
+    (overrides = {}) => {
+      const merged = {
+        category: categoryFilter,
+        status: statusFilter,
+        priority: priorityFilter,
+        assigned_to: assignedToFilter,
+        page,
+        limit,
+        ...overrides,
+      };
+      const qs = filtersToQueryString(merged);
+      setSearchParams(qs ? new URLSearchParams(qs) : new URLSearchParams(), { replace: true });
+    },
+    [categoryFilter, statusFilter, priorityFilter, assignedToFilter, page, limit, setSearchParams]
+  );
+
+  // Tickets & Metrics state
   const [tickets, setTickets] = useState([]);
+  const [totalCount, setTotalCount] = useState(0);
+  const [metrics, setMetrics] = useState({
+    open: 0,
+    in_progress: 0,
+    escalated: 0,
+    resolved: 0,
+    closed: 0,
+    unassigned: 0,
+    total: 0,
+  });
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [errorMessage, setErrorMessage] = useState(null);
@@ -71,17 +118,32 @@ export default function ITSupportDashboard() {
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [assignModalTicket, setAssignModalTicket] = useState(null);
   const [escalateModalTicket, setEscalateModalTicket] = useState(null);
+  const [resolveModalTicket, setResolveModalTicket] = useState(null);
   const [isAssigningId, setIsAssigningId] = useState(null);
-
-  // Filters state
-  const [categoryFilter, setCategoryFilter] = useState("ALL");
-  const [statusFilter, setStatusFilter] = useState("ALL");
-  const [priorityFilter, setPriorityFilter] = useState("ALL");
-  const [searchQuery, setSearchQuery] = useState("");
 
   // Sort state
   const [sortField, setSortField] = useState("priority");
   const [sortDirection, setSortDirection] = useState("desc");
+
+  // Load server-side metrics
+  const fetchMetrics = useCallback(async () => {
+    try {
+      const data = await supportApi.getQueueMetrics();
+      if (data) {
+        setMetrics({
+          open: data.open || 0,
+          in_progress: data.in_progress || 0,
+          escalated: data.escalated || 0,
+          resolved: data.resolved || 0,
+          closed: data.closed || 0,
+          unassigned: data.unassigned || 0,
+          total: data.total || 0,
+        });
+      }
+    } catch {
+      // Non-fatal if metrics fails
+    }
+  }, []);
 
   // Load tickets from API
   const refreshTickets = useCallback(async () => {
@@ -89,19 +151,31 @@ export default function ITSupportDashboard() {
       setIsRefreshing(true);
       setErrorMessage(null);
 
-      const data = await supportApi.getTickets({
+      const params = {
         category: categoryFilter,
         status: statusFilter,
         priority: priorityFilter,
-      });
+        assigned_to: assignedToFilter,
+        page,
+        limit,
+      };
 
-      setTickets(data);
+      const result = await supportApi.getTickets(params);
+
+      const items = Array.isArray(result) ? result : result.items || [];
+      const total = typeof result.total === "number" ? result.total : items.length;
+
+      setTickets(items);
+      setTotalCount(total);
 
       setSelectedTicket((prev) => {
         if (!prev) return null;
-        const fresh = data.find((t) => t.id === prev.id);
+        const fresh = items.find((t) => t.id === prev.id);
         return fresh || prev;
       });
+
+      // Refetch metrics in parallel
+      fetchMetrics();
     } catch (err) {
       setErrorMessage(
         err?.message || "Failed to load support tickets. Please check server connection."
@@ -109,7 +183,7 @@ export default function ITSupportDashboard() {
     } finally {
       setIsRefreshing(false);
     }
-  }, [categoryFilter, statusFilter, priorityFilter]);
+  }, [categoryFilter, statusFilter, priorityFilter, assignedToFilter, page, limit, fetchMetrics]);
 
   useEffect(() => {
     let ignore = false;
@@ -119,18 +193,30 @@ export default function ITSupportDashboard() {
         setIsLoading(true);
         setErrorMessage(null);
 
-        const data = await supportApi.getTickets({
+        const params = {
           category: categoryFilter,
           status: statusFilter,
           priority: priorityFilter,
-        });
+          assigned_to: assignedToFilter,
+          page,
+          limit,
+        };
+
+        const [result] = await Promise.all([
+          supportApi.getTickets(params),
+          fetchMetrics(),
+        ]);
 
         if (ignore) return;
-        setTickets(data);
+        const items = Array.isArray(result) ? result : result.items || [];
+        const total = typeof result.total === "number" ? result.total : items.length;
+
+        setTickets(items);
+        setTotalCount(total);
 
         setSelectedTicket((prev) => {
           if (!prev) return null;
-          const fresh = data.find((t) => t.id === prev.id);
+          const fresh = items.find((t) => t.id === prev.id);
           return fresh || prev;
         });
       } catch (err) {
@@ -151,83 +237,102 @@ export default function ITSupportDashboard() {
     return () => {
       ignore = true;
     };
-  }, [categoryFilter, statusFilter, priorityFilter]);
+  }, [categoryFilter, statusFilter, priorityFilter, assignedToFilter, page, limit, fetchMetrics]);
 
   // Auto-dismiss feedback toast
   useEffect(() => {
     if (!toastMessage) return;
-    const timer = setTimeout(() => setToastMessage(null), 4000);
+    const timer = setTimeout(() => setToastMessage(null), 4500);
     return () => clearTimeout(timer);
   }, [toastMessage]);
 
-  // One-click "Assign to Me" action: updates UI badge to IN_PROGRESS without page reload
+  // Error dispatcher handling 409 conflict & 400 assign errors
+  const handleActionError = (err, context = "action") => {
+    const status = err?.status || err?.response?.status;
+    const msg = String(err?.message || "");
+
+    if (status === 409 || msg.includes("409") || msg.toLowerCase().includes("conflict") || msg.toLowerCase().includes("invalid status")) {
+      setToastMessage({
+        type: "error",
+        text: "Ticket state changed or conflict occurred. Refreshing ticket...",
+      });
+      refreshTickets();
+      return;
+    }
+
+    if (context === "assign" && (status === 400 || msg.toLowerCase().includes("it staff") || msg.toLowerCase().includes("assignee"))) {
+      setToastMessage({
+        type: "error",
+        text: "Assignee must be IT staff",
+      });
+      return;
+    }
+
+    setToastMessage({
+      type: "error",
+      text: msg || `Failed to perform ${context}.`,
+    });
+  };
+
+  // Filter change handlers syncing to URL
+  const handleCategoryChange = (val) => {
+    setCategoryFilter(val);
+    setPage(1);
+    syncFiltersToUrl({ category: val, page: 1 });
+  };
+
+  const handleStatusChange = (val) => {
+    setStatusFilter(val);
+    setPage(1);
+    syncFiltersToUrl({ status: val, page: 1 });
+  };
+
+  const handlePriorityChange = (val) => {
+    setPriorityFilter(val);
+    setPage(1);
+    syncFiltersToUrl({ priority: val, page: 1 });
+  };
+
+  const handleAssignedToChange = (val) => {
+    setAssignedToFilter(val);
+    setPage(1);
+    syncFiltersToUrl({ assigned_to: val, page: 1 });
+  };
+
+  const handlePageChange = (newPage) => {
+    setPage(newPage);
+    syncFiltersToUrl({ page: newPage });
+  };
+
+  const handleResetFilters = () => {
+    setCategoryFilter("ALL");
+    setStatusFilter("ALL");
+    setPriorityFilter("ALL");
+    setAssignedToFilter("ALL");
+    setSearchQuery("");
+    setPage(1);
+    syncFiltersToUrl({
+      category: "ALL",
+      status: "ALL",
+      priority: "ALL",
+      assigned_to: "ALL",
+      page: 1,
+    });
+  };
+
+  // One-click "Assign to Me" action
   const handleAssignToMe = async (ticket) => {
-    const currentEmpId = user?.account_id || user?.emp_id || "IT-101";
-    const currentEmail = user?.email || "it.specialist@worksphere.internal";
-    const currentName = user?.email
-      ? user.email.split("@")[0].replace(".", " ")
-      : "IT Specialist";
+    if (!currentUserId) {
+      setToastMessage({ type: "error", text: "Unable to identify current user account." });
+      return;
+    }
 
     setIsAssigningId(ticket.id);
 
-    // 1. Optimistic UI update: update badge to IN_PROGRESS immediately without reload
-    const nowIso = new Date().toISOString();
-    const optimisticActivity = {
-      id: Date.now(),
-      activity_id: Date.now(),
-      ticket_id: ticket.id,
-      actor_id: currentEmpId,
-      actor_name: currentName,
-      action: "ASSIGNED",
-      activity_type: "ASSIGNED",
-      note: `Assigned to ${currentName} (${currentEmail})`,
-      old_status: ticket.status,
-      new_status: "in_progress",
-      created_at: nowIso,
-    };
-
-    setTickets((prev) =>
-      prev.map((t) => {
-        if (t.id === ticket.id) {
-          return {
-            ...t,
-            assigned_to: currentEmpId,
-            assigned_to_emp_id: currentEmpId,
-            assignee_name: currentName,
-            assignee_email: currentEmail,
-            status: "in_progress",
-            updated_at: nowIso,
-            activities: [...(t.activities || []), optimisticActivity],
-          };
-        }
-        return t;
-      })
-    );
-
-    if (selectedTicket?.id === ticket.id) {
-      setSelectedTicket((prev) => ({
-        ...prev,
-        assigned_to: currentEmpId,
-        assigned_to_emp_id: currentEmpId,
-        assignee_name: currentName,
-        assignee_email: currentEmail,
-        status: "in_progress",
-        updated_at: nowIso,
-        activities: [...(prev.activities || []), optimisticActivity],
-      }));
-    }
-
     try {
-      // 2. API call to persist assignment
-      const updated = await supportApi.assignTicket(ticket.id, {
-        assigned_to: currentEmpId,
-        assigned_to_emp_id: currentEmpId,
-        assignee_name: currentName,
-        assignee_email: currentEmail,
-        reassignment_reason: "Claimed via IT Support Triage Queue (Assign to Me)",
-      });
+      const payload = buildAssignPayload(currentUserId);
+      const updated = await supportApi.assignTicket(ticket.id, payload);
 
-      // Synchronize with server confirmation
       if (updated) {
         setTickets((prev) => prev.map((t) => (t.id === ticket.id ? updated : t)));
         if (selectedTicket?.id === ticket.id) {
@@ -239,146 +344,19 @@ export default function ITSupportDashboard() {
         type: "success",
         text: `Ticket #${ticket.ticket_number} assigned to you and set to IN_PROGRESS.`,
       });
+      fetchMetrics();
     } catch (err) {
-      // Revert if API failed
-      setToastMessage({
-        type: "error",
-        text: `Failed to assign ticket: ${err.message}`,
-      });
-      refreshTickets();
+      handleActionError(err, "assign");
     } finally {
       setIsAssigningId(null);
     }
   };
 
-  // Add Internal Note: instantly appends to activity timeline without page reload
-  const handleAddInternalNote = async (ticketId, noteText) => {
-    const actorName = user?.email
-      ? user.email.split("@")[0].replace(".", " ")
-      : "IT Specialist";
-    const actorId = user?.account_id || user?.emp_id || "current-user";
-    const nowIso = new Date().toISOString();
-
-    const optimisticActivity = {
-      id: Date.now(),
-      activity_id: Date.now(),
-      ticket_id: Number(ticketId),
-      actor_id: actorId,
-      actor_name: actorName,
-      action: "NOTE_ADDED",
-      activity_type: "NOTE_ADDED",
-      note: noteText,
-      old_status: null,
-      new_status: null,
-      created_at: nowIso,
-    };
-
-    // Instant append to local state and drawer timeline
-    setSelectedTicket((prev) => {
-      if (!prev || prev.id !== Number(ticketId)) return prev;
-      return {
-        ...prev,
-        updated_at: nowIso,
-        activities: [...(prev.activities || []), optimisticActivity],
-      };
-    });
-
-    setTickets((prev) =>
-      prev.map((t) => {
-        if (t.id === Number(ticketId)) {
-          return {
-            ...t,
-            updated_at: nowIso,
-            activities: [...(t.activities || []), optimisticActivity],
-          };
-        }
-        return t;
-      })
-    );
-
-    try {
-      const serverActivity = await supportApi.addInternalNote(ticketId, {
-        note_text: noteText,
-        actor_name: actorName,
-        actor_id: actorId,
-      });
-
-      // Update with server confirmed activity ID if returned
-      if (serverActivity?.id) {
-        setSelectedTicket((prev) => {
-          if (!prev) return prev;
-          const acts = (prev.activities || []).map((a) =>
-            a.id === optimisticActivity.id ? { ...a, ...serverActivity } : a
-          );
-          return { ...prev, activities: acts };
-        });
-      }
-
-      setToastMessage({
-        type: "success",
-        text: "Internal note posted and appended to activity timeline.",
-      });
-    } catch (err) {
-      setToastMessage({
-        type: "error",
-        text: `Failed to save internal note: ${err.message}`,
-      });
-    }
-  };
-
   // Confirm Assignment from Modal
-  const handleConfirmAssignment = async ({ ticketId, assignedTo, assigneeName, reason }) => {
-    const nowIso = new Date().toISOString();
-    const optimisticActivity = {
-      id: Date.now(),
-      activity_id: Date.now(),
-      ticket_id: Number(ticketId),
-      actor_id: assignedTo,
-      actor_name: assigneeName,
-      action: "ASSIGNED",
-      activity_type: "ASSIGNED",
-      note: `Assigned to ${assigneeName}${reason ? ` (${reason})` : ""}`,
-      old_status: assignModalTicket?.status || "open",
-      new_status: "in_progress",
-      created_at: nowIso,
-    };
-
-    setTickets((prev) =>
-      prev.map((t) => {
-        if (t.id === Number(ticketId)) {
-          return {
-            ...t,
-            assigned_to: assignedTo,
-            assigned_to_emp_id: assignedTo,
-            assignee_name: assigneeName,
-            status: "in_progress",
-            updated_at: nowIso,
-            activities: [...(t.activities || []), optimisticActivity],
-          };
-        }
-        return t;
-      })
-    );
-
-    if (selectedTicket?.id === Number(ticketId)) {
-      setSelectedTicket((prev) => ({
-        ...prev,
-        assigned_to: assignedTo,
-        assigned_to_emp_id: assignedTo,
-        assignee_name: assigneeName,
-        status: "in_progress",
-        updated_at: nowIso,
-        activities: [...(prev.activities || []), optimisticActivity],
-      }));
-    }
-
+  const handleConfirmAssignment = async ({ ticketId, assignedTo, assigneeName }) => {
     try {
-      const updated = await supportApi.assignTicket(ticketId, {
-        assigned_to: assignedTo,
-        assigned_to_emp_id: assignedTo,
-        assignee_name: assigneeName,
-        reassignment_reason: reason,
-      });
+      const payload = buildAssignPayload(assignedTo);
+      const updated = await supportApi.assignTicket(ticketId, payload);
 
       if (updated) {
         setTickets((prev) => prev.map((t) => (t.id === Number(ticketId) ? updated : t)));
@@ -389,66 +367,20 @@ export default function ITSupportDashboard() {
 
       setToastMessage({
         type: "success",
-        text: `Ticket assigned to ${assigneeName}.`,
+        text: `Ticket assigned to ${assigneeName || "IT specialist"}.`,
       });
+      setAssignModalTicket(null);
+      fetchMetrics();
     } catch (err) {
-      setToastMessage({
-        type: "error",
-        text: `Assignment failed: ${err.message}`,
-      });
-      refreshTickets();
+      handleActionError(err, "assign");
     }
   };
 
-  // Confirm Escalation to SysAdmin with required reason
+  // Confirm Escalation to SysAdmin
   const handleConfirmEscalation = async ({ ticketId, escalationReason }) => {
-    const actorName = user?.email
-      ? user.email.split("@")[0].replace(".", " ")
-      : "IT Specialist";
-    const nowIso = new Date().toISOString();
-
-    const optimisticActivity = {
-      id: Date.now(),
-      activity_id: Date.now(),
-      ticket_id: Number(ticketId),
-      actor_id: user?.account_id || "current-user",
-      actor_name: actorName,
-      action: "ESCALATED",
-      activity_type: "ESCALATED",
-      note: `Escalated to SysAdmin: ${escalationReason}`,
-      old_status: escalateModalTicket?.status || "open",
-      new_status: "escalated",
-      created_at: nowIso,
-    };
-
-    setTickets((prev) =>
-      prev.map((t) => {
-        if (t.id === Number(ticketId)) {
-          return {
-            ...t,
-            status: "escalated",
-            updated_at: nowIso,
-            activities: [...(t.activities || []), optimisticActivity],
-          };
-        }
-        return t;
-      })
-    );
-
-    if (selectedTicket?.id === Number(ticketId)) {
-      setSelectedTicket((prev) => ({
-        ...prev,
-        status: "escalated",
-        updated_at: nowIso,
-        activities: [...(prev.activities || []), optimisticActivity],
-      }));
-    }
-
     try {
       const updated = await supportApi.escalateTicket(ticketId, {
-        escalation_reason: escalationReason,
-        actor_name: actorName,
-        actor_id: user?.account_id,
+        reason: escalationReason,
       });
 
       if (updated) {
@@ -462,52 +394,18 @@ export default function ITSupportDashboard() {
         type: "success",
         text: "Ticket successfully escalated to System Administrator.",
       });
+      setEscalateModalTicket(null);
+      fetchMetrics();
     } catch (err) {
-      setToastMessage({
-        type: "error",
-        text: `Escalation failed: ${err.message}`,
-      });
-      refreshTickets();
+      handleActionError(err, "escalate");
     }
   };
 
-  // Direct status resolution
-  const handleResolveTicket = async (ticketId, resolutionNotes) => {
-    const actorName = user?.email
-      ? user.email.split("@")[0].replace(".", " ")
-      : "IT Specialist";
-    const nowIso = new Date().toISOString();
-
-    setTickets((prev) =>
-      prev.map((t) => {
-        if (t.id === Number(ticketId)) {
-          return {
-            ...t,
-            status: "resolved",
-            resolved_at: nowIso,
-            updated_at: nowIso,
-          };
-        }
-        return t;
-      })
-    );
-
-    if (selectedTicket?.id === Number(ticketId)) {
-      setSelectedTicket((prev) => ({
-        ...prev,
-        status: "resolved",
-        resolved_at: nowIso,
-        updated_at: nowIso,
-      }));
-    }
-
+  // Confirm Ticket Resolution
+  const handleConfirmResolution = async ({ ticketId, resolutionNote }) => {
     try {
-      const updated = await supportApi.updateTicketStatus(ticketId, {
-        status: "resolved",
-        resolution_notes: resolutionNotes || "Issue resolved by IT specialist",
-        actor_name: actorName,
-        actor_id: user?.account_id,
-      });
+      const payload = buildStatusPayload("resolved", resolutionNote);
+      const updated = await supportApi.updateTicketStatus(ticketId, payload);
 
       if (updated) {
         setTickets((prev) => prev.map((t) => (t.id === Number(ticketId) ? updated : t)));
@@ -520,12 +418,80 @@ export default function ITSupportDashboard() {
         type: "success",
         text: "Ticket marked as RESOLVED.",
       });
+      setResolveModalTicket(null);
+      fetchMetrics();
     } catch (err) {
+      handleActionError(err, "resolve");
+    }
+  };
+
+  // SysAdmin Take Over escalated ticket
+  const handleTakeOver = async (ticket) => {
+    try {
+      const payload = buildStatusPayload("in_progress");
+      const updated = await supportApi.updateTicketStatus(ticket.id, payload);
+
+      if (updated) {
+        setTickets((prev) => prev.map((t) => (t.id === ticket.id ? updated : t)));
+        if (selectedTicket?.id === ticket.id) {
+          setSelectedTicket(updated);
+        }
+      }
+
       setToastMessage({
-        type: "error",
-        text: `Resolution failed: ${err.message}`,
+        type: "success",
+        text: `Ticket #${ticket.ticket_number} taken over and set to IN_PROGRESS.`,
       });
-      refreshTickets();
+      fetchMetrics();
+    } catch (err) {
+      handleActionError(err, "take_over");
+    }
+  };
+
+  // Close resolved ticket
+  const handleCloseTicket = async (ticket) => {
+    try {
+      const payload = buildStatusPayload("closed");
+      const updated = await supportApi.updateTicketStatus(ticket.id, payload);
+
+      if (updated) {
+        setTickets((prev) => prev.map((t) => (t.id === ticket.id ? updated : t)));
+        if (selectedTicket?.id === ticket.id) {
+          setSelectedTicket(updated);
+        }
+      }
+
+      setToastMessage({
+        type: "success",
+        text: `Ticket #${ticket.ticket_number} marked as CLOSED.`,
+      });
+      fetchMetrics();
+    } catch (err) {
+      handleActionError(err, "close");
+    }
+  };
+
+  // Add Internal Troubleshooting Note
+  const handleAddInternalNote = async (ticketId, noteText) => {
+    try {
+      const payload = buildNotePayload(noteText);
+      await supportApi.addInternalNote(ticketId, payload);
+
+      // Refresh ticket details to retrieve updated timeline
+      const freshTicket = await supportApi.getTicket(ticketId);
+      if (freshTicket) {
+        setTickets((prev) => prev.map((t) => (t.id === Number(ticketId) ? freshTicket : t)));
+        if (selectedTicket?.id === Number(ticketId)) {
+          setSelectedTicket(freshTicket);
+        }
+      }
+
+      setToastMessage({
+        type: "success",
+        text: "Internal note posted and appended to activity timeline.",
+      });
+    } catch (err) {
+      handleActionError(err, "add_note");
     }
   };
 
@@ -539,19 +505,11 @@ export default function ITSupportDashboard() {
     }
   };
 
-  // Reset filters
-  const handleResetFilters = () => {
-    setCategoryFilter("ALL");
-    setStatusFilter("ALL");
-    setPriorityFilter("ALL");
-    setSearchQuery("");
-  };
-
   // Filtered and sorted tickets
   const filteredTickets = useMemo(() => {
     let result = [...tickets];
 
-    // Search query
+    // Client-side text search query
     if (searchQuery.trim()) {
       const query = searchQuery.trim().toLowerCase();
       result = result.filter(
@@ -612,34 +570,7 @@ export default function ITSupportDashboard() {
     return result;
   }, [tickets, searchQuery, sortField, sortDirection]);
 
-  // Aggregate metrics
-  const metrics = useMemo(() => {
-    let openCount = 0;
-    let inProgressCount = 0;
-    let escalatedCount = 0;
-    let breachedCount = 0;
-    let resolvedCount = 0;
-
-    tickets.forEach((t) => {
-      const s = (t.status || "").toLowerCase();
-      if (s === "open") openCount++;
-      if (s === "in_progress") inProgressCount++;
-      if (s === "escalated") escalatedCount++;
-      if (s === "resolved" || s === "closed") resolvedCount++;
-
-      const sla = calculateSLA(t);
-      if (sla.isBreached) breachedCount++;
-    });
-
-    return {
-      open: openCount,
-      inProgress: inProgressCount,
-      escalated: escalatedCount,
-      breached: breachedCount,
-      resolved: resolvedCount,
-      total: tickets.length,
-    };
-  }, [tickets]);
+  const totalPages = Math.max(1, Math.ceil(totalCount / limit));
 
   // Role Guard View
   if (!isAuthorized) {
@@ -651,26 +582,12 @@ export default function ITSupportDashboard() {
           <p>
             You are currently logged in with role <strong>{rawRole || "EMPLOYEE"}</strong>.
             The IT Support Triage Queue and Console is strictly restricted to personnel
-            holding the <strong>IT_SUPPORT</strong> or <strong>ADMIN</strong> role.
+            holding the <strong>IT_SUPPORT</strong> or <strong>SYSTEM_ADMIN</strong> role.
           </p>
           <div className="role-denied-actions">
-            <Link to="/dashboard" className="btn-primary">
-              Return to Dashboard
+            <Link to="/support" className="btn-primary">
+              Go to My Support Tickets
             </Link>
-            {import.meta.env?.DEV && (
-              <button
-                type="button"
-                className="btn-refresh"
-                onClick={() => {
-                  setDevRoleOverride("IT_SUPPORT");
-                  if (typeof window !== "undefined") {
-                    window.__wmsDevSupportRole = "IT_SUPPORT";
-                  }
-                }}
-              >
-                Switch to IT_SUPPORT (Dev Preview)
-              </button>
-            )}
           </div>
         </div>
       </section>
@@ -679,32 +596,6 @@ export default function ITSupportDashboard() {
 
   return (
     <section className="page support-dashboard-page" aria-label="IT Support Triage Console">
-      {/* Dev role banner */}
-      {import.meta.env?.DEV && (
-        <div className="dev-role-switcher" role="region" aria-label="Development Role Switcher">
-          <span>🛠 Dev Mode: Viewing console as <strong>{effectiveRole || "IT_SUPPORT"}</strong></span>
-          <div className="dev-role-controls">
-            <label htmlFor="dev-role-select">Role Simulation:</label>
-            <select
-              id="dev-role-select"
-              className="dev-role-select"
-              value={effectiveRole}
-              onChange={(e) => {
-                setDevRoleOverride(e.target.value);
-                if (typeof window !== "undefined") {
-                  window.__wmsDevSupportRole = e.target.value;
-                }
-              }}
-            >
-              <option value="IT_SUPPORT">IT_SUPPORT</option>
-              <option value="ADMIN">ADMIN</option>
-              <option value="SYSTEM_ADMIN">SYSTEM_ADMIN</option>
-              <option value="EMPLOYEE">EMPLOYEE (Test Unauthorized)</option>
-            </select>
-          </div>
-        </div>
-      )}
-
       {/* Page Header */}
       <header className="support-header">
         <div className="support-header-info">
@@ -761,7 +652,7 @@ export default function ITSupportDashboard() {
         </div>
       )}
 
-      {/* KPI Metrics Strip */}
+      {/* Server-Side KPI Metrics Strip */}
       <div className="support-metrics-strip" aria-label="Triage Queue KPI Summary">
         <div className="metric-card">
           <div className="metric-icon-bubble metric-bubble-open" aria-hidden="true">📥</div>
@@ -774,16 +665,8 @@ export default function ITSupportDashboard() {
         <div className="metric-card">
           <div className="metric-icon-bubble metric-bubble-progress" aria-hidden="true">⚙️</div>
           <div className="metric-details">
-            <span className="metric-number">{metrics.inProgress}</span>
+            <span className="metric-number">{metrics.in_progress}</span>
             <span className="metric-label">In Progress</span>
-          </div>
-        </div>
-
-        <div className="metric-card">
-          <div className="metric-icon-bubble metric-bubble-breached" aria-hidden="true">⏱️</div>
-          <div className="metric-details">
-            <span className="metric-number">{metrics.breached}</span>
-            <span className="metric-label">SLA Breached</span>
           </div>
         </div>
 
@@ -802,20 +685,30 @@ export default function ITSupportDashboard() {
             <span className="metric-label">Resolved</span>
           </div>
         </div>
+
+        <div className="metric-card">
+          <div className="metric-icon-bubble metric-bubble-unassigned" aria-hidden="true">👤</div>
+          <div className="metric-details">
+            <span className="metric-number">{metrics.unassigned}</span>
+            <span className="metric-label">Unassigned</span>
+          </div>
+        </div>
       </div>
 
       {/* Filter Bar */}
       <TicketFilterBar
         categoryFilter={categoryFilter}
-        onCategoryChange={setCategoryFilter}
+        onCategoryChange={handleCategoryChange}
         statusFilter={statusFilter}
-        onStatusChange={setStatusFilter}
+        onStatusChange={handleStatusChange}
         priorityFilter={priorityFilter}
-        onPriorityChange={setPriorityFilter}
+        onPriorityChange={handlePriorityChange}
+        assignedToFilter={assignedToFilter}
+        onAssignedToChange={handleAssignedToChange}
         searchQuery={searchQuery}
         onSearchChange={setSearchQuery}
         onResetFilters={handleResetFilters}
-        totalCount={tickets.length}
+        totalCount={totalCount}
         filteredCount={filteredTickets.length}
       />
 
@@ -828,11 +721,18 @@ export default function ITSupportDashboard() {
         onSort={handleSort}
         onSelectTicket={(ticket) => setSelectedTicket(ticket)}
         selectedTicketId={selectedTicket?.id}
-        currentUserId={user?.account_id || user?.emp_id}
+        currentUserId={currentUserId}
+        userRole={effectiveRole}
         onAssignToMe={handleAssignToMe}
         onOpenAssignModal={(ticket) => setAssignModalTicket(ticket)}
         onOpenEscalateModal={(ticket) => setEscalateModalTicket(ticket)}
+        onOpenResolveModal={(ticket) => setResolveModalTicket(ticket)}
+        onTakeOver={handleTakeOver}
+        onCloseTicket={handleCloseTicket}
         isAssigningId={isAssigningId}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={handlePageChange}
       />
 
       {/* Slide-out Drawer */}
@@ -840,11 +740,14 @@ export default function ITSupportDashboard() {
         <TicketDetailDrawer
           ticket={selectedTicket}
           onClose={() => setSelectedTicket(null)}
-          currentUserId={user?.account_id || user?.emp_id}
+          currentUserId={currentUserId}
+          userRole={effectiveRole}
           onAssignToMe={handleAssignToMe}
           onOpenAssignModal={(ticket) => setAssignModalTicket(ticket)}
           onOpenEscalateModal={(ticket) => setEscalateModalTicket(ticket)}
-          onResolveTicket={handleResolveTicket}
+          onOpenResolveModal={(ticket) => setResolveModalTicket(ticket)}
+          onTakeOver={handleTakeOver}
+          onCloseTicket={handleCloseTicket}
           onAddNote={handleAddInternalNote}
           isAssigning={isAssigningId === selectedTicket.id}
         />
@@ -854,7 +757,7 @@ export default function ITSupportDashboard() {
       {assignModalTicket && (
         <AssignTicketModal
           ticket={assignModalTicket}
-          currentUserId={user?.account_id || user?.emp_id}
+          currentUserId={currentUserId}
           currentUserEmail={user?.email}
           onClose={() => setAssignModalTicket(null)}
           onConfirm={handleConfirmAssignment}
@@ -867,6 +770,15 @@ export default function ITSupportDashboard() {
           ticket={escalateModalTicket}
           onClose={() => setEscalateModalTicket(null)}
           onConfirm={handleConfirmEscalation}
+        />
+      )}
+
+      {/* Resolve Ticket Modal */}
+      {resolveModalTicket && (
+        <ResolveTicketModal
+          ticket={resolveModalTicket}
+          onClose={() => setResolveModalTicket(null)}
+          onConfirm={handleConfirmResolution}
         />
       )}
     </section>

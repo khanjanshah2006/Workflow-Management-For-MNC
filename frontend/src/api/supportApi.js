@@ -1,21 +1,18 @@
 import { apiClient } from "./client.js";
-import {
-  getMockTickets,
-  updateMockTicket,
-} from "../features/support/mockSupportData.js";
 
 /**
- * Support Console API Service (S8: US-27 & US-28)
+ * Support Console API Service (S8: US-26, US-27, US-28)
  *
- * Implements API wiring for IT Support Triage Queue:
- * - GET /api/v1/support/tickets (with filters for status, category, priority, assignee)
+ * Implements API wiring for IT Support Triage Queue and Reporter View:
+ * - GET /api/v1/support/tickets (live queue with filters for status, category, priority, assigned_to, page, limit)
+ * - GET /api/v1/support/tickets/queue/metrics (aggregate counts by status and unassigned)
+ * - GET /api/v1/support/tickets/my (tickets submitted by current user)
+ * - POST /api/v1/support/tickets (employee submits new ticket)
  * - GET /api/v1/support/tickets/{id} (detailed ticket with activity history)
- * - PUT /api/v1/support/tickets/{id}/assign (assign to self or teammate)
- * - POST /api/v1/support/tickets/{id}/notes (internal troubleshooting notes)
- * - PUT /api/v1/support/tickets/{id}/status (status transition e.g. RESOLVED)
- * - PUT /api/v1/support/tickets/{id}/escalate (escalate to SysAdmin)
- *
- * Includes graceful DEV fallback to mock data when backend is not running or endpoints return 404.
+ * - PUT /api/v1/support/tickets/{id}/assign (assign to IT staff account: { assignee_account_id })
+ * - POST /api/v1/support/tickets/{id}/notes (internal troubleshooting note: { note })
+ * - PUT /api/v1/support/tickets/{id}/status (status transition: { status, resolution_note })
+ * - PUT /api/v1/support/tickets/{id}/escalate (escalate to SysAdmin: { reason })
  */
 
 // SLA Deadlines by Priority (in milliseconds)
@@ -131,12 +128,13 @@ export function normalizeTicket(raw) {
     category,
     priority,
     status,
+    escalation_reason: raw.escalation_reason || null,
     reporter_id: raw.reporter_id || "",
-    reporter_name: raw.reporter_name || raw.reporter?.full_name || `Employee #${String(raw.reporter_id || "").slice(0, 6)}`,
+    reporter_name: raw.reporter_name || raw.reporter?.full_name || (raw.reporter_id ? `Employee #${String(raw.reporter_id).slice(0, 8)}` : "Employee"),
     reporter_email: raw.reporter_email || raw.reporter?.email || "",
     reporter_department: raw.reporter_department || raw.reporter?.department || "General",
     assigned_to: raw.assigned_to || null,
-    assigned_to_emp_id: raw.assigned_to_emp_id || raw.assignee?.emp_id || null,
+    assigned_to_emp_id: raw.assigned_to || raw.assigned_to_emp_id || raw.assignee?.emp_id || null,
     assignee_name: raw.assignee_name || raw.assignee?.full_name || (raw.assigned_to ? "IT Specialist" : null),
     assignee_email: raw.assignee_email || raw.assignee?.email || null,
     created_at: raw.created_at || new Date().toISOString(),
@@ -148,278 +146,206 @@ export function normalizeTicket(raw) {
 
 export const supportApi = {
   /**
-   * Fetch all tickets with optional filtering by category, status, priority, and assignee.
+   * Fetch aggregate triage queue metrics for dashboard header.
+   * Endpoint: GET /api/v1/support/tickets/queue/metrics
+   * @returns {Promise<{ open: number, in_progress: number, resolved: number, closed: number, escalated: number, unassigned: number, total: number }>}
+   */
+  getQueueMetrics: async () => {
+    const response = await apiClient.get("/api/v1/support/tickets/queue/metrics");
+    return {
+      open: response?.open ?? 0,
+      in_progress: response?.in_progress ?? 0,
+      resolved: response?.resolved ?? 0,
+      closed: response?.closed ?? 0,
+      escalated: response?.escalated ?? 0,
+      unassigned: response?.unassigned ?? 0,
+      total: response?.total ?? 0,
+    };
+  },
+
+  /**
+   * Fetch live tickets with server-side filtering, priority sorting, and pagination.
    * Primary: GET /api/v1/support/tickets
+   * @param {{ status?: string, category?: string, priority?: string, assigned_to?: string, page?: number, limit?: number }} filters
+   * @returns {Promise<{ items: Array<Object>, total: number, page: number, limit: number }>}
    */
   getTickets: async (filters = {}) => {
     const params = new URLSearchParams();
 
     if (filters.status && filters.status !== "ALL" && filters.status !== "all") {
-      params.append("status", filters.status.toLowerCase());
+      params.append("status", filters.status.toLowerCase().trim());
     }
     if (filters.category && filters.category !== "ALL" && filters.category !== "all") {
-      params.append("category", filters.category.toLowerCase());
+      params.append("category", filters.category.toLowerCase().trim());
     }
     if (filters.priority && filters.priority !== "ALL" && filters.priority !== "all") {
-      params.append("priority", filters.priority.toUpperCase());
+      params.append("priority", filters.priority.toUpperCase().trim());
     }
-    if (filters.assigned_to) {
-      params.append("assigned_to", filters.assigned_to);
+    if (filters.assigned_to && filters.assigned_to !== "ALL" && filters.assigned_to !== "all") {
+      params.append("assigned_to", filters.assigned_to.trim());
     }
-    if (filters.skip !== undefined) {
-      params.append("skip", String(filters.skip));
+    if (filters.page !== undefined && Number(filters.page) >= 1) {
+      params.append("page", String(filters.page));
     }
-    if (filters.limit !== undefined) {
+    if (filters.limit !== undefined && Number(filters.limit) >= 1) {
       params.append("limit", String(filters.limit));
     }
 
     const queryString = params.toString();
     const endpoint = `/api/v1/support/tickets${queryString ? `?${queryString}` : ""}`;
 
-    try {
-      const response = await apiClient.get(endpoint);
-      const rawList = Array.isArray(response)
-        ? response
-        : response?.tickets || [];
+    const response = await apiClient.get(endpoint);
 
-      return rawList.map(normalizeTicket);
-    } catch (err) {
-      // In DEV mode, fallback to rich mock data if backend is offline or endpoint 404
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        let list = getMockTickets();
-        if (filters.status && filters.status !== "ALL" && filters.status !== "all") {
-          list = list.filter((t) => t.status.toLowerCase() === filters.status.toLowerCase());
-        }
-        if (filters.category && filters.category !== "ALL" && filters.category !== "all") {
-          list = list.filter((t) => t.category.toLowerCase() === filters.category.toLowerCase());
-        }
-        if (filters.priority && filters.priority !== "ALL" && filters.priority !== "all") {
-          list = list.filter((t) => t.priority.toUpperCase() === filters.priority.toUpperCase());
-        }
-        return list.map(normalizeTicket);
-      }
-      throw err;
-    }
+    const rawList = Array.isArray(response)
+      ? response
+      : response?.items || response?.tickets || [];
+
+    const normalizedItems = rawList.map(normalizeTicket);
+
+    return {
+      items: normalizedItems,
+      total: response?.total ?? normalizedItems.length,
+      page: response?.page ?? Number(filters.page || 1),
+      limit: response?.limit ?? Number(filters.limit || 20),
+      // Retain array behavior if caller iterates directly over result
+      [Symbol.iterator]: function* () {
+        yield* normalizedItems;
+      },
+    };
+  },
+
+  /**
+   * Retrieve all support tickets reported by the currently authenticated user (US-26).
+   * Endpoint: GET /api/v1/support/tickets/my
+   * @returns {Promise<Array<Object>>}
+   */
+  getMyTickets: async () => {
+    const response = await apiClient.get("/api/v1/support/tickets/my");
+    const list = Array.isArray(response) ? response : response?.tickets || [];
+    return list.map(normalizeTicket);
+  },
+
+  /**
+   * Submit a new support ticket as an employee (US-26).
+   * Endpoint: POST /api/v1/support/tickets
+   * @param {{ subject?: string, title?: string, description: string, category?: string, priority?: string }} payload
+   * @returns {Promise<Object>}
+   */
+  createTicket: async ({ subject, title, description, category = "other", priority = "MEDIUM" }) => {
+    const textSubject = (subject || title || "").trim();
+    const payload = {
+      subject: textSubject,
+      title: textSubject,
+      description: (description || "").trim(),
+      category: (category || "other").toLowerCase(),
+      priority: (priority || "MEDIUM").toUpperCase(),
+    };
+    const response = await apiClient.post("/api/v1/support/tickets", payload);
+    return normalizeTicket(response);
   },
 
   /**
    * Fetch single ticket details by ID with chronological activities.
    * Primary: GET /api/v1/support/tickets/{id}
+   * @param {number|string} ticketId
+   * @returns {Promise<Object>}
    */
   getTicketDetail: async (ticketId) => {
-    try {
-      const response = await apiClient.get(`/api/v1/support/tickets/${ticketId}`);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const mock = getMockTickets().find((t) => t.id === Number(ticketId));
-        if (mock) return normalizeTicket(mock);
-      }
-      throw err;
-    }
+    const response = await apiClient.get(`/api/v1/support/tickets/${ticketId}`);
+    return normalizeTicket(response);
+  },
+
+  getTicket: async (ticketId) => {
+    return supportApi.getTicketDetail(ticketId);
   },
 
   /**
-   * Assign a support ticket to an IT specialist or self.
-   * Wiring: PUT /api/v1/support/tickets/{id}/assign -> { "assigned_to_emp_id": current_user.emp_id }
+   * Assign a support ticket to an IT specialist account (UUID).
+   * Contract: PUT /api/v1/support/tickets/{id}/assign -> { assignee_account_id: "<uuid>" }
+   * @param {number|string} ticketId
+   * @param {{ assignee_account_id?: string, assigned_to?: string, assigned_to_emp_id?: string }} params
+   * @returns {Promise<Object>}
    */
-  assignTicket: async (ticketId, { assigned_to, assigned_to_emp_id, assignee_name, assignee_email, reassignment_reason }) => {
+  assignTicket: async (ticketId, { assignee_account_id, assigned_to, assigned_to_emp_id }) => {
+    const accountId = assignee_account_id || assigned_to || assigned_to_emp_id;
     const payload = {
-      assigned_to: assigned_to || assigned_to_emp_id,
-      assigned_to_emp_id: assigned_to_emp_id || assigned_to,
-      reassignment_reason: reassignment_reason || "Assigned via IT Support Console",
+      assignee_account_id: String(accountId || "").trim(),
     };
 
-    try {
-      const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/assign`, payload);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: assigned_to || "it-support-agent",
-              actor_name: assignee_name || "IT Support Specialist",
-              action: "ASSIGNED",
-              activity_type: "ASSIGNED",
-              note: `Assigned to ${assignee_name || assignee_email || assigned_to_emp_id || "IT Specialist"}${reassignment_reason ? ` (${reassignment_reason})` : ""}`,
-              old_status: ticket.status,
-              new_status: ticket.status === "open" ? "in_progress" : ticket.status,
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            assigned_to: assigned_to || assigned_to_emp_id,
-            assigned_to_emp_id: assigned_to_emp_id || assigned_to,
-            assignee_name: assignee_name || "IT Support Specialist",
-            assignee_email: assignee_email || "",
-            status: ticket.status === "open" ? "in_progress" : ticket.status,
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
-    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/assign`, payload);
+    return normalizeTicket(response);
   },
 
   /**
-   * Append an internal troubleshooting note to a ticket.
-   * Wiring: POST /api/v1/support/tickets/{id}/notes -> { "note_text": "string" }
+   * Append an internal troubleshooting note to a ticket (1–2000 characters).
+   * Contract: POST /api/v1/support/tickets/{id}/notes -> { note: "1–2000 chars" }
+   * @param {number|string} ticketId
+   * @param {{ note?: string, note_text?: string }} params
+   * @returns {Promise<Object>}
    */
-  addInternalNote: async (ticketId, { note_text, note, actor_name, actor_id }) => {
-    const text = note_text || note;
+  addInternalNote: async (ticketId, { note, note_text }) => {
+    const text = (note !== undefined ? note : note_text) || "";
     const payload = {
-      note_text: text,
-      note: text,
+      note: String(text).trim(),
     };
 
-    try {
-      const response = await apiClient.post(`/api/v1/support/tickets/${ticketId}/notes`, payload);
-      return response;
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const nowIso = new Date().toISOString();
-        const newActivity = {
-          id: Date.now(),
-          activity_id: Date.now(),
-          ticket_id: Number(ticketId),
-          actor_id: actor_id || "current-user",
-          actor_name: actor_name || "IT Support Specialist",
-          action: "NOTE_ADDED",
-          activity_type: "NOTE_ADDED",
-          note: text,
-          old_status: null,
-          new_status: null,
-          created_at: nowIso,
-        };
-
-        updateMockTicket(ticketId, (ticket) => ({
-          ...ticket,
-          updated_at: nowIso,
-          activities: [...(ticket.activities || []), newActivity],
-        }));
-
-        return newActivity;
-      }
-      throw err;
-    }
+    return await apiClient.post(`/api/v1/support/tickets/${ticketId}/notes`, payload);
   },
 
   /**
-   * Transition ticket status (e.g. to in_progress, resolved).
-   * Wiring: PUT /api/v1/support/tickets/{id}/status -> { "status": "RESOLVED", "resolution_notes": "..." }
+   * Transition ticket status according to state machine rules.
+   * Contract: PUT /api/v1/support/tickets/{id}/status -> { status: "lowercase", resolution_note?: "string" }
+   * @param {number|string} ticketId
+   * @param {{ status: string, resolution_note?: string, resolution_notes?: string }} params
+   * @returns {Promise<Object>}
    */
-  updateTicketStatus: async (ticketId, { status, resolution_notes, actor_name, actor_id }) => {
+  updateTicketStatus: async (ticketId, { status, resolution_note, resolution_notes }) => {
+    const resNote = (resolution_note !== undefined ? resolution_note : resolution_notes) || "";
     const payload = {
-      status: status.toLowerCase(),
-      resolution_notes: resolution_notes || undefined,
+      status: String(status || "").toLowerCase().trim(),
     };
-
-    try {
-      const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, payload);
-      return normalizeTicket(response);
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const isResolved = status.toLowerCase() === "resolved";
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: actor_id || "current-user",
-              actor_name: actor_name || "IT Support Specialist",
-              action: "STATUS_CHANGED",
-              activity_type: "STATUS_CHANGED",
-              note: resolution_notes || `Status changed from ${ticket.status} to ${status.toLowerCase()}`,
-              old_status: ticket.status,
-              new_status: status.toLowerCase(),
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            status: status.toLowerCase(),
-            resolved_at: isResolved ? nowIso : ticket.resolved_at,
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
+    if (resNote && String(resNote).trim()) {
+      payload.resolution_note = String(resNote).trim();
     }
+
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, payload);
+    return normalizeTicket(response);
+  },
+
+  /**
+   * Reopen a resolved ticket (reporter view).
+   * Contract: PUT /api/v1/support/tickets/{id}/status -> { status: "open", resolution_note?: comment }
+   * @param {number|string} ticketId
+   * @param {string} [comment]
+   * @returns {Promise<Object>}
+   */
+  reopenTicket: async (ticketId, comment = "") => {
+    const payload = {
+      status: "open",
+    };
+    if (comment && String(comment).trim()) {
+      payload.resolution_note = String(comment).trim();
+    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, payload);
+    return normalizeTicket(response);
   },
 
   /**
    * Escalate ticket to System Admin with required reason.
-   * Wiring: PUT /api/v1/support/tickets/{id}/escalate -> { "escalation_reason": "string" }
+   * Contract: PUT /api/v1/support/tickets/{id}/escalate -> { reason: "string" }
+   * @param {number|string} ticketId
+   * @param {{ reason?: string, escalation_reason?: string }} params
+   * @returns {Promise<Object>}
    */
-  escalateTicket: async (ticketId, { escalation_reason, reason, actor_name, actor_id }) => {
-    const escalationText = escalation_reason || reason;
+  escalateTicket: async (ticketId, { reason, escalation_reason }) => {
+    const escalationText = (reason !== undefined ? reason : escalation_reason) || "";
     const payload = {
-      escalation_reason: escalationText,
-      reason: escalationText,
+      reason: String(escalationText).trim(),
     };
 
-    try {
-      try {
-        const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/escalate`, payload);
-        return normalizeTicket(response);
-      } catch (firstErr) {
-        // If /escalate route returns 404 or 405, fallback to status transition with "escalated"
-        if (firstErr.status === 404 || firstErr.status === 405) {
-          const fallbackRes = await apiClient.put(`/api/v1/support/tickets/${ticketId}/status`, {
-            status: "escalated",
-            resolution_notes: `Escalated to SysAdmin: ${escalationText}`,
-          });
-          return normalizeTicket(fallbackRes);
-        }
-        throw firstErr;
-      }
-    } catch (err) {
-      if (import.meta.env?.DEV && (err.status === 0 || err.status === 404)) {
-        const updated = updateMockTicket(ticketId, (ticket) => {
-          const nowIso = new Date().toISOString();
-          const newActivities = [
-            ...(ticket.activities || []),
-            {
-              id: Date.now(),
-              activity_id: Date.now(),
-              ticket_id: ticket.id,
-              actor_id: actor_id || "current-user",
-              actor_name: actor_name || "IT Support Specialist",
-              action: "ESCALATED",
-              activity_type: "ESCALATED",
-              note: `Escalated to SysAdmin: ${escalationText}`,
-              old_status: ticket.status,
-              new_status: "escalated",
-              created_at: nowIso,
-            },
-          ];
-
-          return {
-            ...ticket,
-            status: "escalated",
-            updated_at: nowIso,
-            activities: newActivities,
-          };
-        });
-        return normalizeTicket(updated);
-      }
-      throw err;
-    }
+    const response = await apiClient.put(`/api/v1/support/tickets/${ticketId}/escalate`, payload);
+    return normalizeTicket(response);
   },
 };
+
+export default supportApi;

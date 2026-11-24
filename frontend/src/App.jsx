@@ -4,7 +4,6 @@ import {
   Route,
   Navigate,
   useLocation,
-  Outlet,
 } from "react-router-dom";
 import {
   QueryClient,
@@ -14,6 +13,8 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import ProtectedRoute from "./components/common/ProtectedRoute";
 import ToastProvider from "./components/common/Toast";
 import LoginPage from "./features/auth/LoginPage";
+import MfaChallengePage from "./features/auth/MfaChallengePage";
+import MfaSetupPage from "./features/auth/MfaSetupPage";
 import AppLayout from "./components/layout/AppLayout";
 import ProjectListPage from "./features/projects/ProjectListPage";
 import ProjectDetailPage from "./features/projects/ProjectDetailPage";
@@ -22,6 +23,7 @@ import SecurityOpsPage from "./features/admin/SecurityOpsPage";
 import UserManagementPage from "./features/admin/UserManagementPage";
 import ProfilePage from "./features/profile/ProfilePage";
 import ITSupportDashboard from "./features/support/ITSupportDashboard";
+import ReporterSupportPage from "./features/support/ReporterSupportPage";
 import MyTasksPage from "./features/tasks/MyTasksPage";
 import TeamLeadTaskWorkspace from "./features/team_lead/TeamLeadTaskWorkspace";
 import TeamLeaveTriagePage from "./features/team_lead/TeamLeaveTriagePage";
@@ -31,7 +33,18 @@ import PMRiskDashboardPage from "./features/project_manager/PMRiskDashboardPage"
 import ExecutiveConsolePage from "./features/executive/ExecutiveConsolePage";
 import SkillRequestQueuePage from "./features/skills/SkillRequestQueuePage";
 import { ROUTES } from "./routes.js";
-import { INTERNAL_ROLES, getHomeRouteForRole } from "./auth/session";
+import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
+import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
+import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
+import AccountSecurityPage from "./features/account/AccountSecurityPage";
+import {
+  ROLES,
+  INTERNAL_ROLES,
+  PLATFORM_ADMINS,
+  IT_STAFF,
+  getHomeRouteForRole,
+  isClient,
+} from "./auth/session";
 import "./App.css";
 
 const queryClient = new QueryClient();
@@ -64,6 +77,15 @@ function RootRedirect() {
       : getHomeRouteForRole(role);
 
   return <Navigate to={targetPath} replace />;
+}
+
+/**
+ * Shell for pages every signed-in role can open: clients keep the client portal
+ * shell, everyone else gets the internal AppLayout.
+ */
+function RoleShell() {
+  const { role } = useAuth();
+  return isClient(role) ? <ClientPortalLayout /> : <AppLayout />;
 }
 
 function PagePlaceholder({ title, description }) {
@@ -104,31 +126,38 @@ function App() {
             <Routes>
               {/* Public Login Route */}
               <Route path="/login" element={<LoginPage />} />
+              {/* S9-FE-2: MFA steps (public; need a pending MFA token held in memory) */}
+              <Route path="/login/mfa" element={<MfaChallengePage />} />
+              <Route path="/login/mfa-setup" element={<MfaSetupPage />} />
 
               {/* Root route: role-based home redirection */}
               <Route path="/" element={<RootRedirect />} />
 
               {/* Client Portal Route Tree (strictly outside internal AppLayout shell) */}
-              {/* S6-FE-1 integration slot: Client Deliverables & Feedback */}
+              {/* S6-FE-1: Client Deliverables & Feedback (US-20, US-21, US-22, US-41) */}
               <Route
                 path="/client"
                 element={
-                  <ProtectedRoute allowedRoles={["CLIENT"]}>
-                    <Outlet />
+                  <ProtectedRoute allowedRoles={[ROLES.CLIENT]}>
+                    <ClientPortalLayout />
                   </ProtectedRoute>
                 }
               >
                 <Route index element={<Navigate to="/client/projects" replace />} />
-                <Route
-                  path="projects"
-                  element={
-                    <PagePlaceholder
-                      title="Client Projects"
-                      description="Client portal workspace for deliverables and project tracking."
-                    />
-                  }
-                />
+                <Route path="projects" element={<ClientProjectListPage />} />
+                <Route path="projects/:projectId" element={<ClientProjectDetailPage />} />
                 <Route path="*" element={<Navigate to="/client/projects" replace />} />
+              </Route>
+
+              {/* S9-FE-2: Account Security, open to every signed-in role */}
+              <Route
+                element={
+                  <ProtectedRoute>
+                    <RoleShell />
+                  </ProtectedRoute>
+                }
+              >
+                <Route path="/account/security" element={<AccountSecurityPage />} />
               </Route>
 
               {/* Guarded Internal Application Shell: requires internal role */}
@@ -156,7 +185,7 @@ function App() {
                 <Route
                   path="/projects"
                   element={
-                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <ProjectListPage />
                     </ProtectedRoute>
                   }
@@ -164,7 +193,7 @@ function App() {
                 <Route
                   path="/projects/:projectId"
                   element={
-                    <ProtectedRoute allowedRoles={["PROJECT_MANAGER", "PM", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <ProjectDetailPage />
                     </ProtectedRoute>
                   }
@@ -196,6 +225,9 @@ function App() {
                   }
                 />
 
+                {/* S1-FE-2 routes */}
+                {/* S1-FE-3 routes */}
+
                 {/* Tasks: Guarded for internal roles */}
                 <Route
                   path="/tasks"
@@ -208,7 +240,7 @@ function App() {
                 <Route
                   path="/team-lead/tasks"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.PM, ROLES.ADMIN]}>
                       <TeamLeadTaskWorkspace />
                     </ProtectedRoute>
                   }
@@ -216,18 +248,18 @@ function App() {
                 <Route
                   path="/tasks/team"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "PM", "PROJECT_MANAGER", "SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.PM, ROLES.ADMIN]}>
                       <TeamLeadTaskWorkspace />
                     </ProtectedRoute>
                   }
                 />
 
-                {/* Support: Guarded for internal roles */}
+                {/* Support: Reporter portal for all internal employees (US-26 / S8-FE-3) */}
                 <Route
                   path="/support"
                   element={
                     <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
-                      <ITSupportDashboard />
+                      <ReporterSupportPage />
                     </ProtectedRoute>
                   }
                 />
@@ -235,18 +267,22 @@ function App() {
                   path="/support/tickets"
                   element={
                     <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
-                      <ITSupportDashboard />
+                      <ReporterSupportPage />
                     </ProtectedRoute>
                   }
                 />
+
+                {/* IT Support Triage Queue: Guarded strictly for IT staff (US-27, US-28 / S8-FE-3) */}
                 <Route
                   path="/it-support"
                   element={
-                    <ProtectedRoute allowedRoles={INTERNAL_ROLES}>
+                    <ProtectedRoute allowedRoles={IT_STAFF}>
                       <ITSupportDashboard />
                     </ProtectedRoute>
                   }
                 />
+
+                {/* S8-FE-3 routes */}
 
                 {/* Profile: Guarded for internal roles */}
                 <Route
@@ -258,11 +294,14 @@ function App() {
                   }
                 />
 
+                {/* S2-FE-2 routes */}
+                {/* S3-FE-5 routes */}
+
                 {/* Admin: Guarded & role permitted */}
                 <Route
                   path="/admin"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <Navigate to="/admin/users" replace />
                     </ProtectedRoute>
                   }
@@ -270,7 +309,7 @@ function App() {
                 <Route
                   path="/admin/users"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <UserManagementPage />
                     </ProtectedRoute>
                   }
@@ -278,17 +317,19 @@ function App() {
                 <Route
                   path="/admin/security"
                   element={
-                    <ProtectedRoute allowedRoles={["SYSTEM_ADMIN", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={PLATFORM_ADMINS}>
                       <SecurityOpsPage />
                     </ProtectedRoute>
                   }
                 />
 
+                {/* S9-FE-2 routes: /login/mfa, /login/mfa-setup and /account/security are registered above */}
+
                 {/* S4-FE-1 routes (Employee Leave Application & History: /leave) */}
                 <Route
                   path="/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["EMPLOYEE", "TEAM_LEAD"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.EMPLOYEE, ROLES.TEAM_LEAD]}>
                       <LeaveDashboardPage />
                     </ProtectedRoute>
                   }
@@ -297,7 +338,7 @@ function App() {
                 <Route
                   path="/team-lead/leave"
                   element={
-                    <ProtectedRoute allowedRoles={["TEAM_LEAD", "HR", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.TEAM_LEAD, ROLES.HR, ROLES.ADMIN]}>
                       <TeamLeaveTriagePage />
                     </ProtectedRoute>
                   }
@@ -306,7 +347,7 @@ function App() {
                 <Route
                   path="/hr/leave-policies"
                   element={
-                    <ProtectedRoute allowedRoles={["HR", "ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.HR, ROLES.ADMIN]}>
                       <LeavePolicyAdminPage />
                     </ProtectedRoute>
                   }
@@ -315,7 +356,7 @@ function App() {
                 <Route
                   path={ROUTES.SKILL_REQUESTS}
                   element={
-                    <ProtectedRoute allowedRoles={["HR", "TEAM_LEAD", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.HR, ROLES.TEAM_LEAD, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
                       <SkillRequestQueuePage />
                     </ProtectedRoute>
                   }
@@ -324,7 +365,7 @@ function App() {
                 <Route
                   path="/pm/risk-dashboard"
                   element={
-                    <ProtectedRoute allowedRoles={["PM", "PROJECT_MANAGER", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.PM, ROLES.ADMIN]}>
                       <PMRiskDashboardPage />
                     </ProtectedRoute>
                   }
@@ -335,7 +376,7 @@ function App() {
                 <Route
                   path="/executive"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.MNC_EXECUTIVE, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
                       <Navigate to="/executive/console" replace />
                     </ProtectedRoute>
                   }
@@ -343,7 +384,7 @@ function App() {
                 <Route
                   path="/executive/console"
                   element={
-                    <ProtectedRoute allowedRoles={["MNC_EXECUTIVE", "ADMIN", "SYSTEM_ADMIN"]}>
+                    <ProtectedRoute allowedRoles={[ROLES.MNC_EXECUTIVE, ROLES.ADMIN, ROLES.SYSTEM_ADMIN]}>
                       <ExecutiveConsolePage />
                     </ProtectedRoute>
                   }

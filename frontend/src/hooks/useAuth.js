@@ -75,7 +75,7 @@ export function normalizeRole(role) {
 
 export function isProjectManager(user) {
   const role = normalizeRole(user?.role || user?.user_type || user);
-  return role === "PM" || role === "PROJECT_MANAGER";
+  return role === "PM";
 }
 
 export function isAdmin(user) {
