@@ -1,0 +1,719 @@
+/* ==========================================================================
+   Department Teams Console Styles (Issue #160 / S1-FE-2)
+   All selectors strictly scoped under .department-teams-page with .dt- prefix
+   to prevent global style leakage.
+   ========================================================================== */
+
+.department-teams-page {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+/* Header & Controls */
+.department-teams-page .dt-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.department-teams-page .dt-header .page-eyebrow {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: #6366f1;
+  text-transform: uppercase;
+  margin-bottom: 4px;
+}
+
+.department-teams-page .dt-header .page-title {
+  font-size: 26px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0 0 6px 0;
+  line-height: 1.25;
+}
+
+.department-teams-page .dt-header .page-description {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  max-width: 650px;
+  line-height: 1.5;
+}
+
+.department-teams-page .dt-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 4px;
+}
+
+/* Two-column layout */
+.department-teams-page .dt-layout {
+  display: flex;
+  gap: 24px;
+}
+
+/* Department sidebar */
+.department-teams-page .dt-dept-sidebar {
+  flex: 0 0 240px;
+  min-width: 200px;
+}
+
+.department-teams-page .dt-dept-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+}
+
+.department-teams-page .dt-dept-item {
+  padding: 12px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  border-bottom: 1px solid #f1f5f9;
+  transition: all 0.15s ease;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.department-teams-page .dt-dept-item:last-child {
+  border-bottom: none;
+}
+
+.department-teams-page .dt-dept-item:hover {
+  background-color: #f8fafc;
+}
+
+.department-teams-page .dt-dept-item.dt-active {
+  background-color: #eef2ff;
+  color: #4338ca;
+  font-weight: 600;
+  border-left: 3px solid #6366f1;
+}
+
+.department-teams-page .dt-dept-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  background: #f1f5f9;
+  border-radius: 10px;
+  padding: 2px 8px;
+  min-width: 20px;
+  text-align: center;
+}
+
+/* Teams content area */
+.department-teams-page .dt-content {
+  flex: 1;
+  min-width: 0;
+}
+
+/* Show disbanded toggle */
+.department-teams-page .dt-show-disbanded-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #334155;
+  cursor: pointer;
+  user-select: none;
+  padding: 6px 12px;
+  border-radius: 6px;
+  background-color: #f8fafc;
+  border: 1px solid #e2e8f0;
+  transition: all 0.15s ease;
+}
+
+.department-teams-page .dt-show-disbanded-control:hover {
+  background-color: #f1f5f9;
+  border-color: #cbd5e1;
+}
+
+.department-teams-page .dt-show-disbanded-control input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+}
+
+/* Team cards grid */
+.department-teams-page .dt-team-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+}
+
+.department-teams-page .dt-team-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 20px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.department-teams-page .dt-team-card:hover {
+  border-color: #6366f1;
+  box-shadow: 0 2px 8px rgba(99, 102, 241, 0.1);
+}
+
+.department-teams-page .dt-team-card.dt-disbanded {
+  opacity: 0.6;
+  border-style: dashed;
+}
+
+.department-teams-page .dt-team-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.department-teams-page .dt-team-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.department-teams-page .dt-team-desc {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 12px 0;
+  line-height: 1.4;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.department-teams-page .dt-team-meta {
+  display: flex;
+  gap: 16px;
+  font-size: 13px;
+  color: #64748b;
+}
+
+.department-teams-page .dt-team-meta span {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* Status badge */
+.department-teams-page .dt-status-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.department-teams-page .dt-status-badge.dt-status-active {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.department-teams-page .dt-status-badge.dt-status-disbanded {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Empty & loading states */
+.department-teams-page .dt-empty-state,
+.department-teams-page .dt-loading-state,
+.department-teams-page .dt-error-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: #64748b;
+}
+
+.department-teams-page .dt-empty-state .dt-empty-icon,
+.department-teams-page .dt-loading-state .dt-loading-icon {
+  font-size: 2rem;
+  margin-bottom: 12px;
+}
+
+/* Primary button */
+.department-teams-page .dt-btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background-color: #6366f1;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+
+.department-teams-page .dt-btn-primary:hover {
+  background-color: #4f46e5;
+}
+
+.department-teams-page .dt-btn-primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Modal overlay */
+.dt-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  display: grid;
+  place-items: center;
+  z-index: 1000;
+  padding: 24px;
+}
+
+.dt-modal {
+  background: #fff;
+  border-radius: 12px;
+  width: 100%;
+  max-width: 560px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+}
+
+.dt-modal-header {
+  padding: 20px 24px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dt-modal-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.dt-modal-close {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  line-height: 1;
+}
+
+.dt-modal-close:hover {
+  color: #0f172a;
+}
+
+.dt-modal-body {
+  padding: 20px 24px;
+}
+
+.dt-modal-footer {
+  padding: 0 24px 20px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+/* Form elements */
+.dt-form-group {
+  margin-bottom: 16px;
+}
+
+.dt-form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  margin-bottom: 6px;
+}
+
+.dt-form-group label .dt-required {
+  color: #ef4444;
+  margin-left: 2px;
+}
+
+.dt-form-input,
+.dt-form-textarea,
+.dt-form-select {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  color: #0f172a;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  background: #fff;
+  transition: border-color 0.15s ease;
+  box-sizing: border-box;
+}
+
+.dt-form-input:focus,
+.dt-form-textarea:focus,
+.dt-form-select:focus {
+  outline: none;
+  border-color: #6366f1;
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+}
+
+.dt-form-input.dt-input-error,
+.dt-form-textarea.dt-input-error {
+  border-color: #ef4444;
+}
+
+.dt-form-textarea {
+  resize: vertical;
+  min-height: 72px;
+}
+
+.dt-field-error {
+  font-size: 12px;
+  color: #ef4444;
+  margin-top: 4px;
+}
+
+.dt-char-count {
+  font-size: 11px;
+  color: #94a3b8;
+  text-align: right;
+  margin-top: 2px;
+}
+
+/* Search input within modal */
+.dt-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  font-size: 14px;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  box-sizing: border-box;
+}
+
+.dt-search-input:focus {
+  outline: none;
+  border-color: #6366f1;
+}
+
+/* Employee picker list */
+.dt-employee-list {
+  max-height: 200px;
+  overflow-y: auto;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+}
+
+.dt-employee-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background-color 0.1s;
+  font-size: 13px;
+}
+
+.dt-employee-option:hover {
+  background-color: #f8fafc;
+}
+
+.dt-employee-option.dt-selected {
+  background-color: #eef2ff;
+}
+
+.dt-employee-option.dt-disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.dt-employee-option input[type="radio"],
+.dt-employee-option input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  cursor: inherit;
+}
+
+.dt-employee-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-employee-name {
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dt-employee-detail {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dt-lead-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #ede9fe;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* Cancel button */
+.dt-btn-cancel {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #64748b;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.dt-btn-cancel:hover {
+  background: #f1f5f9;
+  color: #334155;
+}
+
+/* Danger button */
+.dt-btn-danger {
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+  background: #ef4444;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.dt-btn-danger:hover {
+  background: #dc2626;
+}
+
+.dt-btn-danger:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Drawer */
+.dt-drawer-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.4);
+  z-index: 1000;
+}
+
+.dt-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  max-width: 100vw;
+  background: #fff;
+  box-shadow: -4px 0 20px rgba(0, 0, 0, 0.1);
+  z-index: 1001;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.dt-drawer-header {
+  padding: 20px 24px;
+  border-bottom: 1px solid #e2e8f0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.dt-drawer-header h2 {
+  font-size: 20px;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.dt-drawer-body {
+  padding: 24px;
+  flex: 1;
+}
+
+.dt-drawer-section {
+  margin-bottom: 24px;
+}
+
+.dt-drawer-section h3 {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: #94a3b8;
+  text-transform: uppercase;
+  margin: 0 0 12px 0;
+}
+
+.dt-drawer-field {
+  margin-bottom: 12px;
+}
+
+.dt-drawer-field .dt-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.dt-drawer-field .dt-value {
+  font-size: 14px;
+  color: #0f172a;
+  margin-top: 2px;
+}
+
+/* Member list in drawer */
+.dt-member-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.dt-member-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f1f5f9;
+  gap: 8px;
+}
+
+.dt-member-item:last-child {
+  border-bottom: none;
+}
+
+.dt-member-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.dt-member-name-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.dt-member-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+}
+
+.dt-member-email {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.dt-btn-remove {
+  padding: 4px 10px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #ef4444;
+  background: none;
+  border: 1px solid #fecaca;
+  border-radius: 4px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.dt-btn-remove:hover {
+  background: #fef2f2;
+}
+
+.dt-btn-remove:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Drawer actions */
+.dt-drawer-actions {
+  padding: 16px 24px;
+  border-top: 1px solid #e2e8f0;
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dt-drawer-actions button {
+  flex: 1;
+  min-width: 100px;
+}
+
+/* Confirm dialog */
+.dt-confirm-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+}
+
+.dt-confirm-box p {
+  font-size: 13px;
+  color: #991b1b;
+  margin: 0 0 12px 0;
+  line-height: 1.5;
+}
+
+.dt-confirm-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .department-teams-page .dt-layout {
+    flex-direction: column;
+  }
+  .department-teams-page .dt-dept-sidebar {
+    flex: none;
+    width: 100%;
+  }
+  .dt-drawer {
+    width: 100vw;
+  }
+  .department-teams-page .dt-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 480px) {
+  .department-teams-page {
+    padding: 16px;
+  }
+  .department-teams-page .dt-team-grid {
+    grid-template-columns: 1fr;
+  }
+}

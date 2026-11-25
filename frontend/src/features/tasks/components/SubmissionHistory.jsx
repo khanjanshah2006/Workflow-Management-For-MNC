@@ -332,4 +332,3 @@ export default function SubmissionHistory({ taskId, task }) {
     </div>
   );
 }
-
