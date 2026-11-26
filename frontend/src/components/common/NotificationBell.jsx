@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { notificationsApi } from "../../api/notificationsApi";
+import { useAuth } from "../../context/AuthContext";
+import { ROUTES } from "../../routes";
+import {
+  getNotificationConfig,
+  getNotificationRoute,
+} from "../../features/notifications/notificationTypes";
 
 function formatTimestamp(isoString) {
   if (!isoString) return "";
@@ -23,71 +30,77 @@ function formatTimestamp(isoString) {
   }
 }
 
-function getNotificationIcon(type) {
-  switch ((type || "").toUpperCase()) {
-    case "PROJECT_ASSIGNED":
-    case "PROJECT_ASSIGNMENT":
-      return "💼";
-    case "TASK_ASSIGNED":
-    case "TASK":
-      return "✓";
-    case "DEADLINE_REMINDER":
-    case "DEADLINE":
-      return "⏰";
-    case "LEAVE_APPROVAL":
-    case "LEAVE_REJECTION":
-      return "📋";
-    case "ALERT":
-      return "⚠️";
-    default:
-      return "🔔";
-  }
-}
-
 export default function NotificationBell() {
   const [isOpen, setIsOpen] = useState(false);
   const bellRef = useRef(null);
   const queryClient = useQueryClient();
+  const { role } = useAuth();
+  const navigate = useNavigate();
 
-  // 1. Fetch unread count (polls every 30 seconds for background updates)
+  // Tab visibility state to stop polling while backgrounded
+  const [isTabVisible, setIsTabVisible] = useState(() =>
+    typeof document !== "undefined" ? document.visibilityState === "visible" : true
+  );
+
+  useEffect(() => {
+    function handleVisibility() {
+      const visible = document.visibilityState === "visible";
+      setIsTabVisible(visible);
+      if (visible) {
+        // Immediately refresh unread count on returning to foreground
+        queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
+      }
+    }
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [queryClient]);
+
+  // 1. Fetch unread count (polls every 30 seconds, only while tab is visible)
   const { data: countData } = useQuery({
     queryKey: ["notifications", "unread-count"],
     queryFn: notificationsApi.getUnreadCount,
-    refetchInterval: 30000,
+    refetchInterval: isTabVisible ? 30000 : false,
+    refetchIntervalInBackground: false,
     retry: 1,
   });
 
-  const unreadCount = countData?.unread_count ?? 0;
+  const unreadCount = countData?.count ?? countData?.unread_count ?? 0;
 
-  // 2. Fetch recent notifications when dropdown is open
+  // 2. Fetch latest notifications when dropdown is open
   const {
-    data: notifications = [],
+    data: notifData = [],
     isLoading: listLoading,
     isError,
     error,
     refetch: refetchNotifications,
   } = useQuery({
-    queryKey: ["notifications", "my"],
-    queryFn: () => notificationsApi.getMyNotifications({ limit: 20 }),
+    queryKey: ["notifications", "recent-dropdown"],
+    queryFn: () => notificationsApi.getMyNotifications({ page: 1, page_size: 10 }),
     enabled: isOpen,
     retry: 1,
   });
 
-  // 3. Mark single notification as read mutation (US-19)
+  const notificationsList = Array.isArray(notifData)
+    ? notifData
+    : notifData?.items || [];
+  const latestTen = notificationsList.slice(0, 10);
+
+  // 3. Mark single notification as read mutation
   const markReadMutation = useMutation({
     mutationFn: (id) => notificationsApi.markAsRead(id),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications", "my"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
-  // 4. Mark all as read mutation (US-19)
+  // 4. Mark all as read mutation
   const markAllReadMutation = useMutation({
     mutationFn: notificationsApi.markAllAsRead,
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["notifications", "unread-count"] });
-      queryClient.invalidateQueries({ queryKey: ["notifications", "my"] });
+      queryClient.invalidateQueries({ queryKey: ["notifications"] });
     },
   });
 
@@ -117,9 +130,15 @@ export default function NotificationBell() {
   }, [isOpen]);
 
   const handleNotificationClick = (item) => {
-    // Only call mark-as-read if unread to prevent redundant API calls / double decrementing
-    if (!item.is_read) {
-      markReadMutation.mutate(item.notification_id);
+    const notifId = item.id || item.notification_id;
+    if (!item.is_read && notifId) {
+      markReadMutation.mutate(notifId);
+    }
+    setIsOpen(false);
+
+    const targetRoute = getNotificationRoute(item, role);
+    if (targetRoute) {
+      navigate(targetRoute);
     }
   };
 
@@ -199,47 +218,65 @@ export default function NotificationBell() {
                   Retry
                 </button>
               </div>
-            ) : notifications.length === 0 ? (
+            ) : latestTen.length === 0 ? (
               <div className="notification-empty-state">
                 <div className="empty-symbol">🔕</div>
                 <strong>All caught up!</strong>
                 <p>You have no notifications at this time.</p>
               </div>
             ) : (
-              notifications.map((item) => (
-                <div
-                  key={item.notification_id}
-                  className={`notification-item ${!item.is_read ? "notification-unread" : "notification-read"}`}
-                  onClick={() => handleNotificationClick(item)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" || e.key === " ") {
-                      handleNotificationClick(item);
+              latestTen.map((item) => {
+                const config = getNotificationConfig(item.type);
+                const hasTarget = Boolean(getNotificationRoute(item, role));
+                const notifId = item.id || item.notification_id;
+
+                return (
+                  <div
+                    key={notifId}
+                    className={`notification-item ${!item.is_read ? "notification-unread" : "notification-read"} ${hasTarget ? "notification-clickable" : ""}`}
+                    onClick={() => handleNotificationClick(item)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        handleNotificationClick(item);
+                      }
+                    }}
+                    title={
+                      hasTarget
+                        ? (item.is_read ? "Click to open" : "Click to mark read and open")
+                        : (item.is_read ? "Read notification" : "Click to mark read")
                     }
-                  }}
-                  title={item.is_read ? "Read notification" : "Click to mark as read"}
-                >
-                  <div className="notification-item-icon" aria-hidden="true">
-                    {getNotificationIcon(item.type)}
-                  </div>
-                  <div className="notification-item-content">
-                    <div className="notification-item-top">
-                      <strong>{item.title}</strong>
-                      {!item.is_read && <span className="unread-dot" aria-label="Unread" />}
+                  >
+                    <div className="notification-item-icon" aria-hidden="true">
+                      {config.icon}
                     </div>
-                    <p>{item.message}</p>
-                    <span className="notification-timestamp">
-                      {formatTimestamp(item.created_at)}
-                    </span>
+                    <div className="notification-item-content">
+                      <div className="notification-item-top">
+                        <span className="notification-type-badge">{config.label}</span>
+                        {!item.is_read && <span className="unread-dot" aria-label="Unread" />}
+                      </div>
+                      <div className="notification-item-title">{item.title}</div>
+                      <p>{item.message}</p>
+                      <span className="notification-timestamp">
+                        {formatTimestamp(item.created_at)}
+                      </span>
+                    </div>
                   </div>
-                </div>
-              ))
+                );
+              })
             )}
           </div>
 
           <div className="notification-panel-footer">
-            <span>WorkSphere Live Notification Service · US-19</span>
+            <Link
+              to={ROUTES.NOTIFICATIONS}
+              className="notification-view-all-link"
+              onClick={() => setIsOpen(false)}
+            >
+              View all notifications →
+            </Link>
           </div>
         </div>
       )}

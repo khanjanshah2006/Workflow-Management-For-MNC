@@ -418,6 +418,45 @@ button {
   color: #9aa3b3;
 }
 
+.notification-type-badge {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  color: #475569;
+  background: #f1f5f9;
+  padding: 1px 6px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.notification-item-title {
+  font-size: 12px;
+  font-weight: 650;
+  color: #1e293b;
+  margin-top: 1px;
+}
+
+.notification-view-all-link {
+  display: inline-block;
+  font-size: 12px;
+  font-weight: 600;
+  color: #2563eb;
+  text-decoration: none;
+  padding: 4px 8px;
+  border-radius: 4px;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.notification-view-all-link:hover {
+  text-decoration: underline;
+  background: #eff6ff;
+}
+
+.notification-clickable {
+  cursor: pointer;
+}
+
 .main-content {
   width: 100%;
   max-width: 1440px;

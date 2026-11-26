@@ -38,6 +38,7 @@ import ClientPortalLayout from "./features/client_portal/ClientPortalLayout";
 import ClientProjectListPage from "./features/client_portal/ClientProjectListPage";
 import ClientProjectDetailPage from "./features/client_portal/ClientProjectDetailPage";
 import AccountSecurityPage from "./features/account/AccountSecurityPage";
+import NotificationsPage from "./features/notifications/NotificationsPage";
 import {
   ROLES,
   INTERNAL_ROLES,
@@ -147,10 +148,11 @@ function App() {
                 <Route index element={<Navigate to="/client/projects" replace />} />
                 <Route path="projects" element={<ClientProjectListPage />} />
                 <Route path="projects/:projectId" element={<ClientProjectDetailPage />} />
+                <Route path="notifications" element={<NotificationsPage />} />
                 <Route path="*" element={<Navigate to="/client/projects" replace />} />
               </Route>
 
-              {/* S9-FE-2: Account Security, open to every signed-in role */}
+              {/* Cross-cutting: Account Security & Notifications, open to every signed-in role */}
               <Route
                 element={
                   <ProtectedRoute>
@@ -159,6 +161,7 @@ function App() {
                 }
               >
                 <Route path="/account/security" element={<AccountSecurityPage />} />
+                <Route path={ROUTES.NOTIFICATIONS} element={<NotificationsPage />} />
               </Route>
 
               {/* Guarded Internal Application Shell: requires internal role */}
