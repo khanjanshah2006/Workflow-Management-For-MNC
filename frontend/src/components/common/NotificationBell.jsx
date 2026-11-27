@@ -7,12 +7,13 @@ import { ROUTES } from "../../routes";
 import {
   getNotificationConfig,
   getNotificationRoute,
+  parseServerDate,
 } from "../../features/notifications/notificationTypes";
 
 function formatTimestamp(isoString) {
   if (!isoString) return "";
   try {
-    const date = new Date(isoString);
+    const date = parseServerDate(isoString);
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);

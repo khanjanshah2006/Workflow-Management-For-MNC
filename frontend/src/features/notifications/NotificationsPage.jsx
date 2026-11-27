@@ -8,13 +8,35 @@ import {
   NOTIFICATION_CATEGORY_LIST,
   getNotificationConfig,
   getNotificationRoute,
+  parseServerDate,
 } from "./notificationTypes";
 import "./notifications.css";
+
+// Backend caps page_size at 100. A category filter needs every notification,
+// so it fetches pages of this size (up to CATEGORY_MAX_PAGES) and filters locally.
+const CATEGORY_FETCH_SIZE = 100;
+const CATEGORY_MAX_PAGES = 10;
+
+async function fetchAllNotifications(unreadOnly) {
+  const items = [];
+  for (let p = 1; p <= CATEGORY_MAX_PAGES; p += 1) {
+    const data = await notificationsApi.getMyNotifications({
+      page: p,
+      page_size: CATEGORY_FETCH_SIZE,
+      unread_only: unreadOnly,
+    });
+    const batch = Array.isArray(data) ? data : data?.items || [];
+    items.push(...batch);
+    const total = Array.isArray(data) ? batch.length : data?.total ?? batch.length;
+    if (batch.length < CATEGORY_FETCH_SIZE || items.length >= total) break;
+  }
+  return items;
+}
 
 function formatTimestamp(isoString) {
   if (!isoString) return "";
   try {
-    const date = new Date(isoString);
+    const date = parseServerDate(isoString);
     const now = new Date();
     const diffMs = now - date;
     const diffMins = Math.floor(diffMs / 60000);
@@ -55,7 +77,9 @@ export default function NotificationsPage() {
 
   const unreadCount = countData?.count ?? countData?.unread_count ?? 0;
 
-  // 2. Fetch paginated notifications
+  const isCategoryFiltered = selectedCategory !== NOTIFICATION_CATEGORIES.ALL;
+
+  // 2. Fetch notifications: one server page for "All", every page for a category
   const {
     data: notifData,
     isLoading,
@@ -64,13 +88,17 @@ export default function NotificationsPage() {
     refetch,
     isPlaceholderData,
   } = useQuery({
-    queryKey: ["notifications", "my", { page, pageSize, unreadOnly }],
+    queryKey: isCategoryFiltered
+      ? ["notifications", "my", "all-pages", { unreadOnly }]
+      : ["notifications", "my", { page, pageSize, unreadOnly }],
     queryFn: () =>
-      notificationsApi.getMyNotifications({
-        page,
-        page_size: pageSize,
-        unread_only: unreadOnly,
-      }),
+      isCategoryFiltered
+        ? fetchAllNotifications(unreadOnly)
+        : notificationsApi.getMyNotifications({
+            page,
+            page_size: pageSize,
+            unread_only: unreadOnly,
+          }),
     retry: 1,
   });
 
@@ -93,17 +121,21 @@ export default function NotificationsPage() {
   const rawItems = Array.isArray(notifData)
     ? notifData
     : notifData?.items || [];
-  const totalItems = notifData?.total ?? rawItems.length;
+  // Category filtering runs over every fetched notification, then paginates locally
+  const categoryItems = isCategoryFiltered
+    ? rawItems.filter(
+        (item) => getNotificationConfig(item.type).category === selectedCategory
+      )
+    : rawItems;
+
+  const totalItems = isCategoryFiltered
+    ? categoryItems.length
+    : notifData?.total ?? rawItems.length;
   const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
-  // Category filtering
-  const displayedItems =
-    selectedCategory === NOTIFICATION_CATEGORIES.ALL
-      ? rawItems
-      : rawItems.filter((item) => {
-          const config = getNotificationConfig(item.type);
-          return config.category === selectedCategory;
-        });
+  const displayedItems = isCategoryFiltered
+    ? categoryItems.slice((page - 1) * pageSize, page * pageSize)
+    : rawItems;
 
   const handleRowClick = (item) => {
     const notifId = item.id || item.notification_id;
@@ -169,6 +201,7 @@ export default function NotificationsPage() {
                 className={`notifications-tab-btn ${isActive ? "active" : ""}`}
                 onClick={() => {
                   setSelectedCategory(category);
+                  setPage(1);
                 }}
               >
                 {category}
